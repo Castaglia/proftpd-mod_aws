@@ -67,6 +67,7 @@ struct aws_info {
   const char *public_hostname;
 };
 
-struct aws_info *aws_instance_get_info(pool *p);
+struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
+  unsigned long max_request_secs);
 
 #endif /* MOD_AWS_INSTANCE_H */

@@ -42,7 +42,9 @@ static const char *trace_channel = "aws.instance";
  */
 
 #define AWS_HTTP_RESPONSE_CODE_OK	200L
-#define AWS_INSTANCE_METADATA_URI	"http://169.254.169.254/latest"
+
+#define AWS_INSTANCE_METADATA_HOST	"169.254.169.254"
+#define AWS_INSTANCE_METADATA_URI	"http://" AWS_INSTANCE_METADATA_HOST "/latest"
 
 /* XXX Refactor this into a more generic "GET this URL" function, for better
  * reuse of the error checking, etc.
@@ -257,9 +259,11 @@ static size_t curl_header_cb(char *data, size_t itemsz, size_t item_count,
       char *resp_msg;
       size_t resp_msglen;
 
-      /* Advance the pointer past "HTTP/1.x NNNN "(13). */
+      /* Advance the pointer past "HTTP/1.x NNNN "(13). And take back 2,
+       * for whose CRLF this line is.
+       */
       resp_msg = data + 13;
-      resp_msglen = datasz - 13;
+      resp_msglen = datasz - 13 - 2;
 
       info->last_resp_msg = pstrndup(info->pool, resp_msg, resp_msglen);
 
@@ -273,7 +277,7 @@ static size_t curl_header_cb(char *data, size_t itemsz, size_t item_count,
   return datasz;
 }
 
-static int curl_debug_cb(CURL *curl, curl_infotype data_type, char *data,
+static int curl_trace_cb(CURL *curl, curl_infotype data_type, char *data,
     size_t datasz, void *user_data) {
 
   /* Tell the compiler we won't be using this argument. */
@@ -281,37 +285,40 @@ static int curl_debug_cb(CURL *curl, curl_infotype data_type, char *data,
 
   switch (data_type) {
     case CURLINFO_TEXT:
-      pr_trace_msg(trace_channel, 15,
-        "[debug] TEXT: %s (%ld bytes)", data, datasz);
+      pr_trace_msg(trace_channel, 15, "[debug] INFO: %s", data);
       break;
 
     case CURLINFO_HEADER_IN:
-      pr_trace_msg(trace_channel, 15,
-        "[debug] HEADER IN: %s (%ld bytes)", data, datasz);
+      if (datasz > 2) {
+        pr_trace_msg(trace_channel, 15,
+          "[debug] HEADER IN: %.*s (%ld bytes)", (int) datasz-2, data, datasz);
+      }
       break;
 
     case CURLINFO_HEADER_OUT:
-      pr_trace_msg(trace_channel, 15,
-        "[debug] HEADER OUT: %s (%ld bytes)", data, datasz);
+      if (datasz > 2) {
+        pr_trace_msg(trace_channel, 15,
+          "[debug] HEADER OUT: %.*s (%ld bytes)", (int) datasz-2, data, datasz);
+      }
       break;
 
     case CURLINFO_DATA_IN:
-      pr_trace_msg(trace_channel, 15,
+      pr_trace_msg(trace_channel, 19,
         "[debug] DATA IN: (%ld bytes)", datasz);
       break;
 
     case CURLINFO_DATA_OUT:
-      pr_trace_msg(trace_channel, 15,
+      pr_trace_msg(trace_channel, 19,
         "[debug] DATA OUT: (%ld bytes)", datasz);
       break;
 
     case CURLINFO_SSL_DATA_IN:
-      pr_trace_msg(trace_channel, 15,
+      pr_trace_msg(trace_channel, 19,
         "[debug] SSL DATA IN: (%ld bytes)", datasz);
       break;
 
     case CURLINFO_SSL_DATA_OUT:
-      pr_trace_msg(trace_channel, 15,
+      pr_trace_msg(trace_channel, 19,
         "[debug] SSL DATA OUT: (%ld bytes)", datasz);
       break;
 
@@ -324,7 +331,8 @@ static int curl_debug_cb(CURL *curl, curl_infotype data_type, char *data,
   return 0;
 }
 
-struct aws_info *aws_instance_get_info(pool *p) {
+struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
+    unsigned long max_request_secs) {
   int res;
   pool *info_pool;
   struct aws_info *info;
@@ -380,7 +388,23 @@ struct aws_info *aws_instance_get_info(pool *p) {
       curl_easy_strerror(curl_code));
   }
 
-  headers = curl_slist_append(headers, "Host: 169.254.169.254");
+  /* HTTP-isms. */
+  curl_code = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION,
+    CURL_HTTP_VERSION_1_1);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_HTTP_VERSION: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_HTTPGET: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  headers = curl_slist_append(headers, "Host: " AWS_INSTANCE_METADATA_HOST);
   headers = curl_slist_append(headers, "Accept: */*");
   curl_code = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
   if (curl_code != CURLE_OK) {
@@ -410,7 +434,7 @@ struct aws_info *aws_instance_get_info(pool *p) {
       curl_easy_strerror(curl_code));
   }
 
-  curl_code = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, curl_debug_cb);
+  curl_code = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, curl_trace_cb);
   if (curl_code != CURLE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURLOPT_DEBUGFUNCTION: %s",
@@ -435,6 +459,22 @@ struct aws_info *aws_instance_get_info(pool *p) {
   if (curl_code != CURLE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURLOPT_ERRORBUFFER: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  /* Timeouts */
+  curl_code = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT,
+    (long) max_connect_secs);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_CONNECTTIMEOUT: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_TIMEOUT, (long) max_request_secs);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_TIMEOUT: %s",
       curl_easy_strerror(curl_code));
   }
 

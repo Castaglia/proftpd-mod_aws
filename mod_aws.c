@@ -56,6 +56,9 @@ static unsigned long aws_flags = 0UL;
 
 static const char *aws_logfile = NULL;
 
+/* XXX Make these named constants. Reset them during restart_ev. */
+static unsigned long aws_connect_timeout_secs = 15;
+static unsigned long aws_request_timeout_secs = 30;
 
 static const char *trace_channel = "aws";
 
@@ -187,43 +190,36 @@ MODRET set_awsoptions(cmd_rec *cmd) {
 /* usage: AWSTimeoutConnect secs */
 MODRET set_awstimeoutconnect(cmd_rec *cmd) {
   int timeout = -1;
-  config_rec *c = NULL;
-
-  CHECK_ARGS(cmd, 1);
-  CHECK_CONF(cmd, CONF_ROOT);
-
-  if (pr_str_get_duration(cmd->argv[1], &timeout) < 0) {
-    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "error parsing timeout value '",
-      (char *) cmd->argv[1], "': ", strerror(errno), NULL));
-  }
-
-  c = add_config_param(cmd->argv[0], 1, NULL);
-  c->argv[0] = pcalloc(c->pool, sizeof(int));
-  *((int *) c->argv[0]) = timeout;
-
-  return PR_HANDLED(cmd);
-}
-
-/* usage: AWSTimeoutRequest secs */
-MODRET set_awstimeoutrequest(cmd_rec *cmd) {
-  int timeout = -1;
-  config_rec *c = NULL;
   char *timespec;
 
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
 
   timespec = cmd->argv[1];
-
   if (pr_str_get_duration(timespec, &timeout) < 0) {
     CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "error parsing timeout value '",
       timespec, "': ", strerror(errno), NULL));
   }
 
-  c = add_config_param(cmd->argv[0], 1, NULL);
-  c->argv[0] = pcalloc(c->pool, sizeof(int));
-  *((int *) c->argv[0]) = timeout;
+  aws_connect_timeout_secs = timeout;
+  return PR_HANDLED(cmd);
+}
 
+/* usage: AWSTimeoutRequest secs */
+MODRET set_awstimeoutrequest(cmd_rec *cmd) {
+  int timeout = -1;
+  char *timespec;
+
+  CHECK_ARGS(cmd, 1);
+  CHECK_CONF(cmd, CONF_ROOT);
+
+  timespec = cmd->argv[1];
+  if (pr_str_get_duration(timespec, &timeout) < 0) {
+    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "error parsing timeout value '",
+      timespec, "': ", strerror(errno), NULL));
+  }
+
+  aws_request_timeout_secs = timeout;
   return PR_HANDLED(cmd);
 }
 
@@ -325,7 +321,8 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
     }
   }
 
-  aws_info = aws_instance_get_info(aws_pool);
+  aws_info = aws_instance_get_info(aws_pool, aws_connect_timeout_secs,
+    aws_request_timeout_secs);
   if (aws_info == NULL) {
     pr_log_debug(DEBUG0, MOD_AWS_VERSION
       ": unable to discover EC2 instance metadata: %s", strerror(errno));
