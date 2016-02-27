@@ -1,0 +1,259 @@
+
+Reading material:
+
+  Setting up an FTP server with ProFTPD on EC2:
+    http://www.ajohnstone.com/achives/setting-up-an-ftp-server-with-proftpd-on-ec2-2/  
+
+    # You do NOT need to authorize port 20!! (many guides out there say you DO
+    # need port 20, but they are wrong.  Sadly.)
+    $ aws ec2 authorize default -p 21
+
+    # Authorize your PassivePorts range
+    $ aws ec2 authorize default -p 1024-1048
+
+    Need to lookup (configure) MasqueradeAddress (use public DNS name/IP
+    address)
+
+  How to install an FTP server on an Ubuntu based Amazon EC2 instance:
+    http://www.creativepulse.gr/en/blog/2014/how-to-install-an-ftp-server-on-an-ubuntu-based-amazon-ec2-instance
+
+  Cannot connect to proftpd from Amazon (AWS) EC2 instance:
+    https://forums.proftpd.org/smf/index.php?topic=11703.0
+
+  Amazon AWS - FTP server with ProFTPD:
+    https://almostalldigital.wordpress.com/2013/05/22/amazon-aws-ftp-server-with-proftpd/
+
+    $ aws ec2 authorize -p 49152-65535 # PassivePorts
+
+  ProFTPD on Amazon EC2:
+    https://redscreen.wordpress.com/2011/02/02/98/
+
+  Using Passive FTP on Amazon EC2:
+    http://www.x83.net/using-passive-ftp-on-amazon-ec2/
+
+  EC2 and FTP:
+    https://forums.aws.amazon.com/thread.jspa?threadID=42168
+
+  Elastic Load Balancing for FTP?: (OUTDATED)
+    https://forums.aws.amazon.com/message.jspa?messageID=343728
+
+  ELB with TCP load balancing and X-Forwarded-For header:
+    https://forums.aws.amazon.com/message.jspa?messageID=312663
+
+    # Mention mod_proxy_protocol module!
+
+  Best Practice: AWS FTP with file processing:
+    http://stackoverflow.com/questions/18425326/best-practice-aws-ftp-with-file-processing
+
+  Configuring AWS ELBs and more:
+    https://www.linkedin.com/pulse/20140612185017-3096005-configuring-aws-elb-s-and-more
+
+  Enable FTP in EC2:
+    http://www.adrianworlddesign.com/Knowledge-Base/Web-Hosting/Amazon-Web-Services/Enable-FTP-in-EC2
+
+    # Useful for the iptables commands to use!  May need to document iptables,
+    # ufw, etc.
+      http://serverfault.com/questions/555541/failed-to-retrieve-directory-listing-in-filezilla-connecting-to-vsftpd
+
+  Why Loggly Chose Amazon Route 53 over Elastic Load Balancing:
+    https://www.loggly.com/blog/why-aws-route-53-over-elastic-load-balancing/
+
+    # Statements about not being able to use port 514 are no longer true.
+
+  HostedFTP Case Study:
+    https://aws.amazon.com/solutions/case-studies/hostedftp/
+
+  S3 FTP:
+    http://cloudacademy.com/blog/s3-ftp-server/
+
+  Running an FTP server in AWS:
+    http://tech.domain.com.au/2015/04/running-an-ftp-server-in-aws/
+
+
+(me!) AWS ELB for FTP guide: (docs/howto/AWS.html)
+  When to (and not to!):
+    don't care which client goes to which instance -- implies shared filesystem!
+    if not, use RoundRobin Route53 config!
+      Route 53 instance health checks!
+
+    NOTE: IFF your instance is in a VPC (most common), then it may have a
+      private IP address (RFC1918), which means it cannot be reached from
+      outside.  For such cases, you WILL need an ELB to be the publicly
+      reachable IP address, and let it contact your instance.  Not a bad
+      arrangement from a network security perspective.  (Think SSH access
+      to instance, but ONLY from mgmt LAN; SG or ELB enforced?)
+
+  Elastic IP or no?
+    Not if the instance is an internal VPC instance!
+
+  TCP
+  NO SSL (and why)
+  full range of port mapping
+  Health checks (TCP)
+    * and how this can be used for "full servers" (mod_diskuse), "busy
+      servers" (mod_load), etc.
+
+  Security Group rules (NOT INBOUND PORT 20!!)
+  VPC
+    Network ACLs for inbound, outbound
+  Debugging
+    Logins succeed, but transfers fail
+      MasqueradeAddress, PassivePorts, SGs, NACLs
+
+  Importance of running `ntpd`, gotchas
+
+
+Source layout/APIs:
+
+  http.c
+    signatures
+
+  instance.c
+    Retrieve the instance metadata, store it in session.notes.  Environment
+    variables?  Where else?  Var API, for Display* files?
+
+  ec2.c
+
+  elb.c
+    Auto-registration, deregistration
+
+  route53.c
+    Auto-registration, deregistration
+
+  s3.c
+
+  ebs.c (for auto-mounting volumes?)
+
+  sqs.c
+    Queue-based notifications
+
+  sns.c
+    Push notifications!
+
+  ses.c
+    Email notifications!
+
+  cloudwatch.c
+    Publish custom metrics?
+
+  health.c
+    Basic HTTP server, just to handle HTTP request to "/ping"/"/healthy"
+    (configurable), for Route53/ELB healthchecks.  This lets mod_aws consult
+    load/disk before returning 200 or not.
+
+    Make sure to NOT listen on the public IP address! (or not?)  Default will
+    listen on port 8080 of private IP address.
+
+    Always include "Connection: close\r\n" response header!
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Length: 0\r\n"
+    "Cache-Control: private, no-cache, no-store\r\n"
+    "Date: ...\r\n"
+    "Expires: ...\r\n"
+
+  http.c
+  health.c
+  aws/
+    instance.c
+    ec2.c
+    ...
+
+Existing libraries/SDKs:
+
+  https://aws.amazon.com/blogs/aws/introducing-the-aws-sdk-for-c/
+    C++, not C.
+
+  https://github.com/ceph/libs3
+    S3 only.
+
+  https://github.com/vladistan/aws4c
+  http://blog.v-lad.org/archives/13
+    Good starting point, needs fleshing out.
+
+Eventually extract my own C code into a libclaws library ("C Library for AWS"),
+not be confused with Claws Mail:
+
+  http://www.claws-mail.org/
+
+On startup, make HTTP calls to AWS instance metadata.  NOTE: some of these
+resources return JSON, some do NOT.
+
+  http://169.254.169.254/latest/meta-data/
+    ami-id
+    hostname
+      Instance _private_ hostname
+    iam/info?
+    iam/security-credentials/
+      Returns the role name (e.g. "admin")
+    iam/security-credentials/[role-name]
+      If no IAM role, log error and stop module
+{
+  "Code" : "Success",
+  "LastUpdated" : "2016-02-26T18:37:09Z",
+  "Type" : "AWS-HMAC",
+  "AccessKeyId" : "ASIAJYB3GVCNVD7HWAWQ",
+  "SecretAccessKey" : "mQtGbz2I0jupFzzj95ed9ZgZMfwAb9Z8AtgnehAD",
+  "Token" : "AQoDYXdzEJT//////////wEa4ANnOfjaCnqbz9BnIuCuWCrJs979rlwRv5faM/scyA9WVwSgMNcbXGWecaIwdy8AHk9KDe3CEdhhUpDgBHC5vhKLlN4BuR03t7Dldlu0YDzvqh319Hkq65RxedmRxPpwCIZ+ofcJ0Zobar+4JWQLy46pdD2UGj02Al6W5GvEbxUTfzaWWTrY3oKFc88LkiKwarWKDCD1tomr7i1b1jBlTA277qUSCaqjPIRgBGH+DfBB9W9zURT4d66Z5/+nPVwzNHGWq9rXHQE1F267kY7NDxWp3UW/2zLGqTp4mkQ32gezNg/bGuWhlA/AhQQ+jXBozovduVihRo6PhGjzu4zd5UPEMhI8Q6PZQEZkfWELIGZUgB0eegPMnwUxUex2EGahrYqKVTJ2UJO+jJF9dNzBf11NrFZ2e3bci5vImLpPRGNYlEWCF1bEHIGOjbylTl0MmrzWsonGvCigdXyCJdTCFtAyxJizrsspS2a4Ah1+R1PtAxaaU1c1c4EoIAO0321GWiETjLRBDdAjfJwG3Hzwri+EHs+QHgBnlASH30i5iHupZWqDpibeUCt68O4pzYu2zUO8MPMwD7usVJbkzYrrB8OZgqGeRxt7xiO8jE/ZvBi+k/IcP7vrILpgw1blBThuYkEgg7fCtgU=",
+  "Expiration" : "2016-02-27T00:39:28Z"
+}
+    instance-id
+    instance-type
+    local-hostname
+      Instance _private_ DNS hostname
+    local-ipv4
+      (check if it's an RFC 1918 address!)
+    mac
+      Needed for other calls?
+    placement/availability-zone
+    public-hostname
+    public-ipv4
+      (check if it's an RFC 1918 address!)
+    security-groups
+
+  See also:
+
+    http://169.254.169.254/latest/dynamic/instance-identity/document
+
+    {
+      "devpayProductCodes" : null,
+      "availabilityZone" : "us-east-1d",
+      "privateIp" : "10.158.112.84",
+      "version" : "2010-08-31",
+      "region" : "us-east-1",
+      "instanceId" : "i-3d168483",
+      "billingProducts" : null,
+      "instanceType" : "t1.micro",
+      "accountId" : "123456789012",
+      "pendingTime" : "2015-11-19T16:32:11Z",
+      "imageId" : "ami-5fb8c835",
+      "kernelId" : "aki-919dcaf8",
+      "ramdiskId" : null,
+      "architecture" : "x86_64"
+    }
+
+  http://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/instance-identity-documents.html
+
+  Create a "struct aws_inst" that contains all of this info.  ONLY do this
+  discovery on 'core.startup', NOT on 'core.postparse', as we do NOT need to
+  do this after a restart, only on startup.
+
+ Answer these questions:
+   What region am I in?
+   What AZ am I in?
+   What instance type am I?
+   What AMI am I running?
+   What IAM role do I have?  What resources can I access/change?
+   Am I in a VPC?
+   Am I publicly reachable directly?
+   Can I be reached for my vhost control ports?
+   Can I be reached for my PassivePorts?  (FTP only)
+
+ Options:
+    Enable/disable ping/health listener
+    Auto-adjust SGs for ingress (and egress, for active transfers)?
+    Auto-configure MasqueradeAddress, PassivePorts
+    Auto-register/deregister with ELBs (which ones?)
+    Auto-register/deregister with Route53 (which names?)
+
+  Add "test" ftp client connect, to public IP, to see if can read own
+  banner?
