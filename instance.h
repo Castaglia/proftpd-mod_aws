@@ -31,33 +31,33 @@ struct aws_info {
   pool *pool;
 
   /* Last HTTP response message (since curl does not track this for us). */
-  const char *last_resp_msg;
+  char *last_resp_msg;
 
-  const char *aws_domain;
+  char *aws_domain;
   size_t aws_domainsz;
 
-  const char *account_id;
+  char *account_id;
   size_t account_idsz;
 
-  const char *region;
+  char *region;
   size_t regionsz;
 
-  const char *avail_zone;
+  char *avail_zone;
   size_t avail_zonesz;
 
-  const char *instance_type;
+  char *instance_type;
   size_t instance_typesz;
 
-  const char *instance_id;
+  char *instance_id;
   size_t instance_idsz;
 
-  const char *ami_id;
+  char *ami_id;
   size_t ami_idsz;
 
-  const char *iam_role;
+  char *iam_role;
   size_t iam_rolesz;
 
-  const char *vpc_id;
+  char *vpc_id;
   size_t vpc_idsz;
 
   array_header *security_groups;

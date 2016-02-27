@@ -25,6 +25,10 @@
 #include "mod_aws.h"
 #include "instance.h"
 
+#ifdef HAVE_CURL_CURL_H
+# include <curl/curl.h>
+#endif
+
 static char curl_errorbuf[CURL_ERROR_SIZE];
 
 static const char *trace_channel = "aws.instance";
@@ -83,7 +87,7 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URI "/services/domain";
 
-  curl_code = curl_easy_setopt(curl, CURLOPT_CURL, url);
+  curl_code = curl_easy_setopt(curl, CURLOPT_URL, url);
   if (curl_code != CURLE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURLOPT_URL '%s': %s", url, curl_easy_strerror(curl_code));
@@ -91,7 +95,7 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
     return -1;
   }
 
-  curl_code = curl_easy_setopt(curl, CURL_WRITEFUNCTION, aws_domain_write_cb);
+  curl_code = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, aws_domain_cb);
   if (curl_code != CURLE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURLOPT_WRITEFUNCTION: %s", curl_easy_strerror(curl_code));
@@ -99,7 +103,7 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
     return -1;
   }
 
-  curl_code = curl_easy_setopt(curl, CURL_WRITEDATA, info);
+  curl_code = curl_easy_setopt(curl, CURLOPT_WRITEDATA, info);
   if (curl_code != CURLE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURLOPT_WRITEDATA: %s", curl_easy_strerror(curl_code));
@@ -166,6 +170,10 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
   curl_code = curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
     &content_len);
   if (curl_code == CURLE_OK) {
+    pr_trace_msg(trace_channel, 15,
+      "received Content-Length %0.3lf for '%s' request", content_len, url);
+
+  } else {
     pr_trace_msg(trace_channel, 3,
       "unable to get CURLINFO_CONTENT_LENGTH_DOWNLOAD: %s",
       curl_easy_strerror(curl_code));
@@ -187,7 +195,7 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
   curl_code = curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, &total_secs);
   if (curl_code == CURLE_OK) {
     pr_trace_msg(trace_channel, 15,
-      "'%s' request took %0.3lf secs", total_secs);
+      "'%s' request took %0.3lf secs", url, total_secs);
 
   } else {
     pr_trace_msg(trace_channel, 3,
@@ -198,7 +206,7 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
   curl_code = curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &rcvd_bytes);
   if (curl_code == CURLE_OK) {
     pr_trace_msg(trace_channel, 15,
-      "received %0.3lf bytes for '%s' request", rcvd_bytes);
+      "received %0.3lf bytes for '%s' request", rcvd_bytes, url);
 
   } else {
     pr_trace_msg(trace_channel, 3,

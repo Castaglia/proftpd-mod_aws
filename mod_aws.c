@@ -29,6 +29,10 @@
 #include "mod_aws.h"
 #include "instance.h"
 
+#ifdef HAVE_CURL_CURL_H
+# include <curl/curl.h>
+#endif
+
 /* How long (in secs) to wait to connect to real server? */
 #define AWS_CONNECT_DEFAULT_TIMEOUT	5
 
@@ -48,7 +52,7 @@ unsigned long aws_opts = 0UL;
 
 static int aws_engine = FALSE;
 static unsigned long aws_flags = 0UL;
-#define AWS_FL_CURL_NO_SSL	0x0001;
+#define AWS_FL_CURL_NO_SSL	0x0001
 
 static const char *aws_logfile = NULL;
 
@@ -122,7 +126,6 @@ MODRET set_awscacertpath(cmd_rec *cmd) {
 /* usage: AWSEngine on|off */
 MODRET set_awsengine(cmd_rec *cmd) {
   int engine = 1;
-  config_rec *c;
 
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
@@ -167,7 +170,7 @@ MODRET set_awsoptions(cmd_rec *cmd) {
   c = add_config_param(cmd->argv[0], 1, NULL);
 
   for (i = 1; i < cmd->argc; i++) {
-    if (0) {
+    if (strcmp(cmd->argv[i], "FooBar") == 0) {
 
     } else {
       CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, ": unknown AWSOption '",
@@ -244,17 +247,15 @@ static void aws_mod_unload_ev(const void *event_data, void *user_data) {
 }
 #endif
 
-static void proxy_restart_ev(const void *event_data, void *user_data) {
+static void aws_restart_ev(const void *event_data, void *user_data) {
   CURLcode curl_code;
   long curl_flags = CURL_GLOBAL_ALL;
-
-  /* Re-init libcurl? OpenSSL (for signatures) ? */
 
   curl_global_cleanup();
 
 #ifdef CURL_GLOBAL_ACK_EINTR
   curl_flags |= CURL_GLOBAL_ACK_EINTR;
-#endif /* CURL_GLOBAL_ACK_EINTR *
+#endif /* CURL_GLOBAL_ACK_EINTR */
   curl_code = curl_global_init(curl_flags);
   if (curl_code != CURLE_OK) {
     const char *details;
@@ -266,6 +267,12 @@ static void proxy_restart_ev(const void *event_data, void *user_data) {
     pr_session_disconnect(&aws_module, PR_SESS_DISCONNECT_SESSION_INIT_FAILED,
       details);
   }
+
+  destroy_pool(aws_pool);
+  aws_pool = make_sub_pool(permanent_pool);
+  pr_pool_tag(aws_pool, MOD_AWS_VERSION);
+
+  /* XXX Close/reopen AWSLog? */
 }
 
 static void aws_shutdown_ev(const void *event_data, void *user_data) {
@@ -318,14 +325,18 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
     }
   }
 
-  aws_info = aws_instance_get_info();
+  aws_info = aws_instance_get_info(aws_pool);
   if (aws_info == NULL) {
     pr_log_debug(DEBUG0, MOD_AWS_VERSION
       ": unable to discover EC2 instance metadata: %s", strerror(errno));
     return;
   }
 
-  /* XXX Scan server list, and check SG settings (if allowed by IAM). */
+  /* XXX Scan server list, and check SG settings (if allowed by IAM).
+   *
+   * Make sure to see if MasqueradeAddress is set (if not, suggest/set it),
+   * if PassivePorts are set (if not, suggest/set them AND check SGs).
+   */
 
   /* XXX Register with ELB, or Route53 */
 
@@ -343,7 +354,7 @@ static int aws_init(void) {
 
 #ifdef CURL_GLOBAL_ACK_EINTR
   curl_flags |= CURL_GLOBAL_ACK_EINTR;
-#endif /* CURL_GLOBAL_ACK_EINTR *
+#endif /* CURL_GLOBAL_ACK_EINTR */
   curl_code = curl_global_init(curl_flags);
   if (curl_code != CURLE_OK) {
     pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
@@ -391,7 +402,7 @@ static int aws_init(void) {
  */
 
 static conftable aws_conftab[] = {
-  { "AWSCACertificateFile",	set_awsscacertfile,	NULL },
+  { "AWSCACertificateFile",	set_awscacertfile,	NULL },
   { "AWSCACertificatePath",	set_awscacertpath,	NULL },
   { "AWSEngine",		set_awsengine,		NULL },
   { "AWSLog",			set_awslog,		NULL },
