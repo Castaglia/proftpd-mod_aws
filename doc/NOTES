@@ -108,6 +108,8 @@ Source layout/APIs:
   http.c
     signatures
 
+    Make sure to cache/reuse SSL session data!
+
   instance.c
     Retrieve the instance metadata, store it in session.notes.  Environment
     variables?  Where else?  Var API, for Display* files?
@@ -247,6 +249,9 @@ resources return JSON, some do NOT.
    Am I publicly reachable directly?
    Can I be reached for my vhost control ports?
    Can I be reached for my PassivePorts?  (FTP only)
+
+ Make all of the discovered instance metadata available for logging via
+ notes: %{note:aws.instance-id}, etc.
 
  Options:
     Enable/disable ping/health listener
