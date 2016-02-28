@@ -62,6 +62,167 @@ static unsigned long aws_request_timeout_secs = 30;
 
 static const char *trace_channel = "aws";
 
+static void log_instance_info(pool *p, struct aws_info *info) {
+
+  /* AWS domain */
+  if (info->domain != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.domain = '%s'",
+      info->domain);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.domain = unavailable");
+  }
+
+  /* Account ID */
+  if (info->account_id != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.account-id = '%s'",
+      info->account_id);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.account-id = unavailable");
+  }
+
+  /* Region */
+  if (info->region != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.region = '%s'",
+      info->region);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.region = unavailable");
+  }
+
+  /* Availability zone */
+  if (info->avail_zone != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.avail-zone = '%s'",
+      info->avail_zone);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.avail-zone = unavailable");
+  }
+
+  /* Instance type */
+  if (info->instance_type != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.instance-type = '%s'", info->instance_type);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.instance-type = unavailable");
+  }
+
+  /* Instance ID */
+  if (info->instance_id != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.instance-id = '%s'", info->instance_id);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.instance-id = unavailable");
+  }
+
+  /* AMI ID */
+  if (info->ami_id != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.ami-id = '%s'",
+      info->ami_id);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.ami-id = unavailable");
+  }
+
+  /* IAM role */
+  if (info->iam_role != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.iam-role = '%s'",
+      info->iam_role);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.iam-role = unavailable");
+  }
+
+  /* MAC */
+  if (info->hw_mac != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.mac = '%s'",
+      info->hw_mac);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.mac = unavailable");
+  }
+
+  /* VPC ID */
+  if (info->vpc_id != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.vpc-id = '%s'",
+      info->vpc_id);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.vpc-id = unavailable");
+  }
+
+  /* Local IPv4 */
+  if (info->local_ipv4 != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.local-ipv4 = '%s'",
+      info->local_ipv4);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.local-ipv4 = unavailable");
+  }
+
+  /* Local hostname */
+  if (info->local_hostname != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.local-hostname = '%s'", info->local_hostname);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.local-hostname = unavailable");
+  }
+
+  /* Public IPv4 */
+  if (info->public_ipv4 != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.public-ipv4 = '%s'", info->public_ipv4);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.public-ipv4 = unavailable");
+  }
+
+  /* Public hostname */
+  if (info->public_hostname != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.public-hostname = '%s'", info->public_hostname);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.public-hostname = unavailable");
+  }
+
+  /* Security groups */
+  if (info->security_groups != NULL) {
+    register unsigned int i;
+    char **elts, *groups = "";
+
+    elts = info->security_groups->elts;
+    for (i = 0; i < info->security_groups->nelts; i++) {
+      groups = pstrcat(p, groups, *groups ? ", " : "", elts[i], NULL);
+    }
+
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.security-groups = '%s'", info->public_hostname);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.security-groups = unavailable");
+  }
+}
+
 /* Configuration handlers
  */
 
@@ -328,6 +489,8 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
       ": unable to discover EC2 instance metadata: %s", strerror(errno));
     return;
   }
+
+  log_instance_info(aws_pool, aws_info);
 
   /* XXX Scan server list, and check SG settings (if allowed by IAM).
    *

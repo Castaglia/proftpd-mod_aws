@@ -34,22 +34,18 @@ struct aws_info {
   char *last_resp_msg;
 
   /* http://169.254.169.254/latest/meta-data/services/domain */
-  char *aws_domain;
-  size_t aws_domainsz;
+  char *domain;
+  size_t domainsz;
 
-  /* http://169.254.169.254/latest/dynamic/instance-identity/document
-   *
-   * See "accountId" key.
-   */
+  /* http://169.254.169.254/latest/dynamic/instance-identity/document */
+  char *identity_doc;
+  size_t identity_docsz;
+
+  /* See identity doc "accountId" key. */
   char *account_id;
-  size_t account_idsz;
 
-  /* http://169.254.169.254/latest/dynamic/instance-identity/document
-   *
-   * See "region" key.
-   */
+  /* See identity doc "region" key. */
   char *region;
-  size_t regionsz;
 
   /* http://169.254.169.254/latest/meta-data/placement/availability-zone */
   char *avail_zone;
@@ -72,28 +68,32 @@ struct aws_info {
   size_t iam_rolesz;
 
   /* http://169.254.169.254/latest/meta-data/mac */
-  char *mac;
-  size_t macsz;
+  char *hw_mac;
+  size_t hw_macsz;
 
   /* http://169.254.169.254/latest/meta-data/network/interfaces/macs/{mac}/vpc-id */
   char *vpc_id;
   size_t vpc_idsz;
 
   /* http://169.254.169.254/latest/meta-data/security-groups */
+  char *sg_names;
+  size_t sg_namessz;
   array_header *security_groups;
 
   /* http://169.254.169.254/latest/meta-data/local-ipv4 */
-  pr_netaddr_t *private_addr;
+  char *local_ipv4;
+  size_t local_ipv4sz;
 
   /* http://169.254.169.254/latest/meta-data/local-hostname */
-  char *private_hostname;
-  size_t private_hostnamesz;
+  char *local_hostname;
+  size_t local_hostnamesz;
 
   /* http://169.254.169.254/latest/meta-data/public-ipv4
    *
    * Note that this may NOT be present in e.g. VPC internal hosts.
    */
-  pr_netaddr_t *public_addr;
+  char *public_ipv4;
+  size_t public_ipv4sz;
 
   /* http://169.254.169.254/latest/meta-data/public-hostname
    *

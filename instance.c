@@ -41,53 +41,20 @@ static const char *trace_channel = "aws.instance";
  *
  */
 
-#define AWS_HTTP_RESPONSE_CODE_OK	200L
+#define AWS_HTTP_RESPONSE_CODE_OK		200L
+#define AWS_HTTP_RESPONSE_CODE_BAD_REQUEST	400L
+#define AWS_HTTP_RESPONSE_CODE_NOT_FOUND	404L
 
 #define AWS_INSTANCE_METADATA_HOST	"169.254.169.254"
 #define AWS_INSTANCE_METADATA_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/meta-data"
+#define AWS_INSTANCE_DYNAMIC_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/dynamic"
 
-/* XXX Refactor this into a more generic "GET this URL" function, for better
- * reuse of the error checking, etc.
- */
-
-static size_t aws_domain_cb(char *data, size_t item_sz, size_t item_count,
-    void *user_data) {
-  struct aws_info *info;
-  size_t datasz;
-  char *ptr;
-
-  info = user_data;
-  datasz = item_sz * item_count;
-
-  if (datasz == 0) {
-    return 0;
-  }
-
-  if (info->aws_domainsz == 0) {
-    info->aws_domainsz = datasz;
-    ptr = info->aws_domain = palloc(info->pool, info->aws_domainsz);
-
-  } else {
-    ptr = info->aws_domain;
-    info->aws_domain = palloc(info->pool, info->aws_domainsz + datasz);
-    memcpy(info->aws_domain, ptr, info->aws_domainsz);
-
-    ptr = info->aws_domain + info->aws_domainsz;
-    info->aws_domainsz += datasz;
-  }
-
-  memcpy(ptr, data, datasz);
-  return datasz;
-}
-
-static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
+static int get_url(pool *p, CURL *curl, struct aws_info *info, const char *url,
+    size_t (*handle_body)(char *, size_t, size_t, void *)) {
   CURLcode curl_code;
-  const char *url;
   long resp_code;
   double content_len, rcvd_bytes, total_secs;
   char *content_type = NULL;
-
-  url = AWS_INSTANCE_METADATA_URL "/services/domain";
 
   curl_code = curl_easy_setopt(curl, CURLOPT_URL, url);
   if (curl_code != CURLE_OK) {
@@ -97,7 +64,7 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
     return -1;
   }
 
-  curl_code = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, aws_domain_cb);
+  curl_code = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, handle_body);
   if (curl_code != CURLE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURLOPT_WRITEFUNCTION: %s", curl_easy_strerror(curl_code));
@@ -128,8 +95,13 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
       pr_trace_msg(trace_channel, 1,
         "'%s' request error: %s", url, curl_errorbuf);
 
+      /* Note: What other error strings should we search for here? */
       if (strstr(curl_errorbuf, "Could not resolve host") != NULL) {
-        errno = ENOENT;
+        errno = ESRCH;
+
+      } else if (strstr(curl_errorbuf, "Connection timed out") != NULL) {
+        /* Hit our AWSTimeoutConnect? */
+        errno = ETIMEDOUT;
 
       } else {
         /* Generic error */
@@ -170,11 +142,28 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
       "received response code %ld for '%s' request", resp_code, url);
   }
 
-  if (resp_code != AWS_HTTP_RESPONSE_CODE_OK) {
-    pr_trace_msg(trace_channel, 2,
-      "received %ld response code for '%s' request", resp_code, url);
-    errno = EPERM;
-    return -1;
+  /* Note: should we handle other response codes? */
+  switch (resp_code) {
+    case AWS_HTTP_RESPONSE_CODE_OK:
+      break;
+
+    case AWS_HTTP_RESPONSE_CODE_BAD_REQUEST:
+      pr_trace_msg(trace_channel, 2,
+        "received %ld response code for '%s' request", resp_code, url);
+      errno = EINVAL;
+      return -1;
+
+    case AWS_HTTP_RESPONSE_CODE_NOT_FOUND:
+      pr_trace_msg(trace_channel, 2,
+        "received %ld response code for '%s' request", resp_code, url);
+      errno = ENOENT;
+      return -1;
+
+    default:
+      pr_trace_msg(trace_channel, 2,
+        "received %ld response code for '%s' request", resp_code, url);
+      errno = EPERM;
+      return -1;
   }
 
   curl_code = curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
@@ -224,24 +213,690 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
       curl_easy_strerror(curl_code));
   }
 
-  (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.domain = '%s'",
-    info->aws_domain);
-
   return 0;
 }
 
+/* Domain */
+static size_t domain_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->domainsz == 0) {
+    info->domainsz = datasz;
+    ptr = info->domain = palloc(info->pool, info->domainsz);
+
+  } else {
+    ptr = info->domain;
+    info->domain = palloc(info->pool, info->domainsz + datasz);
+    memcpy(info->domain, ptr, info->domainsz);
+
+    ptr = info->domain + info->domainsz;
+    info->domainsz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_domain(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_METADATA_URL "/services/domain";
+
+  res = get_url(p, curl, info, url, domain_cb);
+  return res;
+}
+
+/* Availability zone */
+static size_t avail_zone_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->avail_zonesz == 0) {
+    info->avail_zonesz = datasz;
+    ptr = info->avail_zone = palloc(info->pool, info->avail_zonesz);
+
+  } else {
+    ptr = info->avail_zone;
+    info->avail_zone = palloc(info->pool, info->avail_zonesz + datasz);
+    memcpy(info->avail_zone, ptr, info->avail_zonesz);
+
+    ptr = info->avail_zone + info->avail_zonesz;
+    info->avail_zonesz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_avail_zone(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_METADATA_URL "/placement/availability-zone";
+
+  res = get_url(p, curl, info, url, avail_zone_cb);
+  return res;
+}
+
+/* Instance type */
+static size_t instance_type_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->instance_typesz == 0) {
+    info->instance_typesz = datasz;
+    ptr = info->instance_type = palloc(info->pool, info->instance_typesz);
+
+  } else {
+    ptr = info->instance_type;
+    info->instance_type = palloc(info->pool, info->instance_typesz + datasz);
+    memcpy(info->instance_type, ptr, info->instance_typesz);
+
+    ptr = info->instance_type + info->instance_typesz;
+    info->instance_typesz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_instance_type(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_METADATA_URL "/instance-type";
+
+  res = get_url(p, curl, info, url, instance_type_cb);
+  return res;
+}
+
+/* Instance ID */
+static size_t instance_id_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->instance_idsz == 0) {
+    info->instance_idsz = datasz;
+    ptr = info->instance_id = palloc(info->pool, info->instance_idsz);
+
+  } else {
+    ptr = info->instance_id;
+    info->instance_id = palloc(info->pool, info->instance_idsz + datasz);
+    memcpy(info->instance_id, ptr, info->instance_idsz);
+
+    ptr = info->instance_id + info->instance_idsz;
+    info->instance_idsz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_instance_id(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_METADATA_URL "/instance-id";
+
+  res = get_url(p, curl, info, url, instance_id_cb);
+  return res;
+}
+
+/* AMI ID */
+static size_t ami_id_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->ami_idsz == 0) {
+    info->ami_idsz = datasz;
+    ptr = info->ami_id = palloc(info->pool, info->ami_idsz);
+
+  } else {
+    ptr = info->ami_id;
+    info->ami_id = palloc(info->pool, info->ami_idsz + datasz);
+    memcpy(info->ami_id, ptr, info->ami_idsz);
+
+    ptr = info->ami_id + info->ami_idsz;
+    info->ami_idsz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_ami_id(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_METADATA_URL "/ami-id";
+
+  res = get_url(p, curl, info, url, ami_id_cb);
+  return res;
+}
+
+/* IAM role */
+static size_t iam_role_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->iam_rolesz == 0) {
+    info->iam_rolesz = datasz;
+    ptr = info->iam_role = palloc(info->pool, info->iam_rolesz);
+
+  } else {
+    ptr = info->iam_role;
+    info->iam_role = palloc(info->pool, info->iam_rolesz + datasz);
+    memcpy(info->iam_role, ptr, info->iam_rolesz);
+
+    ptr = info->iam_role + info->iam_rolesz;
+    info->iam_rolesz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_iam_role(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  /* Note: the trailing slash in this URL is important, and is NOT a typo. */
+  url = AWS_INSTANCE_METADATA_URL "/iam/security-credentials/";
+
+  res = get_url(p, curl, info, url, iam_role_cb);
+  return res;
+}
+
+/* Hardware MAC */
+static size_t hw_mac_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->hw_macsz == 0) {
+    info->hw_macsz = datasz;
+    ptr = info->hw_mac = palloc(info->pool, info->hw_macsz);
+
+  } else {
+    ptr = info->hw_mac;
+    info->hw_mac = palloc(info->pool, info->hw_macsz + datasz);
+    memcpy(info->hw_mac, ptr, info->hw_macsz);
+
+    ptr = info->hw_mac + info->hw_macsz;
+    info->hw_macsz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_hw_mac(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_METADATA_URL "/mac";
+
+  res = get_url(p, curl, info, url, hw_mac_cb);
+  return res;
+}
+
+/* VPC ID */
+static size_t vpc_id_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->vpc_idsz == 0) {
+    info->vpc_idsz = datasz;
+    ptr = info->vpc_id = palloc(info->pool, info->vpc_idsz);
+
+  } else {
+    ptr = info->vpc_id;
+    info->vpc_id = palloc(info->pool, info->vpc_idsz + datasz);
+    memcpy(info->vpc_id, ptr, info->vpc_idsz);
+
+    ptr = info->vpc_id + info->vpc_idsz;
+    info->vpc_idsz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_vpc_id(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  /* If we don't know the MAC, then we cannot find the VPC ID. */
+  if (info->hw_mac == NULL) {
+    pr_trace_msg(trace_channel, 9, "unable to discover vpc.id without hw.mac");
+    errno = EPERM;
+    return -1;
+  }
+
+  url = pstrcat(p, AWS_INSTANCE_METADATA_URL, "/network/interfaces/macs/",
+    info->hw_mac, "/vpc-id", NULL);
+
+  res = get_url(p, curl, info, url, vpc_id_cb);
+  return res;
+}
+
+/* Local IPv4 */
+static size_t local_ipv4_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->local_ipv4sz == 0) {
+    info->local_ipv4sz = datasz;
+    ptr = info->local_ipv4 = palloc(info->pool, info->local_ipv4sz);
+
+  } else {
+    ptr = info->local_ipv4;
+    info->local_ipv4 = palloc(info->pool, info->local_ipv4sz + datasz);
+    memcpy(info->local_ipv4, ptr, info->local_ipv4sz);
+
+    ptr = info->local_ipv4 + info->local_ipv4sz;
+    info->local_ipv4sz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_local_ipv4(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_METADATA_URL "/local-ipv4";
+
+  res = get_url(p, curl, info, url, local_ipv4_cb);
+  return res;
+}
+
+/* Local hostname */
+static size_t local_hostname_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->local_hostnamesz == 0) {
+    info->local_hostnamesz = datasz;
+    ptr = info->local_hostname = palloc(info->pool, info->local_hostnamesz);
+
+  } else {
+    ptr = info->local_hostname;
+    info->local_hostname = palloc(info->pool, info->local_hostnamesz + datasz);
+    memcpy(info->local_hostname, ptr, info->local_hostnamesz);
+
+    ptr = info->local_hostname + info->local_hostnamesz;
+    info->local_hostnamesz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_local_hostname(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_METADATA_URL "/local-hostname";
+
+  res = get_url(p, curl, info, url, local_hostname_cb);
+  return res;
+}
+
+/* Public IPv4 */
+static size_t public_ipv4_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->public_ipv4sz == 0) {
+    info->public_ipv4sz = datasz;
+    ptr = info->public_ipv4 = palloc(info->pool, info->public_ipv4sz);
+
+  } else {
+    ptr = info->public_ipv4;
+    info->public_ipv4 = palloc(info->pool, info->public_ipv4sz + datasz);
+    memcpy(info->public_ipv4, ptr, info->public_ipv4sz);
+
+    ptr = info->public_ipv4 + info->public_ipv4sz;
+    info->public_ipv4sz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_public_ipv4(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_METADATA_URL "/public-ipv4";
+
+  res = get_url(p, curl, info, url, public_ipv4_cb);
+  return res;
+}
+
+/* Public hostname */
+static size_t public_hostname_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->public_hostnamesz == 0) {
+    info->public_hostnamesz = datasz;
+    ptr = info->public_hostname = palloc(info->pool, info->public_hostnamesz);
+
+  } else {
+    ptr = info->public_hostname;
+    info->public_hostname = palloc(info->pool,
+      info->public_hostnamesz + datasz);
+    memcpy(info->public_hostname, ptr, info->public_hostnamesz);
+
+    ptr = info->public_hostname + info->public_hostnamesz;
+    info->public_hostnamesz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_public_hostname(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_METADATA_URL "/public-hostname";
+
+  res = get_url(p, curl, info, url, public_hostname_cb);
+  return res;
+}
+
+/* Security groups */
+static size_t security_groups_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->sg_namessz == 0) {
+    info->sg_namessz = datasz;
+    ptr = info->sg_names = palloc(info->pool, info->sg_namessz);
+
+  } else {
+    ptr = info->sg_names;
+    info->sg_names = palloc(info->pool, info->sg_namessz + datasz);
+    memcpy(info->sg_names, ptr, info->sg_namessz);
+
+    ptr = info->sg_names + info->sg_namessz;
+    info->sg_namessz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_security_groups(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_METADATA_URL "/security-groups";
+
+  res = get_url(p, curl, info, url, security_groups_cb);
+  if (res == 0) {
+    /* XXX Post-progress info->sg_names into an array_header. */
+  }
+
+  return res;
+}
+
+/* Identity doc */
+static size_t identity_doc_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->identity_docsz == 0) {
+    info->identity_docsz = datasz;
+    ptr = info->identity_doc = palloc(info->pool, info->identity_docsz);
+
+  } else {
+    ptr = info->identity_doc;
+    info->identity_doc = palloc(info->pool, info->identity_docsz + datasz);
+    memcpy(info->identity_doc, ptr, info->identity_docsz);
+
+    ptr = info->identity_doc + info->identity_docsz;
+    info->identity_docsz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_identity_doc(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  url = AWS_INSTANCE_DYNAMIC_URL "/instance-identity/document";
+
+  res = get_url(p, curl, info, url, identity_doc_cb);
+  if (res == 0) {
+    /* XXX Post-proess the identity doc JSON into account_id, region */
+  }
+
+  return res;
+}
+
+/* Gather up the EC2 instance metadata. */
 static int get_info(pool *p, CURL *curl, struct aws_info *info) {
   int res;
 
-  /* Some resources provide only a single bit of metadata, and some provide
-   * a blob of metadata.
-   *
-   * XXX Start by calling the document, and parsing the JSON.  If that
-   * doesn't work, fall back to doing the individual calls.
+  /* Note: the ESRCH errno value is used here by get_url() to indicate that
+   * the requested host could not be resolved/does not exist.
    */
-  res = get_aws_domain(p, curl, info);
+
+  res = get_domain(p, curl, info);
   if (res < 0 &&
-      errno != EPERM) {
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_avail_zone(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_instance_type(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_instance_id(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_ami_id(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_iam_role(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_hw_mac(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_vpc_id(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_local_ipv4(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_local_hostname(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_public_ipv4(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_public_hostname(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_security_groups(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_identity_doc(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
     return -1;
   }
 
@@ -348,12 +1003,11 @@ static int curl_trace_cb(CURL *curl, curl_infotype data_type, char *data,
 
 struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
     unsigned long max_request_secs) {
-  int res;
+  int res, xerrno = 0;
   pool *info_pool;
   struct aws_info *info;
   CURL *curl;
   CURLcode curl_code;
-  struct curl_slist *headers = NULL;
 
   /* XXX use an easy handle, then clean it up when we're done; we don't need
    * to keep persistent connections open to the metadata service after
@@ -416,15 +1070,6 @@ struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
   if (curl_code != CURLE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURLOPT_HTTPGET: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  headers = curl_slist_append(headers, "Host: " AWS_INSTANCE_METADATA_HOST);
-  headers = curl_slist_append(headers, "Accept: */*");
-  curl_code = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_HTTPHEADER: %s",
       curl_easy_strerror(curl_code));
   }
 
@@ -507,12 +1152,13 @@ struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
   }
 
   res = get_info(p, curl, info);
+  xerrno = errno;
 
-  curl_slist_free_all(headers);
   curl_easy_cleanup(curl);
 
   if (res < 0) {
     info = NULL;
+    errno = xerrno;
   }
 
   return info;
