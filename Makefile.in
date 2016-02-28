@@ -15,7 +15,7 @@ MODULE_OBJS=mod_aws.o \
   stacktrace.o \
   instance.o
 
-SHARED_MODULE_OBJS=mod_proxy.lo \
+SHARED_MODULE_OBJS=mod_aws.lo \
   stacktrace.lo \
   instance.lo
 
