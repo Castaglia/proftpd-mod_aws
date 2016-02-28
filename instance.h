@@ -38,12 +38,14 @@ struct aws_info {
   size_t aws_domainsz;
 
   /* http://169.254.169.254/latest/dynamic/instance-identity/document
+   *
    * See "accountId" key.
    */
   char *account_id;
   size_t account_idsz;
 
   /* http://169.254.169.254/latest/dynamic/instance-identity/document
+   *
    * See "region" key.
    */
   char *region;
@@ -87,10 +89,16 @@ struct aws_info {
   char *private_hostname;
   size_t private_hostnamesz;
 
-  /* http://169.254.169.254/latest/meta-data/public-ipv4 */
+  /* http://169.254.169.254/latest/meta-data/public-ipv4
+   *
+   * Note that this may NOT be present in e.g. VPC internal hosts.
+   */
   pr_netaddr_t *public_addr;
 
-  /* http://169.254.169.254/latest/meta-data/public-hostname */
+  /* http://169.254.169.254/latest/meta-data/public-hostname
+   *
+   * Note that this may NOT be present in e.g. VPC internal hosts.
+   */
   char *public_hostname;
   size_t public_hostnamesz;
 };

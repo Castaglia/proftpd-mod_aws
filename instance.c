@@ -128,12 +128,20 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
       pr_trace_msg(trace_channel, 1,
         "'%s' request error: %s", url, curl_errorbuf);
 
+      if (strstr(curl_errorbuf, "Could not resolve host") != NULL) {
+        errno = ENOENT;
+
+      } else {
+        /* Generic error */
+        errno = EPERM;
+      }
+
     } else {
       pr_trace_msg(trace_channel, 1,
         "'%s' request error: %s", url, curl_easy_strerror(curl_code));
+      errno = EPERM;
     }
 
-    errno = EPERM;
     return -1;
   }
 
@@ -232,6 +240,10 @@ static int get_info(pool *p, CURL *curl, struct aws_info *info) {
    * doesn't work, fall back to doing the individual calls.
    */
   res = get_aws_domain(p, curl, info);
+  if (res < 0 &&
+      errno != EPERM) {
+    return -1;
+  }
 
   return 0;
 }
