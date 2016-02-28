@@ -64,10 +64,12 @@ static const char *trace_channel = "aws";
 
 static void log_instance_info(pool *p, struct aws_info *info) {
 
+  /* NOTE that many of the fields are NOT NUL-terminated. */
+
   /* AWS domain */
   if (info->domain != NULL) {
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.domain = '%s'",
-      info->domain);
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.domain = '%.*s'", (int) info->domainsz, info->domain);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -96,8 +98,8 @@ static void log_instance_info(pool *p, struct aws_info *info) {
 
   /* Availability zone */
   if (info->avail_zone != NULL) {
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.avail-zone = '%s'",
-      info->avail_zone);
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.avail-zone = '%.*s'", (int) info->avail_zonesz, info->avail_zone);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -107,7 +109,8 @@ static void log_instance_info(pool *p, struct aws_info *info) {
   /* Instance type */
   if (info->instance_type != NULL) {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "aws.instance-type = '%s'", info->instance_type);
+      "aws.instance-type = '%.*s'", (int) info->instance_typesz,
+      info->instance_type);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -117,7 +120,7 @@ static void log_instance_info(pool *p, struct aws_info *info) {
   /* Instance ID */
   if (info->instance_id != NULL) {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "aws.instance-id = '%s'", info->instance_id);
+      "aws.instance-id = '%.*s'", (int) info->instance_idsz, info->instance_id);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -126,8 +129,8 @@ static void log_instance_info(pool *p, struct aws_info *info) {
 
   /* AMI ID */
   if (info->ami_id != NULL) {
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.ami-id = '%s'",
-      info->ami_id);
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.ami-id = '%.*s'",
+      (int) info->ami_idsz, info->ami_id);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -136,8 +139,8 @@ static void log_instance_info(pool *p, struct aws_info *info) {
 
   /* IAM role */
   if (info->iam_role != NULL) {
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.iam-role = '%s'",
-      info->iam_role);
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.iam-role = '%.*s'",
+      (int) info->iam_rolesz, info->iam_role);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -146,8 +149,8 @@ static void log_instance_info(pool *p, struct aws_info *info) {
 
   /* MAC */
   if (info->hw_mac != NULL) {
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.mac = '%s'",
-      info->hw_mac);
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.mac = '%.*s'",
+      (int) info->hw_macsz, info->hw_mac);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -156,8 +159,8 @@ static void log_instance_info(pool *p, struct aws_info *info) {
 
   /* VPC ID */
   if (info->vpc_id != NULL) {
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.vpc-id = '%s'",
-      info->vpc_id);
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.vpc-id = '%.*s'",
+      (int) info->vpc_idsz, info->vpc_id);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -166,8 +169,8 @@ static void log_instance_info(pool *p, struct aws_info *info) {
 
   /* Local IPv4 */
   if (info->local_ipv4 != NULL) {
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.local-ipv4 = '%s'",
-      info->local_ipv4);
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.local-ipv4 = '%.*s'", (int) info->local_ipv4sz, info->local_ipv4);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -177,7 +180,8 @@ static void log_instance_info(pool *p, struct aws_info *info) {
   /* Local hostname */
   if (info->local_hostname != NULL) {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "aws.local-hostname = '%s'", info->local_hostname);
+      "aws.local-hostname = '%.*s'", (int) info->local_hostnamesz,
+      info->local_hostname);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -187,7 +191,7 @@ static void log_instance_info(pool *p, struct aws_info *info) {
   /* Public IPv4 */
   if (info->public_ipv4 != NULL) {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "aws.public-ipv4 = '%s'", info->public_ipv4);
+      "aws.public-ipv4 = '%.*s'", (int) info->public_ipv4sz, info->public_ipv4);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -197,7 +201,8 @@ static void log_instance_info(pool *p, struct aws_info *info) {
   /* Public hostname */
   if (info->public_hostname != NULL) {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "aws.public-hostname = '%s'", info->public_hostname);
+      "aws.public-hostname = '%.*s'", (int) info->public_hostnamesz,
+      info->public_hostname);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
