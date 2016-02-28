@@ -864,10 +864,17 @@ static int get_security_groups(pool *p, CURL *curl, struct aws_info *info) {
         ptr = sg_names;
         ptr2 = strchr(ptr, '\n');
         while (ptr2 != NULL) {
-          *((char **) push_array(info->security_groups)) = pstrndup(info->pool,
-            ptr, ptr2 - ptr);
+          char *sg_name;
+
+          sg_name = pstrndup(info->pool, ptr, ptr2 - ptr);
+          *((char **) push_array(info->security_groups)) = sg_name;
+
           ptr = ptr2 + 1;
+          ptr2 = strchr(ptr, '\n');
         }
+
+        /* Don't forget to add the last SG. */
+        *((char **) push_array(info->security_groups)) = ptr;
       }
     }
 

@@ -220,7 +220,7 @@ static void log_instance_info(pool *p, struct aws_info *info) {
     }
 
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "aws.security-groups = '%s'", info->public_hostname);
+      "aws.security-groups = '%s'", groups);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
