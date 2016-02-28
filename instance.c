@@ -44,7 +44,7 @@ static const char *trace_channel = "aws.instance";
 #define AWS_HTTP_RESPONSE_CODE_OK	200L
 
 #define AWS_INSTANCE_METADATA_HOST	"169.254.169.254"
-#define AWS_INSTANCE_METADATA_URI	"http://" AWS_INSTANCE_METADATA_HOST "/latest"
+#define AWS_INSTANCE_METADATA_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/meta-data"
 
 /* XXX Refactor this into a more generic "GET this URL" function, for better
  * reuse of the error checking, etc.
@@ -87,7 +87,7 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
   double content_len, rcvd_bytes, total_secs;
   char *content_type = NULL;
 
-  url = AWS_INSTANCE_METADATA_URI "/services/domain";
+  url = AWS_INSTANCE_METADATA_URL "/services/domain";
 
   curl_code = curl_easy_setopt(curl, CURLOPT_URL, url);
   if (curl_code != CURLE_OK) {
@@ -173,7 +173,7 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
     &content_len);
   if (curl_code == CURLE_OK) {
     pr_trace_msg(trace_channel, 15,
-      "received Content-Length %0.3lf for '%s' request", content_len, url);
+      "received Content-Length %0.0lf for '%s' request", content_len, url);
 
   } else {
     pr_trace_msg(trace_channel, 3,
@@ -208,13 +208,16 @@ static int get_aws_domain(pool *p, CURL *curl, struct aws_info *info) {
   curl_code = curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &rcvd_bytes);
   if (curl_code == CURLE_OK) {
     pr_trace_msg(trace_channel, 15,
-      "received %0.3lf bytes for '%s' request", rcvd_bytes, url);
+      "received %0.0lf bytes for '%s' request", rcvd_bytes, url);
 
   } else {
     pr_trace_msg(trace_channel, 3,
       "unable to get CURLINFO_SIZE_DOWNLOAD: %s",
       curl_easy_strerror(curl_code));
   }
+
+  (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.domain = '%s'",
+    info->aws_domain);
 
   return 0;
 }

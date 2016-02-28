@@ -33,38 +33,66 @@ struct aws_info {
   /* Last HTTP response message (since curl does not track this for us). */
   char *last_resp_msg;
 
+  /* http://169.254.169.254/latest/meta-data/services/domain */
   char *aws_domain;
   size_t aws_domainsz;
 
+  /* http://169.254.169.254/latest/dynamic/instance-identity/document
+   * See "accountId" key.
+   */
   char *account_id;
   size_t account_idsz;
 
+  /* http://169.254.169.254/latest/dynamic/instance-identity/document
+   * See "region" key.
+   */
   char *region;
   size_t regionsz;
 
+  /* http://169.254.169.254/latest/meta-data/placement/availability-zone */
   char *avail_zone;
   size_t avail_zonesz;
 
+  /* http://169.254.169.254/latest/meta-data/instance-type */
   char *instance_type;
   size_t instance_typesz;
 
+  /* http://169.254.169.254/latest/meta-data/instance-id */
   char *instance_id;
   size_t instance_idsz;
 
+  /* http://169.254.169.254/latest/meta-data/ami-id */
   char *ami_id;
   size_t ami_idsz;
 
+  /* http://169.254.169.254/latest/meta-data/iam/security-credentials/ */
   char *iam_role;
   size_t iam_rolesz;
 
+  /* http://169.254.169.254/latest/meta-data/mac */
+  char *mac;
+  size_t macsz;
+
+  /* http://169.254.169.254/latest/meta-data/network/interfaces/macs/{mac}/vpc-id */
   char *vpc_id;
   size_t vpc_idsz;
 
+  /* http://169.254.169.254/latest/meta-data/security-groups */
   array_header *security_groups;
+
+  /* http://169.254.169.254/latest/meta-data/local-ipv4 */
   pr_netaddr_t *private_addr;
-  const char *private_hostname;
+
+  /* http://169.254.169.254/latest/meta-data/local-hostname */
+  char *private_hostname;
+  size_t private_hostnamesz;
+
+  /* http://169.254.169.254/latest/meta-data/public-ipv4 */
   pr_netaddr_t *public_addr;
-  const char *public_hostname;
+
+  /* http://169.254.169.254/latest/meta-data/public-hostname */
+  char *public_hostname;
+  size_t public_hostnamesz;
 };
 
 struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
