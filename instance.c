@@ -24,6 +24,7 @@
 
 #include "mod_aws.h"
 #include "instance.h"
+#include "ccan-json.h"
 
 #ifdef HAVE_CURL_CURL_H
 # include <curl/curl.h>
@@ -841,7 +842,34 @@ static int get_security_groups(pool *p, CURL *curl, struct aws_info *info) {
 
   res = get_url(p, curl, info, url, security_groups_cb);
   if (res == 0) {
-    /* XXX Post-process info->sg_names into an array_header. */
+    info->security_groups = make_array(info->pool, 0, sizeof(char *));
+
+    if (info->sg_namessz > 0) {
+      char *sg_names, *ptr;
+
+      /* Since strchr(3) wants NUL-terminated strings, we need to make one. */
+      sg_names = pstrndup(info->pool, info->sg_names, info->sg_namessz);
+
+      /* The list of security groups is LF-delimited; if there is only
+       * one security group, then there is no LF.
+       */
+      ptr = strchr(sg_names, '\n');
+      if (ptr == NULL) {
+        /* Just one SG. */
+        *((char **) push_array(info->security_groups)) = sg_names;
+
+      } else {
+        char *ptr2;
+
+        ptr = sg_names;
+        ptr2 = strchr(ptr, '\n');
+        while (ptr2 != NULL) {
+          *((char **) push_array(info->security_groups)) = pstrndup(info->pool,
+            ptr, ptr2 - ptr);
+          ptr = ptr2 + 1;
+        }
+      }
+    }
 
   } else if (res < 0 &&
              errno == ENOENT) {
@@ -892,7 +920,51 @@ static int get_identity_doc(pool *p, CURL *curl, struct aws_info *info) {
 
   res = get_url(p, curl, info, url, identity_doc_cb);
   if (res == 0) {
-    /* XXX Post-process the identity doc JSON into account_id, region */
+    const char *json_str;
+
+    json_str = pstrndup(info->pool, info->identity_doc, info->identity_docsz);
+    if (json_validate(json_str) == TRUE) {
+      JsonNode *field, *json;
+      const char *key;
+
+      json = json_decode(json_str);
+
+      key = "accountId";
+      field = json_find_member(json, key);
+      if (field != NULL) {
+        if (field->tag == JSON_STRING) {
+          info->account_id = pstrdup(info->pool, field->string_);
+
+        } else {
+          pr_trace_msg(trace_channel, 3,
+           "ignoring non-string '%s' JSON field in '%s'", key, json_str);
+        }
+      }
+
+      key = "region";
+      field = json_find_member(json, key);
+      if (field != NULL) {
+        if (field->tag == JSON_STRING) {
+          info->region = pstrdup(info->pool, field->string_);
+
+        } else {
+          pr_trace_msg(trace_channel, 3,
+           "ignoring non-string '%s' JSON field in '%s'", key, json_str);
+        }
+      }
+
+      json_delete(json);
+
+    } else {
+      pr_trace_msg(trace_channel, 3,
+        "'%s' JSON failed validation, ignoring", url);
+
+      info->identity_docsz = 0;
+      info->identity_doc = NULL;
+
+      errno = ENOENT;
+      return -1;
+    }
 
   } else if (res < 0 &&
              errno == ENOENT) {
