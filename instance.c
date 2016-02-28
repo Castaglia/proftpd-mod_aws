@@ -254,6 +254,13 @@ static int get_domain(pool *p, CURL *curl, struct aws_info *info) {
   url = AWS_INSTANCE_METADATA_URL "/services/domain";
 
   res = get_url(p, curl, info, url, domain_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->domainsz = 0;
+    info->domain = NULL;
+  }
+
   return res;
 }
 
@@ -295,6 +302,13 @@ static int get_avail_zone(pool *p, CURL *curl, struct aws_info *info) {
   url = AWS_INSTANCE_METADATA_URL "/placement/availability-zone";
 
   res = get_url(p, curl, info, url, avail_zone_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->avail_zonesz = 0;
+    info->avail_zone = NULL;
+  }
+
   return res;
 }
 
@@ -336,6 +350,13 @@ static int get_instance_type(pool *p, CURL *curl, struct aws_info *info) {
   url = AWS_INSTANCE_METADATA_URL "/instance-type";
 
   res = get_url(p, curl, info, url, instance_type_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->instance_typesz = 0;
+    info->instance_type = NULL;
+  }
+
   return res;
 }
 
@@ -377,6 +398,13 @@ static int get_instance_id(pool *p, CURL *curl, struct aws_info *info) {
   url = AWS_INSTANCE_METADATA_URL "/instance-id";
 
   res = get_url(p, curl, info, url, instance_id_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->instance_idsz = 0;
+    info->instance_id = NULL;
+  }
+
   return res;
 }
 
@@ -418,6 +446,13 @@ static int get_ami_id(pool *p, CURL *curl, struct aws_info *info) {
   url = AWS_INSTANCE_METADATA_URL "/ami-id";
 
   res = get_url(p, curl, info, url, ami_id_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->ami_idsz = 0;
+    info->ami_id = NULL;
+  }
+
   return res;
 }
 
@@ -460,6 +495,13 @@ static int get_iam_role(pool *p, CURL *curl, struct aws_info *info) {
   url = AWS_INSTANCE_METADATA_URL "/iam/security-credentials/";
 
   res = get_url(p, curl, info, url, iam_role_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->iam_rolesz = 0;
+    info->iam_role = NULL;
+  }
+
   return res;
 }
 
@@ -501,6 +543,13 @@ static int get_hw_mac(pool *p, CURL *curl, struct aws_info *info) {
   url = AWS_INSTANCE_METADATA_URL "/mac";
 
   res = get_url(p, curl, info, url, hw_mac_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->hw_macsz = 0;
+    info->hw_mac = NULL;
+  }
+
   return res;
 }
 
@@ -550,6 +599,13 @@ static int get_vpc_id(pool *p, CURL *curl, struct aws_info *info) {
     info->hw_mac, "/vpc-id", NULL);
 
   res = get_url(p, curl, info, url, vpc_id_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->vpc_idsz = 0;
+    info->vpc_id = NULL;
+  }
+
   return res;
 }
 
@@ -591,6 +647,13 @@ static int get_local_ipv4(pool *p, CURL *curl, struct aws_info *info) {
   url = AWS_INSTANCE_METADATA_URL "/local-ipv4";
 
   res = get_url(p, curl, info, url, local_ipv4_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->local_ipv4sz = 0;
+    info->local_ipv4 = NULL;
+  }
+
   return res;
 }
 
@@ -632,6 +695,13 @@ static int get_local_hostname(pool *p, CURL *curl, struct aws_info *info) {
   url = AWS_INSTANCE_METADATA_URL "/local-hostname";
 
   res = get_url(p, curl, info, url, local_hostname_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->local_hostnamesz = 0;
+    info->local_hostname = NULL;
+  }
+
   return res;
 }
 
@@ -673,6 +743,13 @@ static int get_public_ipv4(pool *p, CURL *curl, struct aws_info *info) {
   url = AWS_INSTANCE_METADATA_URL "/public-ipv4";
 
   res = get_url(p, curl, info, url, public_ipv4_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->public_ipv4sz = 0;
+    info->public_ipv4 = NULL;
+  }
+
   return res;
 }
 
@@ -715,6 +792,13 @@ static int get_public_hostname(pool *p, CURL *curl, struct aws_info *info) {
   url = AWS_INSTANCE_METADATA_URL "/public-hostname";
 
   res = get_url(p, curl, info, url, public_hostname_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->public_hostnamesz = 0;
+    info->public_hostname = NULL;
+  }
+
   return res;
 }
 
@@ -757,7 +841,13 @@ static int get_security_groups(pool *p, CURL *curl, struct aws_info *info) {
 
   res = get_url(p, curl, info, url, security_groups_cb);
   if (res == 0) {
-    /* XXX Post-progress info->sg_names into an array_header. */
+    /* XXX Post-process info->sg_names into an array_header. */
+
+  } else if (res < 0 &&
+             errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->sg_namessz = 0;
+    info->sg_names = NULL;
   }
 
   return res;
@@ -802,7 +892,13 @@ static int get_identity_doc(pool *p, CURL *curl, struct aws_info *info) {
 
   res = get_url(p, curl, info, url, identity_doc_cb);
   if (res == 0) {
-    /* XXX Post-proess the identity doc JSON into account_id, region */
+    /* XXX Post-process the identity doc JSON into account_id, region */
+
+  } else if (res < 0 &&
+             errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->identity_docsz = 0;
+    info->identity_doc = NULL;
   }
 
   return res;
