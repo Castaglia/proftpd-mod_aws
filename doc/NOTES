@@ -250,6 +250,9 @@ resources return JSON, some do NOT.
    Can I be reached for my vhost control ports?
    Can I be reached for my PassivePorts?  (FTP only)
 
+ CAN these questions be answered without outside config?
+   What ELBs am I in?
+
  Make all of the discovered instance metadata available for logging via
  notes: %{note:aws.instance-id}, etc.
 
