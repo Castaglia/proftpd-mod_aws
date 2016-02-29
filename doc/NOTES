@@ -1,28 +1,5 @@
 
 NEXT:
-  get subnet_id:
-    network/interfaces/macs/{mac}/subnet-id
-  For use in requesting Network ACLs for that subnet
-
-  get IAM access key ID, secret access key (for signatures) from JSON doc
-  returned by:
-    iam/security-credentials/{iam-role}
-  Example:
-{
-  "Code" : "Success",
-  "LastUpdated" : "2012-04-26T16:39:16Z",
-  "Type" : "AWS-HMAC",
-  "AccessKeyId" : "AKIAIOSFODNN7EXAMPLE",
-  "SecretAccessKey" : "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-  "Token" : "token",
-  "Expiration" : "2012-04-27T22:39:16Z"
-}
-
-  NOTE: these credentials change/expire automatically, so these need to
-  be queried dynamically.  This suggests a separate function:
-
-    int aws_instance_get_credentials(...);
-
   http.c
     Allow expected Content-Type for response?
   
