@@ -1,5 +1,5 @@
 /*
- * ProFTPD - mod_aws HTTP requests
+ * ProFTPD - mod_aws AWS Errors
  * Copyright (c) 2016 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,30 +23,32 @@
  */
 
 #include "mod_aws.h"
+#include "error.h"
+#include "xml.h"
 
-#ifndef MOD_AWS_HTTP_H
-#define MOD_AWS_HTTP_H
+static const char *trace_channel = "aws.error";
 
-#define AWS_HTTP_RESPONSE_CODE_OK		200L
-#define AWS_HTTP_RESPONSE_CODE_BAD_REQUEST	400L
-#define AWS_HTTP_RESPONSE_CODE_NOT_FOUND	404L
+/*
+Example doc to parse:
 
-void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
-  unsigned long max_request_secs, const char *cacerts);
-int aws_http_destroy(pool *p, void *http);
+<?xml version="1.0" encoding="UTF-8"?>
+<Response><Errors><Error><Code>MissingParameter</Code><Message>The request must contain the parameter AWSAccessKeyId</Message></Error></Errors><RequestID>e03bfe35-249e-42ee-8671-f9a1c6201ceb</RequestID></Response>
 
-const char *aws_http_urldecode(pool *p, void *http, const char *item,
-  size_t item_len, size_t *decoded_len);
-const char *aws_http_urlencode(pool *p, void *http, const char *item,
-  size_t item_len);
+ */
 
-int aws_http_get(pool *p, void *http, const char *url,
-  size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
-  long *resp_code);
+/* XXX Will need a string table, matching <code> string to our error code */
 
-/* API lifetime functions, for mod_aws use only. */
-int aws_http_init(pool *p, unsigned long *feature_flags,
-  const char **http_details);
-int aws_http_free(void);
+struct aws_error *aws_error_parse(pool *p, const char *data, size_t datasz) {
+  void *xml;
 
-#endif /* MOD_AWS_HTTP_H */
+  xml = aws_xml_alloc(p, data, datasz);
+  if (xml == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  aws_xml_destroy(p, xml);
+
+  errno = ENOSYS;
+  return NULL;
+}

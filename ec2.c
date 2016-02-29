@@ -25,6 +25,7 @@
 #include "mod_aws.h"
 #include "http.h"
 #include "instance.h"
+#include "error.h"
 #include "ec2.h"
 
 static const char *trace_channel = "aws.ec2";
@@ -44,10 +45,10 @@ struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
     const char *domain, const char *api_version) {
   pool *ec2_pool;
   struct ec2_conn *ec2;
-  CURL *curl;
+  void *http;
 
-  curl = aws_http_alloc(p, max_connect_secs, max_request_secs, cacerts);
-  if (curl == NULL) {
+  http = aws_http_alloc(p, max_connect_secs, max_request_secs, cacerts);
+  if (http == NULL) {
     return NULL;
   }
 
@@ -56,7 +57,7 @@ struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
 
   ec2 = pcalloc(ec2_pool, sizeof(struct ec2_conn));
   ec2->pool = ec2_pool;
-  ec2->curl = curl;
+  ec2->http = http;
   ec2->region = pstrdup(ec2->pool, region);
   ec2->domain = pstrdup(ec2->pool, domain);
   ec2->api_version = pstrdup(ec2->pool, api_version);
@@ -67,7 +68,7 @@ struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
 int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2) {
   int res, xerrno;
 
-  res = aws_http_destroy(p, ec2->curl);
+  res = aws_http_destroy(p, ec2->http);
   xerrno = errno;
 
   destroy_pool(ec2->pool);
@@ -76,15 +77,20 @@ int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2) {
   return res;
 }
 
-static int ec2_get(pool *p, CURL *curl, void *user_data, const char *url,
-    size_t (*resp_body)(char *, size_t, size_t, void *)) {
+static int ec2_get(pool *p, void *http, const char *url,
+    size_t (*resp_body)(char *, size_t, size_t, void *),
+    void *user_data) {
   int res;
   long resp_code;
+struct ec2_conn *ec2 = user_data;
 
-  res = aws_http_get(p, curl, url, resp_body, user_data, &resp_code);
+  res = aws_http_get(p, http, url, resp_body, user_data, &resp_code);
   if (res < 0) {
     return -1;
   }
+
+(void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "DescribeSecurityGroups: respsz = %lu (%p)", (unsigned long) ec2->respsz, ec2->resp);
+(void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "DescribeSecurityGroups: '%.*s'", (int) ec2->respsz, ec2->resp);
 
   /* Note: should we handle other response codes? */
   switch (resp_code) {
@@ -149,22 +155,20 @@ int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
   const char *url;
   pool *req_pool;
 
-/* XXX test using WRONG name, for SSL verification */
-
   req_pool = make_sub_pool(ec2->pool);
   pr_pool_tag(req_pool, "EC2 Request Pool");
+  ec2->req_pool = req_pool;
 
   /* Note: do any of these query parameters need to be URL-encoded?  Per the
    * AWS docs, the answer is "yes".
    */
-
   url = pstrcat(req_pool, "https://ec2.", ec2->region, ".", ec2->domain,
     "/?Action=DescribeSecurityGroups",
-    "&Version=", aws_http_urlencode(req_pool, ec2->curl, ec2->api_version, 0),
+    "&Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
     "&DryRun",
     NULL);
 
-  res = ec2_get(p, ec2->curl, ec2, url, ec2_resp_cb);
+  res = ec2_get(p, ec2->http, url, ec2_resp_cb, ec2);
   if (res == 0) {
 /* XXX Parse response data */
   }

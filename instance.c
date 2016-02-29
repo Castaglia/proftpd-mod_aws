@@ -41,12 +41,13 @@ static const char *trace_channel = "aws.instance";
 #define AWS_INSTANCE_METADATA_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/meta-data"
 #define AWS_INSTANCE_DYNAMIC_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/dynamic"
 
-static int get_metadata(pool *p, CURL *curl, void *user_data,
-    const char *url, size_t (*resp_body)(char *, size_t, size_t, void *)) {
+static int get_metadata(pool *p, void *http, const char *url,
+    size_t (*resp_body)(char *, size_t, size_t, void *),
+    void *user_data) {
   int res;
   long resp_code;
 
-  res = aws_http_get(p, curl, url, resp_body, user_data, &resp_code);
+  res = aws_http_get(p, http, url, resp_body, user_data, &resp_code);
   if (res < 0) {
     return -1;
   }
@@ -109,13 +110,13 @@ static size_t domain_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_domain(pool *p, CURL *curl, struct aws_info *info) {
+static int get_domain(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_METADATA_URL "/services/domain";
 
-  res = get_metadata(p, curl, info, url, domain_cb);
+  res = get_metadata(p, http, url, domain_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -157,13 +158,13 @@ static size_t avail_zone_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_avail_zone(pool *p, CURL *curl, struct aws_info *info) {
+static int get_avail_zone(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_METADATA_URL "/placement/availability-zone";
 
-  res = get_metadata(p, curl, info, url, avail_zone_cb);
+  res = get_metadata(p, http, url, avail_zone_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -205,13 +206,13 @@ static size_t instance_type_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_instance_type(pool *p, CURL *curl, struct aws_info *info) {
+static int get_instance_type(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_METADATA_URL "/instance-type";
 
-  res = get_metadata(p, curl, info, url, instance_type_cb);
+  res = get_metadata(p, http, url, instance_type_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -253,13 +254,13 @@ static size_t instance_id_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_instance_id(pool *p, CURL *curl, struct aws_info *info) {
+static int get_instance_id(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_METADATA_URL "/instance-id";
 
-  res = get_metadata(p, curl, info, url, instance_id_cb);
+  res = get_metadata(p, http, url, instance_id_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -301,13 +302,13 @@ static size_t ami_id_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_ami_id(pool *p, CURL *curl, struct aws_info *info) {
+static int get_ami_id(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_METADATA_URL "/ami-id";
 
-  res = get_metadata(p, curl, info, url, ami_id_cb);
+  res = get_metadata(p, http, url, ami_id_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -349,14 +350,14 @@ static size_t iam_role_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_iam_role(pool *p, CURL *curl, struct aws_info *info) {
+static int get_iam_role(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   /* Note: the trailing slash in this URL is important, and is NOT a typo. */
   url = AWS_INSTANCE_METADATA_URL "/iam/security-credentials/";
 
-  res = get_metadata(p, curl, info, url, iam_role_cb);
+  res = get_metadata(p, http, url, iam_role_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -398,13 +399,13 @@ static size_t hw_mac_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_hw_mac(pool *p, CURL *curl, struct aws_info *info) {
+static int get_hw_mac(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_METADATA_URL "/mac";
 
-  res = get_metadata(p, curl, info, url, hw_mac_cb);
+  res = get_metadata(p, http, url, hw_mac_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -446,7 +447,7 @@ static size_t vpc_id_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_vpc_id(pool *p, CURL *curl, struct aws_info *info) {
+static int get_vpc_id(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
@@ -461,7 +462,7 @@ static int get_vpc_id(pool *p, CURL *curl, struct aws_info *info) {
   url = pstrcat(p, AWS_INSTANCE_METADATA_URL, "/network/interfaces/macs/",
     info->hw_mac, "/vpc-id", NULL);
 
-  res = get_metadata(p, curl, info, url, vpc_id_cb);
+  res = get_metadata(p, http, url, vpc_id_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -503,7 +504,7 @@ static size_t subnet_id_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_subnet_id(pool *p, CURL *curl, struct aws_info *info) {
+static int get_subnet_id(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
@@ -518,7 +519,7 @@ static int get_subnet_id(pool *p, CURL *curl, struct aws_info *info) {
   url = pstrcat(p, AWS_INSTANCE_METADATA_URL, "/network/interfaces/macs/",
     info->hw_mac, "/subnet-id", NULL);
 
-  res = get_metadata(p, curl, info, url, subnet_id_cb);
+  res = get_metadata(p, http, url, subnet_id_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -560,13 +561,13 @@ static size_t local_ipv4_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_local_ipv4(pool *p, CURL *curl, struct aws_info *info) {
+static int get_local_ipv4(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_METADATA_URL "/local-ipv4";
 
-  res = get_metadata(p, curl, info, url, local_ipv4_cb);
+  res = get_metadata(p, http, url, local_ipv4_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -608,13 +609,13 @@ static size_t local_hostname_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_local_hostname(pool *p, CURL *curl, struct aws_info *info) {
+static int get_local_hostname(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_METADATA_URL "/local-hostname";
 
-  res = get_metadata(p, curl, info, url, local_hostname_cb);
+  res = get_metadata(p, http, url, local_hostname_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -656,13 +657,13 @@ static size_t public_ipv4_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_public_ipv4(pool *p, CURL *curl, struct aws_info *info) {
+static int get_public_ipv4(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_METADATA_URL "/public-ipv4";
 
-  res = get_metadata(p, curl, info, url, public_ipv4_cb);
+  res = get_metadata(p, http, url, public_ipv4_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -705,13 +706,13 @@ static size_t public_hostname_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_public_hostname(pool *p, CURL *curl, struct aws_info *info) {
+static int get_public_hostname(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_METADATA_URL "/public-hostname";
 
-  res = get_metadata(p, curl, info, url, public_hostname_cb);
+  res = get_metadata(p, http, url, public_hostname_cb, info);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -753,13 +754,13 @@ static size_t security_groups_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_security_groups(pool *p, CURL *curl, struct aws_info *info) {
+static int get_security_groups(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_METADATA_URL "/security-groups";
 
-  res = get_metadata(p, curl, info, url, security_groups_cb);
+  res = get_metadata(p, http, url, security_groups_cb, info);
   if (res == 0) {
     info->security_groups = make_array(info->pool, 0, sizeof(char *));
 
@@ -838,13 +839,13 @@ static size_t identity_doc_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_identity_doc(pool *p, CURL *curl, struct aws_info *info) {
+static int get_identity_doc(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
   url = AWS_INSTANCE_DYNAMIC_URL "/instance-identity/document";
 
-  res = get_metadata(p, curl, info, url, identity_doc_cb);
+  res = get_metadata(p, http, url, identity_doc_cb, info);
   if (res == 0) {
     const char *json_str;
 
@@ -915,98 +916,98 @@ static int get_identity_doc(pool *p, CURL *curl, struct aws_info *info) {
 }
 
 /* Gather up the EC2 instance metadata. */
-static int get_aws_info(pool *p, CURL *curl, struct aws_info *info) {
+static int get_instance_info(pool *p, void *http, struct aws_info *info) {
   int res;
 
   /* Note: the ESRCH errno value is used here by aws_http_get() to indicate
    * that the requested host could not be resolved/does not exist.
    */
 
-  res = get_domain(p, curl, info);
+  res = get_domain(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_avail_zone(p, curl, info);
+  res = get_avail_zone(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_instance_type(p, curl, info);
+  res = get_instance_type(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_instance_id(p, curl, info);
+  res = get_instance_id(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_ami_id(p, curl, info);
+  res = get_ami_id(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_iam_role(p, curl, info);
+  res = get_iam_role(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_hw_mac(p, curl, info);
+  res = get_hw_mac(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_vpc_id(p, curl, info);
+  res = get_vpc_id(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_subnet_id(p, curl, info);
+  res = get_subnet_id(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_local_ipv4(p, curl, info);
+  res = get_local_ipv4(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_local_hostname(p, curl, info);
+  res = get_local_hostname(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_public_ipv4(p, curl, info);
+  res = get_public_ipv4(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_public_hostname(p, curl, info);
+  res = get_public_hostname(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_security_groups(p, curl, info);
+  res = get_security_groups(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
   }
 
-  res = get_identity_doc(p, curl, info);
+  res = get_identity_doc(p, http, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
@@ -1019,13 +1020,13 @@ struct aws_info *aws_instance_get_info(pool *p) {
   int res, xerrno = 0;
   pool *info_pool;
   struct aws_info *info;
-  CURL *curl;
+  void *http;
 
   /* The metadata URLs do not use SSL, so we don't need to provide the
    * CA certs file.  And we assume short hardcoded timeouts here.
    */
-  curl = aws_http_alloc(p, 1UL, 1UL, NULL);
-  if (curl == NULL) {
+  http = aws_http_alloc(p, 1UL, 1UL, NULL);
+  if (http == NULL) {
     return NULL;
   }
 
@@ -1035,10 +1036,10 @@ struct aws_info *aws_instance_get_info(pool *p) {
   info = pcalloc(info_pool, sizeof(struct aws_info));
   info->pool = info_pool;
 
-  res = get_aws_info(p, curl, info);
+  res = get_instance_info(p, http, info);
   xerrno = errno;
 
-  aws_http_destroy(p, curl);
+  aws_http_destroy(p, http);
 
   if (res < 0) {
     destroy_pool(info_pool);
@@ -1080,14 +1081,14 @@ static size_t iam_creds_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-static int get_iam_info(pool *p, CURL *curl, struct iam_info *info) {
+static int get_iam_info(pool *p, void *http, struct iam_info *info) {
   int res;
   const char *url;
 
   url = pstrcat(p, AWS_INSTANCE_METADATA_URL, "/iam/security-credentials/",
     info->iam_role, NULL);
 
-  res = get_metadata(p, curl, info, url, iam_creds_cb);
+  res = get_metadata(p, http, url, iam_creds_cb, info);
   if (res == 0) {
     const char *json_str;
 
@@ -1162,10 +1163,10 @@ struct iam_info *aws_instance_get_iam_credentials(pool *p,
   int res, xerrno = 0;
   pool *iam_pool;
   struct iam_info *info;
-  CURL *curl;
+  void *http;
 
-  curl = aws_http_alloc(p, 1UL, 1UL, NULL);
-  if (curl == NULL) {
+  http = aws_http_alloc(p, 1UL, 1UL, NULL);
+  if (http == NULL) {
     return NULL;
   }
 
@@ -1176,10 +1177,10 @@ struct iam_info *aws_instance_get_iam_credentials(pool *p,
   info->pool = iam_pool;
   info->iam_role = pstrdup(iam_pool, iam_role);
 
-  res = get_iam_info(p, curl, info);
+  res = get_iam_info(p, http, info);
   xerrno = errno;
 
-  aws_http_destroy(p, curl);
+  aws_http_destroy(p, http);
 
   if (res < 0) {
     destroy_pool(iam_pool);

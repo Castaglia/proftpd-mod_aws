@@ -25,6 +25,10 @@
 #include "mod_aws.h"
 #include "http.h"
 
+#ifdef HAVE_CURL_CURL_H
+# include <curl/curl.h>
+#endif
+
 static char curl_errorbuf[CURL_ERROR_SIZE];
 static CURLSH *curl_share = NULL;
 
@@ -33,28 +37,33 @@ static pool *http_resp_pool = NULL;
 
 static const char *trace_channel = "aws.http";
 
-const char *aws_http_urldecode(pool *p, CURL *curl, const char *item,
+const char *aws_http_urldecode(pool *p, void *http, const char *item,
     size_t item_len, size_t *decoded_len) {
+  CURL *curl;
   char *decoded_item, *ptr;
 
+  curl = http;
   ptr = curl_easy_unescape(curl, item, (int) item_len, (int *) decoded_len);
   if (ptr == NULL) {
     errno = EINVAL;
     return NULL;
   }
 
-  decoded_item = palloc(p, *decoded_len);
+  decoded_item = palloc(p, *decoded_len + 1);
   memcpy(decoded_item, ptr, *decoded_len);
+  decoded_item[*decoded_len] = '\0';
   curl_free(ptr);
 
   return decoded_item;
 }
 
-const char *aws_http_urlencode(pool *p, CURL *curl, const char *item,
+const char *aws_http_urlencode(pool *p, void *http, const char *item,
     size_t item_len) {
+  CURL *curl;
   char *encoded_item, *ptr;
   size_t encoded_len;
 
+  curl = http;
   ptr = curl_easy_escape(curl, item, (int) item_len);
   if (ptr == NULL) {
     errno = EINVAL;
@@ -62,10 +71,13 @@ const char *aws_http_urlencode(pool *p, CURL *curl, const char *item,
   }
 
   encoded_len = strlen(ptr);
-  encoded_item = palloc(p, encoded_len);
+  encoded_item = palloc(p, encoded_len + 1);
   memcpy(encoded_item, ptr, encoded_len);
+  encoded_item[encoded_len] = '\0';
   curl_free(ptr);
 
+  pr_trace_msg(trace_channel, 15,
+    "'%s' URL-encoded as '%s'", item, encoded_item);
   return encoded_item;
 }
 
@@ -77,12 +89,15 @@ static void clear_http_response(void) {
   http_resp_msg = NULL;
 }
 
-int aws_http_get(pool *p, CURL *curl, const char *url,
+int aws_http_get(pool *p, void *http, const char *url,
     size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
     long *resp_code) {
+  CURL *curl;
   CURLcode curl_code;
   double content_len, rcvd_bytes, total_secs;
   char *content_type = NULL;
+
+  curl = http;
 
   curl_code = curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
   if (curl_code != CURLE_OK) {
@@ -189,8 +204,10 @@ int aws_http_get(pool *p, CURL *curl, const char *url,
   curl_code = curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
     &content_len);
   if (curl_code == CURLE_OK) {
-    pr_trace_msg(trace_channel, 15,
-      "received Content-Length %0.0lf for '%s' request", content_len, url);
+    if (content_len > 0) {
+      pr_trace_msg(trace_channel, 15,
+        "received Content-Length %0.0lf for '%s' request", content_len, url);
+    }
 
   } else {
     pr_trace_msg(trace_channel, 3,
@@ -280,6 +297,14 @@ static int http_trace_cb(CURL *curl, curl_infotype data_type, char *data,
       break;
 
     case CURLINFO_HEADER_IN:
+      /* Note: You MAY sometimes see AWS send the following response header:
+       *
+       *   nnCoection: close
+       *
+       * This is a deliberate hack, albeit ugly.  See:
+       *   https://forums.aws.amazon.com/message.jspa?messageID=81954
+       */
+
       if (datasz > 2) {
         pr_trace_msg(trace_channel, 15,
           "[debug] HEADER IN: %.*s (%ld bytes)", (int) datasz-2, data, datasz);
@@ -322,7 +347,7 @@ static int http_trace_cb(CURL *curl, curl_infotype data_type, char *data,
   return 0;
 }
 
-CURL *aws_http_alloc(pool *p, unsigned long max_connect_secs,
+void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
     unsigned long max_request_secs, const char *cacerts) {
   CURL *curl;
   CURLcode curl_code;
@@ -486,8 +511,11 @@ CURL *aws_http_alloc(pool *p, unsigned long max_connect_secs,
   return curl;
 }
 
-int aws_http_destroy(pool *p, CURL *curl) {
+int aws_http_destroy(pool *p, void *http) {
+  CURL *curl;
+
   (void) p;
+  curl = http;
 
   if (curl != NULL) {
     CURLcode curl_code;

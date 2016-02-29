@@ -31,7 +31,7 @@
 struct ec2_conn {
   pool *pool;
 
-  CURL *curl;
+  void *http;
   const char *region;
   const char *domain;
   const char *api_version;

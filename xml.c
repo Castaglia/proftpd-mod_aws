@@ -1,5 +1,5 @@
 /*
- * ProFTPD - mod_aws HTTP requests
+ * ProFTPD - mod_aws XML
  * Copyright (c) 2016 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,30 +23,63 @@
  */
 
 #include "mod_aws.h"
+#include "xml.h"
 
-#ifndef MOD_AWS_HTTP_H
-#define MOD_AWS_HTTP_H
+#ifdef HAVE_LIBXML_PARSER_H
+# include <libxml/parser.h>
+# include <libxml/tree.h>
+#endif
 
-#define AWS_HTTP_RESPONSE_CODE_OK		200L
-#define AWS_HTTP_RESPONSE_CODE_BAD_REQUEST	400L
-#define AWS_HTTP_RESPONSE_CODE_NOT_FOUND	404L
+static const char *trace_channel = "aws.xml";
 
-void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
-  unsigned long max_request_secs, const char *cacerts);
-int aws_http_destroy(pool *p, void *http);
+void *aws_xml_alloc(pool *p, const char *data, size_t datasz) {
+  xmlDocPtr doc;
+  int doc_opts = XML_PARSE_NONET;
 
-const char *aws_http_urldecode(pool *p, void *http, const char *item,
-  size_t item_len, size_t *decoded_len);
-const char *aws_http_urlencode(pool *p, void *http, const char *item,
-  size_t item_len);
+  doc = xmlReadMemory(data, (int) datasz, "error.xml", NULL, doc_opts);
+  if (doc == NULL) {
+/* XXX libxml2 error reporting? */
+    errno = EINVAL;
+    return NULL;
+  }
 
-int aws_http_get(pool *p, void *http, const char *url,
-  size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
-  long *resp_code);
+  return doc;
+}
 
-/* API lifetime functions, for mod_aws use only. */
-int aws_http_init(pool *p, unsigned long *feature_flags,
-  const char **http_details);
-int aws_http_free(void);
+int aws_xml_destroy(pool *p, void *xml) {
+  xmlDocPtr doc;
 
-#endif /* MOD_AWS_HTTP_H */
+  if (xml == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  doc = xml;
+  xmlFreeDoc(doc);
+
+  return 0;
+}
+
+/* Generic error reporting callback. */
+static void xml_error_cb(void *ctx, const char *fmt, ...) {
+  va_list msg;
+
+  va_start(msg, fmt);
+  (void) pr_trace_vmsg(trace_channel, 1, fmt, msg);
+  va_end(msg);
+}
+
+int aws_xml_init(pool *p) {
+  (void) p;
+
+  xmlInitParser();
+  xmlSetGenericErrorFunc(NULL, xml_error_cb);
+
+  return 0;
+}
+
+int aws_xml_free(void) {
+  xmlCleanupParser();
+
+  return 0;
+}

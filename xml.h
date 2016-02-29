@@ -1,5 +1,5 @@
 /*
- * ProFTPD - mod_aws HTTP requests
+ * ProFTPD - mod_aws XML
  * Copyright (c) 2016 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,29 +24,14 @@
 
 #include "mod_aws.h"
 
-#ifndef MOD_AWS_HTTP_H
-#define MOD_AWS_HTTP_H
+#ifndef MOD_AWS_XML_H
+#define MOD_AWS_XML_H
 
-#define AWS_HTTP_RESPONSE_CODE_OK		200L
-#define AWS_HTTP_RESPONSE_CODE_BAD_REQUEST	400L
-#define AWS_HTTP_RESPONSE_CODE_NOT_FOUND	404L
-
-void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
-  unsigned long max_request_secs, const char *cacerts);
-int aws_http_destroy(pool *p, void *http);
-
-const char *aws_http_urldecode(pool *p, void *http, const char *item,
-  size_t item_len, size_t *decoded_len);
-const char *aws_http_urlencode(pool *p, void *http, const char *item,
-  size_t item_len);
-
-int aws_http_get(pool *p, void *http, const char *url,
-  size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
-  long *resp_code);
+void *aws_xml_alloc(pool *p, const char *data, size_t datasz);
+int aws_xml_destroy(pool *p, void *xml);
 
 /* API lifetime functions, for mod_aws use only. */
-int aws_http_init(pool *p, unsigned long *feature_flags,
-  const char **http_details);
-int aws_http_free(void);
+int aws_xml_init(pool *p);
+int aws_xml_free(void);
 
-#endif /* MOD_AWS_HTTP_H */
+#endif /* MOD_AWS_XML_H */

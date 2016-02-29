@@ -14,13 +14,17 @@ MODULE_NAME=mod_aws
 MODULE_OBJS=mod_aws.o \
   stacktrace.o \
   http.o \
+  xml.o \
   instance.o \
+  error.o \
   ec2.o
 
 SHARED_MODULE_OBJS=mod_aws.lo \
   stacktrace.lo \
   http.lo \
+  xml.lo \
   instance.lo \
+  error.lo \
   ec2.lo
 
 # Necessary redefinitions

@@ -28,6 +28,7 @@
 
 #include "mod_aws.h"
 #include "http.h"
+#include "xml.h"
 #include "instance.h"
 #include "ec2.h"
 
@@ -52,7 +53,7 @@ static int aws_engine = FALSE;
 static unsigned long aws_flags = 0UL;
 
 static const char *aws_logfile = NULL;
-static const char *aws_cacerts = NULL;
+static const char *aws_cacerts = PR_CONFIG_DIR "/aws-cacerts.pem";
 
 /* XXX Make these named constants. Reset them during restart_ev. */
 static unsigned long aws_connect_timeout_secs = 15;
@@ -61,8 +62,6 @@ static unsigned long aws_request_timeout_secs = 30;
 static const char *trace_channel = "aws";
 
 static void log_instance_info(pool *p, struct aws_info *info) {
-
-  /* NOTE that many of the fields are NOT NUL-terminated. */
 
   /* AWS domain */
   if (info->domain != NULL) {
@@ -384,6 +383,7 @@ static void aws_mod_unload_ev(const void *event_data, void *user_data) {
     pr_event_unregister(&aws_module, NULL, NULL);
 
     aws_http_free();
+    aws_xml_free();
     destroy_pool(aws_pool);
     aws_pool = NULL;
 
@@ -421,6 +421,7 @@ static void aws_shutdown_ev(const void *event_data, void *user_data) {
   /* XXX Unregister from ELB, or Route53 */
 
   aws_http_free();
+  aws_xml_free();
 
   destroy_pool(aws_pool);
   aws_pool = NULL;
@@ -471,22 +472,57 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
   if (aws_info == NULL) {
     pr_log_debug(DEBUG0, MOD_AWS_VERSION
       ": unable to discover EC2 instance metadata: %s", strerror(errno));
+    aws_engine = FALSE;
+
+    if (aws_logfd >= 0) {
+      (void) close(aws_logfd);
+      aws_logfd = -1;
+    }
+
+    destroy_pool(aws_pool);
+    aws_pool = NULL;
+
     return;
   }
 
+#if 0
+  if (aws_info->domain == NULL) {
+    /* Assume that we are not running within AWS EC2. */
+    pr_log_debug(DEBUG0, MOD_AWS_VERSION
+      ": not running within AWS EC2, disabling mod_aws");
+    aws_engine = FALSE;
+
+    if (aws_logfd >= 0) {
+      (void) close(aws_logfd);
+      aws_logfd = -1;
+    }
+
+    destroy_pool(aws_pool);
+    aws_pool = NULL;
+
+    return;
+  }
+#endif
+
   log_instance_info(aws_pool, aws_info);
 
-  if (aws_info->iam_role != NULL) {
+  if (aws_info->iam_role != NULL || TRUE) {
     struct ec2_conn *ec2;
     const char *domain;
 
+#if 0
     domain = pstrndup(aws_pool, aws_info->domain, aws_info->domainsz);
+#endif
+    domain = "amazonaws.com";
+
+aws_info->region = "us-west-2";
+aws_info->api_version = "2010-08-31";
 
     ec2 = aws_ec2_conn_alloc(aws_pool, aws_connect_timeout_secs,
       aws_request_timeout_secs, aws_cacerts, aws_info->region, domain,
       aws_info->api_version);
 
-    if (aws_info->security_groups != NULL) {
+    if (aws_info->security_groups != NULL || TRUE) {
       (void) aws_ec2_get_security_groups(aws_pool, ec2,
         aws_info->security_groups);
     }
@@ -521,6 +557,9 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 static int aws_init(void) {
   const char *http_details = NULL;
 
+  aws_pool = make_sub_pool(permanent_pool);
+  pr_pool_tag(aws_pool, MOD_AWS_VERSION);
+
   if (aws_http_init(aws_pool, &aws_flags, &http_details) < 0) {
     pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
       ": error initializing HTTP API: %s", http_details);
@@ -533,9 +572,6 @@ static int aws_init(void) {
     return 0;
   }
 
-  aws_pool = make_sub_pool(permanent_pool);
-  pr_pool_tag(aws_pool, MOD_AWS_VERSION);
-
 #if defined(PR_SHARED_MODULE)
   pr_event_register(&aws_module, "core.module-unload", aws_mod_unload_ev,
     NULL);
@@ -543,6 +579,8 @@ static int aws_init(void) {
   pr_event_register(&aws_module, "core.restart", aws_restart_ev, NULL);
   pr_event_register(&aws_module, "core.shutdown", aws_shutdown_ev, NULL);
   pr_event_register(&aws_module, "core.startup", aws_startup_ev, NULL);
+
+  aws_xml_init(aws_pool);
 
   return 0;
 }
