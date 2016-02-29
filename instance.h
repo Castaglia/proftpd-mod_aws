@@ -104,7 +104,28 @@ struct aws_info {
   size_t public_hostnamesz;
 };
 
-struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
-  unsigned long max_request_secs);
+struct iam_info {
+  pool *pool;
+
+  const char *iam_role;
+
+  /* http://169.254.169.254/latest/meta-data/iam/security-credentials/{role} */
+  char *creds_doc;
+  size_t creds_docsz;
+
+  /* See security credentials doc "AccessKeyId" key. */
+  const char *access_key_id;
+
+  /* See security credentials doc "SecretAccessKey" key. */
+  const char *secret_access_key;
+
+  /* See security credentials doc "Token" key. */
+  const char *token;
+};
+
+struct aws_info *aws_instance_get_info(pool *p);
+
+struct iam_info *aws_instance_get_iam_credentials(pool *p,
+  const char *iam_role);
 
 #endif /* MOD_AWS_INSTANCE_H */

@@ -456,8 +456,7 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
     }
   }
 
-  aws_info = aws_instance_get_info(aws_pool, aws_connect_timeout_secs,
-    aws_request_timeout_secs);
+  aws_info = aws_instance_get_info(aws_pool);
   if (aws_info == NULL) {
     pr_log_debug(DEBUG0, MOD_AWS_VERSION
       ": unable to discover EC2 instance metadata: %s", strerror(errno));

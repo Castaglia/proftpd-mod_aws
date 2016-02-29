@@ -45,12 +45,12 @@ static const char *trace_channel = "aws.instance";
 #define AWS_INSTANCE_METADATA_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/meta-data"
 #define AWS_INSTANCE_DYNAMIC_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/dynamic"
 
-static int get_metadata(pool *p, CURL *curl, struct aws_info *info,
+static int get_metadata(pool *p, CURL *curl, void *user_data,
     const char *url, size_t (*resp_body)(char *, size_t, size_t, void *)) {
   int res;
   long resp_code;
 
-  res = aws_http_get(p, curl, url, resp_body, info, &resp_code);
+  res = aws_http_get(p, curl, url, resp_body, user_data, &resp_code);
   if (res < 0) {
     return -1;
   }
@@ -907,7 +907,7 @@ static int get_identity_doc(pool *p, CURL *curl, struct aws_info *info) {
 }
 
 /* Gather up the EC2 instance metadata. */
-static int get_info(pool *p, CURL *curl, struct aws_info *info) {
+static int get_aws_info(pool *p, CURL *curl, struct aws_info *info) {
   int res;
 
   /* Note: the ESRCH errno value is used here by aws_http_get() to indicate
@@ -1007,17 +1007,16 @@ static int get_info(pool *p, CURL *curl, struct aws_info *info) {
   return 0;
 }
 
-struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
-    unsigned long max_request_secs) {
+struct aws_info *aws_instance_get_info(pool *p) {
   int res, xerrno = 0;
   pool *info_pool;
   struct aws_info *info;
   CURL *curl;
 
   /* The metadata URLs do not use SSL, so we don't need to provide the
-   * CA certs file.
+   * CA certs file.  And we assume short hardcoded timeouts here.
    */
-  curl = aws_http_alloc(p, max_connect_secs, max_request_secs, NULL);
+  curl = aws_http_alloc(p, 1UL, 1UL, NULL);
   if (curl == NULL) {
     return NULL;
   }
@@ -1028,15 +1027,157 @@ struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
   info = pcalloc(info_pool, sizeof(struct aws_info));
   info->pool = info_pool;
 
-  res = get_info(p, curl, info);
+  res = get_aws_info(p, curl, info);
   xerrno = errno;
 
   aws_http_destroy(p, curl);
 
   if (res < 0) {
+    destroy_pool(info_pool);
     info = NULL;
-    errno = xerrno;
   }
 
+  errno = xerrno;
+  return info;
+}
+
+/* Security credentials doc */
+static size_t iam_creds_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct iam_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->creds_docsz == 0) {
+    info->creds_docsz = datasz;
+    ptr = info->creds_doc = palloc(info->pool, info->creds_docsz);
+
+  } else {
+    ptr = info->creds_doc;
+    info->creds_doc = palloc(info->pool, info->creds_docsz + datasz);
+    memcpy(info->creds_doc, ptr, info->creds_docsz);
+
+    ptr = info->creds_doc + info->creds_docsz;
+    info->creds_docsz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_iam_info(pool *p, CURL *curl, struct iam_info *info) {
+  int res;
+  const char *url;
+
+  url = pstrcat(p, AWS_INSTANCE_METADATA_URL, "/iam/security-credentials/",
+    info->iam_role, NULL);
+
+  res = get_metadata(p, curl, info, url, iam_creds_cb);
+  if (res == 0) {
+    const char *json_str;
+
+    json_str = pstrndup(info->pool, info->creds_doc, info->creds_docsz);
+    if (json_validate(json_str) == TRUE) {
+      JsonNode *field, *json;
+      const char *key;
+
+      json = json_decode(json_str);
+
+      key = "AccessKeyId";
+      field = json_find_member(json, key);
+      if (field != NULL) {
+        if (field->tag == JSON_STRING) {
+          info->access_key_id = pstrdup(info->pool, field->string_);
+
+        } else {
+          pr_trace_msg(trace_channel, 3,
+           "ignoring non-string '%s' JSON field in '%s'", key, json_str);
+        }
+      }
+
+      key = "SecretAccessKey";
+      field = json_find_member(json, key);
+      if (field != NULL) {
+        if (field->tag == JSON_STRING) {
+          info->secret_access_key = pstrdup(info->pool, field->string_);
+
+        } else {
+          pr_trace_msg(trace_channel, 3,
+           "ignoring non-string '%s' JSON field in '%s'", key, json_str);
+        }
+      }
+
+      key = "Token";
+      field = json_find_member(json, key);
+      if (field != NULL) {
+        if (field->tag == JSON_STRING) {
+          info->token = pstrdup(info->pool, field->string_);
+
+        } else {
+          pr_trace_msg(trace_channel, 3,
+           "ignoring non-string '%s' JSON field in '%s'", key, json_str);
+        }
+      }
+
+      json_delete(json);
+
+    } else {
+      pr_trace_msg(trace_channel, 3,
+        "'%s' JSON failed validation, ignoring", url);
+
+      info->creds_docsz = 0;
+      info->creds_doc = NULL;
+
+      errno = ENOENT;
+      return -1;
+    }
+
+  } else if (res < 0 &&
+             errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->creds_docsz = 0;
+    info->creds_doc = NULL;
+  }
+
+  return res;
+}
+
+struct iam_info *aws_instance_get_iam_credentials(pool *p,
+    const char *iam_role) {
+  int res, xerrno = 0;
+  pool *iam_pool;
+  struct iam_info *info;
+  CURL *curl;
+
+  curl = aws_http_alloc(p, 1UL, 1UL, NULL);
+  if (curl == NULL) {
+    return NULL;
+  }
+
+  iam_pool = make_sub_pool(p);
+  pr_pool_tag(iam_pool, "IAM credentials pool");
+
+  info = pcalloc(iam_pool, sizeof(struct iam_info));
+  info->pool = iam_pool;
+  info->iam_role = pstrdup(iam_pool, iam_role);
+
+  res = get_iam_info(p, curl, info);
+  xerrno = errno;
+
+  aws_http_destroy(p, curl);
+
+  if (res < 0) {
+    destroy_pool(iam_pool);
+    info = NULL;
+  }
+
+  errno = xerrno;
   return info;
 }
