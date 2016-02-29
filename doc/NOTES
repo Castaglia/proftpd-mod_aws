@@ -23,19 +23,8 @@ NEXT:
 
     int aws_instance_get_credentials(...);
 
-  use curl share interface for calls to ec2.${domain}
-
-  use CA certs for SSL verification of ec2.${domain}
-
-  abstract curl init/request processing into http.c
-
-    int aws_http_alloc(pool *p, CURL **curl);
-    int aws_http_free(pool *p, CURL **curl);
-
-    int aws_http_get(pool *p, CURL *curl, const char *url, long *resp_code,
-      char **resp_body, size_t *resp_bodysz);
-
-  Allow expected Content-Type for response?
+  http.c
+    Allow expected Content-Type for response?
   
   use <uuid/uuid.h> for request IDs; see uuid_generate(3), uuid_unparse_lower(3)
   man pages.  Add autoconf detection (what to do if not present)?

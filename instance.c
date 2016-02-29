@@ -950,7 +950,10 @@ struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
   struct aws_info *info;
   CURL *curl;
 
-  curl = aws_http_alloc(p, max_connect_secs, max_request_secs);
+  /* The metadata URLs do not use SSL, so we don't need to provide the
+   * CA certs file.
+   */
+  curl = aws_http_alloc(p, max_connect_secs, max_request_secs, NULL);
   if (curl == NULL) {
     return NULL;
   }

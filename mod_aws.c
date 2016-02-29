@@ -27,11 +27,8 @@
  */
 
 #include "mod_aws.h"
+#include "http.h"
 #include "instance.h"
-
-#ifdef HAVE_CURL_CURL_H
-# include <curl/curl.h>
-#endif
 
 /* How long (in secs) to wait to connect to real server? */
 #define AWS_CONNECT_DEFAULT_TIMEOUT	5
@@ -52,9 +49,9 @@ unsigned long aws_opts = 0UL;
 
 static int aws_engine = FALSE;
 static unsigned long aws_flags = 0UL;
-#define AWS_FL_CURL_NO_SSL	0x0001
 
 static const char *aws_logfile = NULL;
+static const char *aws_cacerts = NULL;
 
 /* XXX Make these named constants. Reset them during restart_ev. */
 static unsigned long aws_connect_timeout_secs = 15;
@@ -233,7 +230,6 @@ static void log_instance_info(pool *p, struct aws_info *info) {
 
 /* usage: AWSCACertificateFile path */
 MODRET set_awscacertfile(cmd_rec *cmd) {
-#ifdef PR_USE_OPENSSL
   int res;
   char *path;
 
@@ -255,41 +251,8 @@ MODRET set_awscacertfile(cmd_rec *cmd) {
     CONF_ERROR(cmd, "parameter must be an absolute path");
   }
 
-  add_config_param_str(cmd->argv[0], 1, path);
+  aws_cacerts = pstrdup(aws_pool, path);
   return PR_HANDLED(cmd);
-#else
-  CONF_ERROR(cmd, "Missing required OpenSSL support (see --enable-openssl configure option)");
-#endif /* PR_USE_OPENSSL */
-}
-
-/* usage: AWSCACertificatePath path */
-MODRET set_awscacertpath(cmd_rec *cmd) {
-#ifdef PR_USE_OPENSSL
-  int res;
-  char *path;
-
-  CHECK_ARGS(cmd, 1);
-  CHECK_CONF(cmd, CONF_ROOT);
-
-  path = cmd->argv[1];
-
-  PRIVS_ROOT
-  res = dir_exists2(cmd->tmp_pool, path);
-  PRIVS_RELINQUISH
-
-  if (!res) {
-    CONF_ERROR(cmd, "parameter must be a directory path");
-  }
-
-  if (*path != '/') {
-    CONF_ERROR(cmd, "parameter must be an absolute path");
-  }
-
-  add_config_param_str(cmd->argv[0], 1, path);
-  return PR_HANDLED(cmd);
-#else
-  CONF_ERROR(cmd, "Missing required OpenSSL support (see --enable-openssl configure option)");
-#endif /* PR_USE_OPENSSL */
 }
 
 /* usage: AWSEngine on|off */
@@ -307,7 +270,8 @@ MODRET set_awsengine(cmd_rec *cmd) {
   if (engine == TRUE) {
     if (aws_flags & AWS_FL_CURL_NO_SSL) {
       CONF_ERROR(cmd, pstrcat(cmd->tmp_pool,
-        "unable to enable mod_aws: libcurl lacks necessary SSL support", NULL));
+        "unable to enable mod_aws: HTTP API lacks necessary SSL support",
+        NULL));
     }
   }
 
@@ -398,6 +362,7 @@ static void aws_mod_unload_ev(const void *event_data, void *user_data) {
     /* Unregister ourselves from all events. */
     pr_event_unregister(&aws_module, NULL, NULL);
 
+    aws_http_free();
     destroy_pool(aws_pool);
     aws_pool = NULL;
 
@@ -410,24 +375,18 @@ static void aws_mod_unload_ev(const void *event_data, void *user_data) {
 #endif
 
 static void aws_restart_ev(const void *event_data, void *user_data) {
-  CURLcode curl_code;
-  long curl_flags = CURL_GLOBAL_ALL;
+  int res;
+  const char *http_details = NULL;
 
-  curl_global_cleanup();
+  aws_http_free();
 
-#ifdef CURL_GLOBAL_ACK_EINTR
-  curl_flags |= CURL_GLOBAL_ACK_EINTR;
-#endif /* CURL_GLOBAL_ACK_EINTR */
-  curl_code = curl_global_init(curl_flags);
-  if (curl_code != CURLE_OK) {
-    const char *details;
-
-    details = curl_easy_strerror(curl_code);
+  res = aws_http_init(aws_pool, NULL, &http_details);
+  if (res < 0) {
     pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
-      ": error initializing libcurl: %s", details);
+      ": error initializing HTTP API: %s", http_details);
 
     pr_session_disconnect(&aws_module, PR_SESS_DISCONNECT_SESSION_INIT_FAILED,
-      details);
+      http_details);
   }
 
   destroy_pool(aws_pool);
@@ -440,7 +399,7 @@ static void aws_restart_ev(const void *event_data, void *user_data) {
 static void aws_shutdown_ev(const void *event_data, void *user_data) {
   /* XXX Unregister from ELB, or Route53 */
 
-  curl_global_cleanup();
+  aws_http_free();
 
   destroy_pool(aws_pool);
   aws_pool = NULL;
@@ -513,39 +472,17 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
  */
 
 static int aws_init(void) {
-  CURLcode curl_code;
-  curl_version_info_data *curl_info;
-  long curl_flags = CURL_GLOBAL_ALL;
+  const char *http_details = NULL;
 
-#ifdef CURL_GLOBAL_ACK_EINTR
-  curl_flags |= CURL_GLOBAL_ACK_EINTR;
-#endif /* CURL_GLOBAL_ACK_EINTR */
-  curl_code = curl_global_init(curl_flags);
-  if (curl_code != CURLE_OK) {
+  if (aws_http_init(aws_pool, &aws_flags, &http_details) < 0) {
     pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
-      ": error initializing libcurl: %s", curl_easy_strerror(curl_code));
+      ": error initializing HTTP API: %s", http_details);
     errno = EPERM;
     return -1;
   }
 
-  curl_info = curl_version_info(CURLVERSION_NOW);
-  if (curl_info != NULL) {
-    pr_log_debug(DEBUG5, MOD_AWS_VERSION
-      ": libcurl version: %s", curl_info->version);
-
-    if (!(curl_info->features & CURL_VERSION_SSL)) {
-      pr_log_pri(PR_LOG_INFO, MOD_AWS_VERSION
-        ": libcurl compiled without SSL support, disabling mod_aws");
-      aws_flags |= AWS_FL_CURL_NO_SSL;
-
-    } else {
-      pr_log_debug(DEBUG5, MOD_AWS_VERSION
-        ": libcurl compiled using OpenSSL version: %s", curl_info->ssl_version);
-    }
-  }
-
   if (aws_flags & AWS_FL_CURL_NO_SSL) {
-    curl_global_cleanup();
+    aws_http_free();
     return 0;
   }
 
@@ -568,7 +505,6 @@ static int aws_init(void) {
 
 static conftable aws_conftab[] = {
   { "AWSCACertificateFile",	set_awscacertfile,	NULL },
-  { "AWSCACertificatePath",	set_awscacertpath,	NULL },
   { "AWSEngine",		set_awsengine,		NULL },
   { "AWSLog",			set_awslog,		NULL },
   { "AWSOptions",		set_awsoptions,		NULL },

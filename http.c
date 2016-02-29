@@ -26,6 +26,7 @@
 #include "http.h"
 
 static char curl_errorbuf[CURL_ERROR_SIZE];
+static CURLSH *curl_share = NULL;
 
 static char *http_resp_msg = NULL;
 static pool *http_resp_pool = NULL;
@@ -132,6 +133,7 @@ int aws_http_get(pool *p, CURL *curl, const char *url,
       curl_easy_strerror(curl_code));
 
     clear_http_response();
+
     errno = EPERM;
     return -1;
   }
@@ -285,7 +287,7 @@ static int http_trace_cb(CURL *curl, curl_infotype data_type, char *data,
 }
 
 CURL *aws_http_alloc(pool *p, unsigned long max_connect_secs,
-    unsigned long max_request_secs) {
+    unsigned long max_request_secs, char *cacerts) {
   CURL *curl;
   CURLcode curl_code;
 
@@ -331,6 +333,12 @@ CURL *aws_http_alloc(pool *p, unsigned long max_connect_secs,
       curl_easy_strerror(curl_code));
   }
 
+  curl_code = curl_easy_setopt(curl, CURLOPT_SHARE, curl_share);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_SHARE: %s", curl_easy_strerror(curl_code));
+  }
+
   /* HTTP-isms. */
   curl_code = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION,
     CURL_HTTP_VERSION_1_1);
@@ -349,6 +357,34 @@ CURL *aws_http_alloc(pool *p, unsigned long max_connect_secs,
 
 /* XXX */
   /* SSL-isms. */
+
+  if (cacerts != NULL) {
+    curl_code = curl_easy_setopt(curl, CURLOPT_CAINFO, cacerts);
+    if (curl_code != CURLE_OK) {
+      pr_trace_msg(trace_channel, 1,
+        "error setting CURLOPT_CAINFO: %s", curl_easy_strerror(curl_code));
+    }
+
+    curl_code = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    if (curl_code != CURLE_OK) {
+      pr_trace_msg(trace_channel, 1,
+        "error setting CURLOPT_SSL_VERIFYPEER: %s",
+        curl_easy_strerror(curl_code));
+    }
+
+    curl_code = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    if (curl_code != CURLE_OK) {
+      pr_trace_msg(trace_channel, 1,
+        "error setting CURLOPT_SSL_VERIFYPEER: %s",
+        curl_easy_strerror(curl_code));
+    }
+
+    /* XXX Ideally we'd also set CURLOPT_SSL_VERIFYSTATUS, but we don't know
+     * if AWS is supporting OCSP stapling; right now (2016-02-28), using
+     * `openssl s_client -connect ec2.amazonaws.com:443 -status` shows that
+     * AWS does NOT provide a stapled OCSP response.
+     */
+  }
 
   curl_code = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, http_header_cb);
   if (curl_code != CURLE_OK) {
@@ -421,3 +457,82 @@ int aws_http_destroy(pool *p, CURL *curl) {
   return 0;
 }
 
+int aws_http_init(pool *p, unsigned long *feature_flags,
+    const char **http_details) {
+  CURLcode curl_code;
+  CURLSHcode share_code;
+  curl_version_info_data *curl_info;
+  long curl_flags = CURL_GLOBAL_ALL;
+
+  (void) p;
+
+#ifdef CURL_GLOBAL_ACK_EINTR
+  curl_flags |= CURL_GLOBAL_ACK_EINTR;
+#endif /* CURL_GLOBAL_ACK_EINTR */
+  curl_code = curl_global_init(curl_flags);
+  if (curl_code != CURLE_OK) {
+    if (http_details != NULL) {
+      *http_details = curl_easy_strerror(curl_code);
+    }
+
+    errno = EPERM;
+    return -1;
+  }
+
+  curl_share = curl_share_init();
+  if (curl_share == NULL) {
+    errno = ENOMEM;
+    return -1;
+  }
+
+  share_code = curl_share_setopt(curl_share, CURLSHOPT_SHARE,
+    CURL_LOCK_DATA_COOKIE);
+  if (curl_code != CURLSHE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURL_LOCK_DATA_COOKIE: %s",
+      curl_share_strerror(share_code));
+  }
+
+  share_code = curl_share_setopt(curl_share, CURLSHOPT_SHARE,
+    CURL_LOCK_DATA_DNS);
+  if (curl_code != CURLSHE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURL_LOCK_DATA_DNS: %s", curl_share_strerror(share_code));
+  }
+
+  share_code = curl_share_setopt(curl_share, CURLSHOPT_SHARE,
+    CURL_LOCK_DATA_SSL_SESSION);
+  if (curl_code != CURLSHE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURL_LOCK_DATA_SSL_SESSION: %s",
+      curl_share_strerror(share_code));
+  }
+
+  curl_info = curl_version_info(CURLVERSION_NOW);
+  if (curl_info != NULL) {
+    pr_log_debug(DEBUG5, MOD_AWS_VERSION
+      ": libcurl version: %s", curl_info->version);
+
+    if (!(curl_info->features & CURL_VERSION_SSL)) {
+      pr_log_pri(PR_LOG_INFO, MOD_AWS_VERSION
+        ": libcurl compiled without SSL support, disabling mod_aws");
+      *feature_flags |= AWS_FL_CURL_NO_SSL;
+
+    } else {
+      pr_log_debug(DEBUG5, MOD_AWS_VERSION
+        ": libcurl compiled using OpenSSL version: %s", curl_info->ssl_version);
+    }
+  }
+
+  return 0;
+}
+
+int aws_http_free(void) {
+  if (curl_share != NULL) {
+    curl_share_cleanup(curl_share);
+    curl_share = NULL;
+  }
+
+  curl_global_cleanup();
+  return 0;
+}
