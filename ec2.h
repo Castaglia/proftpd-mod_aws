@@ -23,18 +23,31 @@
  */
 
 #include "mod_aws.h"
+#include "instance.h"
 
 #ifndef MOD_AWS_EC2_H
 #define MOD_AWS_EC2_H
 
 struct ec2_conn {
   pool *pool;
+
   CURL *curl;
+  const char *region;
   const char *domain;
+  const char *api_version;
+
+  /* To be refreshed whenever the credentials are deemed too old. */
+  struct iam_info *iam_info;
+
+  /* For handling request/response documents. */
+  pool *req_pool;
+  char *resp;
+  size_t respsz;
 };
 
 struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
-  unsigned long max_request_secs, const char *cacerts, const char *domain);
+  unsigned long max_request_secs, const char *cacerts, const char *region,
+  const char *domain, const char *api_version);
 int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2);
 
 int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,

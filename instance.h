@@ -41,6 +41,9 @@ struct aws_info {
   /* See identity doc "accountId" key. */
   char *account_id;
 
+  /* See identity doc "version" key. */
+  char *api_version;
+
   /* See identity doc "region" key. */
   char *region;
 

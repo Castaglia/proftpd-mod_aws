@@ -37,10 +37,6 @@ static const char *trace_channel = "aws.instance";
  *
  */
 
-#define AWS_HTTP_RESPONSE_CODE_OK		200L
-#define AWS_HTTP_RESPONSE_CODE_BAD_REQUEST	400L
-#define AWS_HTTP_RESPONSE_CODE_NOT_FOUND	404L
-
 #define AWS_INSTANCE_METADATA_HOST	"169.254.169.254"
 #define AWS_INSTANCE_METADATA_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/meta-data"
 #define AWS_INSTANCE_DYNAMIC_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/dynamic"
@@ -864,6 +860,18 @@ static int get_identity_doc(pool *p, CURL *curl, struct aws_info *info) {
       if (field != NULL) {
         if (field->tag == JSON_STRING) {
           info->account_id = pstrdup(info->pool, field->string_);
+
+        } else {
+          pr_trace_msg(trace_channel, 3,
+           "ignoring non-string '%s' JSON field in '%s'", key, json_str);
+        }
+      }
+
+      key = "version";
+      field = json_find_member(json, key);
+      if (field != NULL) {
+        if (field->tag == JSON_STRING) {
+          info->api_version = pstrdup(info->pool, field->string_);
 
         } else {
           pr_trace_msg(trace_channel, 3,

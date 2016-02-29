@@ -28,14 +28,24 @@
 #ifndef MOD_AWS_HTTP_H
 #define MOD_AWS_HTTP_H
 
+#define AWS_HTTP_RESPONSE_CODE_OK		200L
+#define AWS_HTTP_RESPONSE_CODE_BAD_REQUEST	400L
+#define AWS_HTTP_RESPONSE_CODE_NOT_FOUND	404L
+
 CURL *aws_http_alloc(pool *p, unsigned long max_connect_secs,
   unsigned long max_request_secs, const char *cacerts);
 int aws_http_destroy(pool *p, CURL *curl);
+
+const char *aws_http_urldecode(pool *p, CURL *curl, const char *item,
+  size_t item_len, size_t *decoded_len);
+const char *aws_http_urlencode(pool *p, CURL *curl, const char *item,
+  size_t item_len);
 
 int aws_http_get(pool *p, CURL *curl, const char *url,
   size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
   long *resp_code);
 
+/* API lifetime functions, for mod_aws use only. */
 int aws_http_init(pool *p, unsigned long *feature_flags,
   const char **http_details);
 int aws_http_free(void);

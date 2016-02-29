@@ -84,6 +84,16 @@ static void log_instance_info(pool *p, struct aws_info *info) {
       "aws.account-id = unavailable");
   }
 
+  /* API version */
+  if (info->api_version != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.api-version = '%s'", info->api_version);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.api-version = unavailable");
+  }
+
   /* Region */
   if (info->region != NULL) {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "aws.region = '%s'",
@@ -468,9 +478,13 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 
   if (aws_info->iam_role != NULL) {
     struct ec2_conn *ec2;
+    const char *domain;
+
+    domain = pstrndup(aws_pool, aws_info->domain, aws_info->domainsz);
 
     ec2 = aws_ec2_conn_alloc(aws_pool, aws_connect_timeout_secs,
-      aws_request_timeout_secs, aws_cacerts, aws_info->domain);
+      aws_request_timeout_secs, aws_cacerts, aws_info->region, domain,
+      aws_info->api_version);
 
     if (aws_info->security_groups != NULL) {
       (void) aws_ec2_get_security_groups(aws_pool, ec2,

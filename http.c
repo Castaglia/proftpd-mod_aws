@@ -33,6 +33,42 @@ static pool *http_resp_pool = NULL;
 
 static const char *trace_channel = "aws.http";
 
+const char *aws_http_urldecode(pool *p, CURL *curl, const char *item,
+    size_t item_len, size_t *decoded_len) {
+  char *decoded_item, *ptr;
+
+  ptr = curl_easy_unescape(curl, item, (int) item_len, (int *) decoded_len);
+  if (ptr == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  decoded_item = palloc(p, *decoded_len);
+  memcpy(decoded_item, ptr, *decoded_len);
+  curl_free(ptr);
+
+  return decoded_item;
+}
+
+const char *aws_http_urlencode(pool *p, CURL *curl, const char *item,
+    size_t item_len) {
+  char *encoded_item, *ptr;
+  size_t encoded_len;
+
+  ptr = curl_easy_escape(curl, item, (int) item_len);
+  if (ptr == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  encoded_len = strlen(ptr);
+  encoded_item = palloc(p, encoded_len);
+  memcpy(encoded_item, ptr, encoded_len);
+  curl_free(ptr);
+
+  return encoded_item;
+}
+
 static void clear_http_response(void) {
   if (http_resp_pool != NULL) {
     destroy_pool(http_resp_pool);
