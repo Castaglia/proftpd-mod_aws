@@ -1,4 +1,53 @@
 
+NEXT:
+  get subnet_id:
+    network/interfaces/macs/{mac}/subnet-id
+  For use in requesting Network ACLs for that subnet
+
+  get IAM access key ID, secret access key (for signatures) from JSON doc
+  returned by:
+    iam/security-credentials/{iam-role}
+  Example:
+{
+  "Code" : "Success",
+  "LastUpdated" : "2012-04-26T16:39:16Z",
+  "Type" : "AWS-HMAC",
+  "AccessKeyId" : "AKIAIOSFODNN7EXAMPLE",
+  "SecretAccessKey" : "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+  "Token" : "token",
+  "Expiration" : "2012-04-27T22:39:16Z"
+}
+
+  NOTE: these credentials change/expire automatically, so these need to
+  be queried dynamically.  This suggests a separate function:
+
+    int aws_instance_get_credentials(...);
+
+  use curl share interface for calls to ec2.${domain}
+
+  use CA certs for SSL verification of ec2.${domain}
+
+  abstract curl init/request processing into http.c
+
+    int aws_http_alloc(pool *p, CURL **curl);
+    int aws_http_free(pool *p, CURL **curl);
+
+    int aws_http_get(pool *p, CURL *curl, const char *url, long *resp_code,
+      char **resp_body, size_t *resp_bodysz);
+
+  Allow expected Content-Type for response?
+  
+  use <uuid/uuid.h> for request IDs; see uuid_generate(3), uuid_unparse_lower(3)
+  man pages.  Add autoconf detection (what to do if not present)?
+
+  use aws4c as template for signature-v4.c (and libaws, if needed)
+
+  use libxml2 to parse XML response for errors
+    http://docs.aws.amazon.com/AWSEC2/latest/APIReference/errors-overview.html#api-error-response
+
+  First request: DescribeSecurityGroups
+    http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeSecurityGroups.html
+
 Reading material:
 
   Setting up an FTP server with ProFTPD on EC2:
