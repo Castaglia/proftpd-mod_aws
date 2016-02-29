@@ -49,7 +49,7 @@
 /* Define if you have the uuid/uuid.h header.  */
 #undef HAVE_UUID_UUID_H
 
-#define MOD_AWS_VERSION		"mod_aws/0.0"
+#define MOD_AWS_VERSION			"mod_aws/0.0"
 
 /* Make sure the version of proftpd is as necessary. */
 #if PROFTPD_VERSION_NUMBER < 0x0001030602

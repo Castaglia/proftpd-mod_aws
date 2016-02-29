@@ -103,6 +103,9 @@ struct aws_error *aws_xml_parse_error(pool *p, const char *data,
   struct aws_error *err;
   unsigned long count;
 
+  pr_trace_msg(trace_channel, 15,
+    "parsing XML error document: '%.*s'", (int) datasz, data);
+
   doc = xmlReadMemory(data, (int) datasz, "error.xml", NULL, xml_parse_opts);
   if (doc == NULL) {
     errno = EINVAL;

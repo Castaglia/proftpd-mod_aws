@@ -100,9 +100,11 @@ static int ec2_get(pool *p, void *http, const char *url,
        * the response is XML.  (Thanks, AWS.)
        */
       if (content_type == NULL ||
-          strcmp(content_type, AWS_HTTP_CONTENT_TYPE_XML) == 0) {
+          strstr(content_type, AWS_HTTP_CONTENT_TYPE_XML) != NULL) {
+        struct ec2_conn *ec2;
         struct aws_error *err;
 
+        ec2 = user_data;
         err = aws_xml_parse_error(p, ec2->resp, ec2->respsz);
         if (err == NULL) {
           pr_trace_msg(trace_channel, 3,
@@ -116,6 +118,18 @@ static int ec2_get(pool *p, void *http, const char *url,
         }
       }
     }
+
+  } else {
+    /* Note: If we receive a 200 OK, BUT the content type is HTML, then it's
+     * an unexpected error.
+     */
+    if (content_type != NULL &&
+        strstr(content_type, AWS_HTTP_CONTENT_TYPE_HTML) != NULL) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "received unexpected HTML response for '%s'", url);
+      errno = EINVAL;
+      return -1;
+    }
   }
 
   /* Note: should we handle other response codes? */
@@ -127,8 +141,29 @@ static int ec2_get(pool *p, void *http, const char *url,
       errno = EINVAL;
       return -1;
 
+    case AWS_HTTP_RESPONSE_CODE_UNAUTHORIZED:
+      errno = EACCES;
+      return -1;
+
+    case AWS_HTTP_RESPONSE_CODE_FORBIDDEN:
+      errno = EPERM;
+      return -1;
+
     case AWS_HTTP_RESPONSE_CODE_NOT_FOUND:
       errno = ENOENT;
+      return -1;
+
+    case AWS_HTTP_RESPONSE_CODE_INTERNAL_SERVER_ERROR:
+    case AWS_HTTP_RESPONSE_CODE_BAD_GATEWAY:
+      errno = EINVAL;
+      return -1;
+
+    case AWS_HTTP_RESPONSE_CODE_SERVICE_UNAVAIL:
+      errno = EAGAIN;
+      return -1;
+
+    case AWS_HTTP_RESPONSE_CODE_GATEWAY_TIMEOUT:
+      errno = ETIMEDOUT;
       return -1;
 
     default:
@@ -184,8 +219,10 @@ int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
    */
   url = pstrcat(req_pool, "https://ec2.", ec2->region, ".", ec2->domain,
     "/?Action=DescribeSecurityGroups",
+    "&Action=FooBar",
     "&Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
     "&DryRun",
+    "&AWSAccessKeyId=BazQuxxQuzz",
     NULL);
 
   res = ec2_get(p, ec2->http, url, ec2_resp_cb, ec2);
