@@ -30,9 +30,6 @@
 struct aws_info {
   pool *pool;
 
-  /* Last HTTP response message (since curl does not track this for us). */
-  char *last_resp_msg;
-
   /* http://169.254.169.254/latest/meta-data/services/domain */
   char *domain;
   size_t domainsz;

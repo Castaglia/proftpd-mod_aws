@@ -24,13 +24,8 @@
 
 #include "mod_aws.h"
 #include "instance.h"
+#include "http.h"
 #include "ccan-json.h"
-
-#ifdef HAVE_CURL_CURL_H
-# include <curl/curl.h>
-#endif
-
-static char curl_errorbuf[CURL_ERROR_SIZE];
 
 static const char *trace_channel = "aws.instance";
 
@@ -50,97 +45,14 @@ static const char *trace_channel = "aws.instance";
 #define AWS_INSTANCE_METADATA_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/meta-data"
 #define AWS_INSTANCE_DYNAMIC_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/dynamic"
 
-static int get_url(pool *p, CURL *curl, struct aws_info *info, const char *url,
-    size_t (*handle_body)(char *, size_t, size_t, void *)) {
-  CURLcode curl_code;
+static int get_metadata(pool *p, CURL *curl, struct aws_info *info,
+    const char *url, size_t (*resp_body)(char *, size_t, size_t, void *)) {
+  int res;
   long resp_code;
-  double content_len, rcvd_bytes, total_secs;
-  char *content_type = NULL;
 
-  curl_code = curl_easy_setopt(curl, CURLOPT_URL, url);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_URL '%s': %s", url, curl_easy_strerror(curl_code));
-    errno = EINVAL;
+  res = aws_http_get(p, curl, url, resp_body, info, &resp_code);
+  if (res < 0) {
     return -1;
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, handle_body);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_WRITEFUNCTION: %s", curl_easy_strerror(curl_code));
-    errno = EINVAL;
-    return -1;
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_WRITEDATA, info);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_WRITEDATA: %s", curl_easy_strerror(curl_code));
-    errno = EINVAL;
-    return -1;
-  }
-
-  /* Clear error buffer, response message before performing request,
-   * per docs.
-   */
-  curl_errorbuf[0] = '\0';
-  info->last_resp_msg = NULL;
-
-  curl_code = curl_easy_perform(curl);
-  if (curl_code != CURLE_OK) {
-    size_t error_len;
-
-    error_len = strlen(curl_errorbuf);
-    if (error_len > 0) {
-      pr_trace_msg(trace_channel, 1,
-        "'%s' request error: %s", url, curl_errorbuf);
-
-      /* Note: What other error strings should we search for here? */
-      if (strstr(curl_errorbuf, "Could not resolve host") != NULL) {
-        errno = ESRCH;
-
-      } else if (strstr(curl_errorbuf, "Connection timed out") != NULL) {
-        /* Hit our AWSTimeoutConnect? */
-        errno = ETIMEDOUT;
-
-      } else {
-        /* Generic error */
-        errno = EPERM;
-      }
-
-    } else {
-      pr_trace_msg(trace_channel, 1,
-        "'%s' request error: %s", url, curl_easy_strerror(curl_code));
-      errno = EPERM;
-    }
-
-    return -1;
-  }
-
-  curl_code = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &resp_code);
-  if (curl_code == CURLE_UNKNOWN_OPTION) {
-    /* Use the older option name. */
-    curl_code = curl_easy_getinfo(curl, CURLINFO_HTTP_CODE, &resp_code);
-  }
-
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 2,
-      "unable to get '%s' response code: %s", url,
-      curl_easy_strerror(curl_code));
-
-    errno = EPERM;
-    return -1;
-  }
-
-  if (info->last_resp_msg != NULL) {
-    pr_trace_msg(trace_channel, 15,
-      "received response '%ld %s' for '%s' request", resp_code,
-      info->last_resp_msg, url);
-
-  } else {
-    pr_trace_msg(trace_channel, 15,
-      "received response code %ld for '%s' request", resp_code, url);
   }
 
   /* Note: should we handle other response codes? */
@@ -165,53 +77,6 @@ static int get_url(pool *p, CURL *curl, struct aws_info *info, const char *url,
         "received %ld response code for '%s' request", resp_code, url);
       errno = EPERM;
       return -1;
-  }
-
-  curl_code = curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
-    &content_len);
-  if (curl_code == CURLE_OK) {
-    pr_trace_msg(trace_channel, 15,
-      "received Content-Length %0.0lf for '%s' request", content_len, url);
-
-  } else {
-    pr_trace_msg(trace_channel, 3,
-      "unable to get CURLINFO_CONTENT_LENGTH_DOWNLOAD: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
-  if (curl_code == CURLE_OK) {
-    if (content_type != NULL) {
-      pr_trace_msg(trace_channel, 15,
-        "received Content-Type '%s' for '%s' request", content_type, url);
-    }
-
-  } else {
-    pr_trace_msg(trace_channel, 3,
-      "unable to get CURLINFO_CONTENT_TYPE: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, &total_secs);
-  if (curl_code == CURLE_OK) {
-    pr_trace_msg(trace_channel, 15,
-      "'%s' request took %0.3lf secs", url, total_secs);
-
-  } else {
-    pr_trace_msg(trace_channel, 3,
-      "unable to get CURLINFO_TOTAL_TIME: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &rcvd_bytes);
-  if (curl_code == CURLE_OK) {
-    pr_trace_msg(trace_channel, 15,
-      "received %0.0lf bytes for '%s' request", rcvd_bytes, url);
-
-  } else {
-    pr_trace_msg(trace_channel, 3,
-      "unable to get CURLINFO_SIZE_DOWNLOAD: %s",
-      curl_easy_strerror(curl_code));
   }
 
   return 0;
@@ -254,7 +119,7 @@ static int get_domain(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URL "/services/domain";
 
-  res = get_url(p, curl, info, url, domain_cb);
+  res = get_metadata(p, curl, info, url, domain_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -302,7 +167,7 @@ static int get_avail_zone(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URL "/placement/availability-zone";
 
-  res = get_url(p, curl, info, url, avail_zone_cb);
+  res = get_metadata(p, curl, info, url, avail_zone_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -350,7 +215,7 @@ static int get_instance_type(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URL "/instance-type";
 
-  res = get_url(p, curl, info, url, instance_type_cb);
+  res = get_metadata(p, curl, info, url, instance_type_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -398,7 +263,7 @@ static int get_instance_id(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URL "/instance-id";
 
-  res = get_url(p, curl, info, url, instance_id_cb);
+  res = get_metadata(p, curl, info, url, instance_id_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -446,7 +311,7 @@ static int get_ami_id(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URL "/ami-id";
 
-  res = get_url(p, curl, info, url, ami_id_cb);
+  res = get_metadata(p, curl, info, url, ami_id_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -495,7 +360,7 @@ static int get_iam_role(pool *p, CURL *curl, struct aws_info *info) {
   /* Note: the trailing slash in this URL is important, and is NOT a typo. */
   url = AWS_INSTANCE_METADATA_URL "/iam/security-credentials/";
 
-  res = get_url(p, curl, info, url, iam_role_cb);
+  res = get_metadata(p, curl, info, url, iam_role_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -543,7 +408,7 @@ static int get_hw_mac(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URL "/mac";
 
-  res = get_url(p, curl, info, url, hw_mac_cb);
+  res = get_metadata(p, curl, info, url, hw_mac_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -599,7 +464,7 @@ static int get_vpc_id(pool *p, CURL *curl, struct aws_info *info) {
   url = pstrcat(p, AWS_INSTANCE_METADATA_URL, "/network/interfaces/macs/",
     info->hw_mac, "/vpc-id", NULL);
 
-  res = get_url(p, curl, info, url, vpc_id_cb);
+  res = get_metadata(p, curl, info, url, vpc_id_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -647,7 +512,7 @@ static int get_local_ipv4(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URL "/local-ipv4";
 
-  res = get_url(p, curl, info, url, local_ipv4_cb);
+  res = get_metadata(p, curl, info, url, local_ipv4_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -695,7 +560,7 @@ static int get_local_hostname(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URL "/local-hostname";
 
-  res = get_url(p, curl, info, url, local_hostname_cb);
+  res = get_metadata(p, curl, info, url, local_hostname_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -743,7 +608,7 @@ static int get_public_ipv4(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URL "/public-ipv4";
 
-  res = get_url(p, curl, info, url, public_ipv4_cb);
+  res = get_metadata(p, curl, info, url, public_ipv4_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -792,7 +657,7 @@ static int get_public_hostname(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URL "/public-hostname";
 
-  res = get_url(p, curl, info, url, public_hostname_cb);
+  res = get_metadata(p, curl, info, url, public_hostname_cb);
   if (res < 0 &&
       errno == ENOENT) {
     /* Clear the response data for 404 responses. */
@@ -840,7 +705,7 @@ static int get_security_groups(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_METADATA_URL "/security-groups";
 
-  res = get_url(p, curl, info, url, security_groups_cb);
+  res = get_metadata(p, curl, info, url, security_groups_cb);
   if (res == 0) {
     info->security_groups = make_array(info->pool, 0, sizeof(char *));
 
@@ -925,7 +790,7 @@ static int get_identity_doc(pool *p, CURL *curl, struct aws_info *info) {
 
   url = AWS_INSTANCE_DYNAMIC_URL "/instance-identity/document";
 
-  res = get_url(p, curl, info, url, identity_doc_cb);
+  res = get_metadata(p, curl, info, url, identity_doc_cb);
   if (res == 0) {
     const char *json_str;
 
@@ -987,8 +852,8 @@ static int get_identity_doc(pool *p, CURL *curl, struct aws_info *info) {
 static int get_info(pool *p, CURL *curl, struct aws_info *info) {
   int res;
 
-  /* Note: the ESRCH errno value is used here by get_url() to indicate that
-   * the requested host could not be resolved/does not exist.
+  /* Note: the ESRCH errno value is used here by aws_http_get() to indicate
+   * that the requested host could not be resolved/does not exist.
    */
 
   res = get_domain(p, curl, info);
@@ -1078,239 +943,16 @@ static int get_info(pool *p, CURL *curl, struct aws_info *info) {
   return 0;
 }
 
-static size_t curl_header_cb(char *data, size_t itemsz, size_t item_count,
-    void *user_data) {
-  CURL *curl;
-  size_t datasz;
-
-  curl = user_data;
-  datasz = itemsz * item_count;
-
-  /* Fortunately, only COMPLETE headers are passed to us, so that we do not
-   * need to do any buffering.  Be aware that the header data may NOT be
-   * NUL-terminated.
-   */
-
-  if (strncmp(data, "HTTP/1.0 ", 9) == 0 ||
-      strncmp(data, "HTTP/1.1 ", 9) == 0) {
-    struct aws_info *info = NULL;
-    CURLcode curl_code;
-
-    /* We're receiving the HTTP response status line. */
-
-    curl_code = curl_easy_getinfo(curl, CURLINFO_PRIVATE, &info);
-    if (curl_code == CURLE_OK &&
-        info != NULL) {
-      char *resp_msg;
-      size_t resp_msglen;
-
-      /* Advance the pointer past "HTTP/1.x NNNN "(13). And take back 2,
-       * for whose CRLF this line is.
-       */
-      resp_msg = data + 13;
-      resp_msglen = datasz - 13 - 2;
-
-      info->last_resp_msg = pstrndup(info->pool, resp_msg, resp_msglen);
-
-    } else {
-      pr_trace_msg(trace_channel, 3,
-        "unable to get CURLINFO_PRIVATE: %s",
-        curl_easy_strerror(curl_code));
-    }
-  }
-
-  return datasz;
-}
-
-static int curl_trace_cb(CURL *curl, curl_infotype data_type, char *data,
-    size_t datasz, void *user_data) {
-
-  /* Tell the compiler we won't be using this argument. */
-  (void) curl;
-
-  switch (data_type) {
-    case CURLINFO_TEXT:
-      pr_trace_msg(trace_channel, 15, "[debug] INFO: %s", data);
-      break;
-
-    case CURLINFO_HEADER_IN:
-      if (datasz > 2) {
-        pr_trace_msg(trace_channel, 15,
-          "[debug] HEADER IN: %.*s (%ld bytes)", (int) datasz-2, data, datasz);
-      }
-      break;
-
-    case CURLINFO_HEADER_OUT:
-      if (datasz > 2) {
-        pr_trace_msg(trace_channel, 15,
-          "[debug] HEADER OUT: %.*s (%ld bytes)", (int) datasz-2, data, datasz);
-      }
-      break;
-
-    case CURLINFO_DATA_IN:
-      pr_trace_msg(trace_channel, 19,
-        "[debug] DATA IN: (%ld bytes)", datasz);
-      break;
-
-    case CURLINFO_DATA_OUT:
-      pr_trace_msg(trace_channel, 19,
-        "[debug] DATA OUT: (%ld bytes)", datasz);
-      break;
-
-    case CURLINFO_SSL_DATA_IN:
-      pr_trace_msg(trace_channel, 19,
-        "[debug] SSL DATA IN: (%ld bytes)", datasz);
-      break;
-
-    case CURLINFO_SSL_DATA_OUT:
-      pr_trace_msg(trace_channel, 19,
-        "[debug] SSL DATA OUT: (%ld bytes)", datasz);
-      break;
-
-    default:
-      pr_trace_msg(trace_channel, 3,
-        "[debug] UNKNOWN DEBUG DATA: %d", (int) data_type);
-      break;
-  }
-
-  return 0;
-}
-
 struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
     unsigned long max_request_secs) {
   int res, xerrno = 0;
   pool *info_pool;
   struct aws_info *info;
   CURL *curl;
-  CURLcode curl_code;
 
-  /* XXX use an easy handle, then clean it up when we're done; we don't need
-   * to keep persistent connections open to the metadata service after
-   * discovery.
-   */
-
-  curl = curl_easy_init();
+  curl = aws_http_alloc(p, max_connect_secs, max_request_secs);
   if (curl == NULL) {
-    pr_trace_msg(trace_channel, 3,
-      "error initializing curl easy handle");
-    errno = ENOMEM;
     return NULL;
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_FOLLOWLOCATION: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_NOPROGRESS: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_NOSIGNAL: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_TCP_NODELAY: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_TCP_KEEPALIVE: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  /* HTTP-isms. */
-  curl_code = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION,
-    CURL_HTTP_VERSION_1_1);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_HTTP_VERSION: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_HTTPGET: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_USERAGENT, MOD_AWS_VERSION);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_USERAGENT: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curl_header_cb);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_HEADERFUNCTION: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_HEADERDATA, curl);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_HEADERDATA: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, curl_trace_cb);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_DEBUGFUNCTION: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_DEBUGDATA, NULL);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_DEBUGDATA: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_VERBOSE: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_errorbuf);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_ERRORBUFFER: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  /* Timeouts */
-  curl_code = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT,
-    (long) max_connect_secs);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_CONNECTTIMEOUT: %s",
-      curl_easy_strerror(curl_code));
-  }
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_TIMEOUT, (long) max_request_secs);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_TIMEOUT: %s",
-      curl_easy_strerror(curl_code));
   }
 
   info_pool = make_sub_pool(p);
@@ -1319,17 +961,10 @@ struct aws_info *aws_instance_get_info(pool *p, unsigned long max_connect_secs,
   info = pcalloc(info_pool, sizeof(struct aws_info));
   info->pool = info_pool;
 
-  curl_code = curl_easy_setopt(curl, CURLOPT_PRIVATE, info);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_PRIVATE: %s",
-      curl_easy_strerror(curl_code));
-  }
-
   res = get_info(p, curl, info);
   xerrno = errno;
 
-  curl_easy_cleanup(curl);
+  aws_http_destroy(p, curl);
 
   if (res < 0) {
     info = NULL;
