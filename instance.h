@@ -72,6 +72,10 @@ struct aws_info {
   char *vpc_id;
   size_t vpc_idsz;
 
+  /* http://169.254.169.254/latest/meta-data/network/interfaces/macs/{mac}/subnet-id */
+  char *subnet_id;
+  size_t subnet_idsz;
+
   /* http://169.254.169.254/latest/meta-data/security-groups */
   char *sg_names;
   size_t sg_namessz;

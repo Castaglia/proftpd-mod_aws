@@ -164,6 +164,16 @@ static void log_instance_info(pool *p, struct aws_info *info) {
       "aws.vpc-id = unavailable");
   }
 
+  /* Subnet ID */
+  if (info->subnet_id != NULL) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.subnet-id = '%.*s'", (int) info->subnet_idsz, info->subnet_id);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "aws.subnet-id = unavailable");
+  }
+
   /* Local IPv4 */
   if (info->local_ipv4 != NULL) {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,

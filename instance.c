@@ -23,8 +23,8 @@
  */
 
 #include "mod_aws.h"
-#include "instance.h"
 #include "http.h"
+#include "instance.h"
 #include "ccan-json.h"
 
 static const char *trace_channel = "aws.instance";
@@ -456,7 +456,8 @@ static int get_vpc_id(pool *p, CURL *curl, struct aws_info *info) {
 
   /* If we don't know the MAC, then we cannot find the VPC ID. */
   if (info->hw_mac == NULL) {
-    pr_trace_msg(trace_channel, 9, "unable to discover vpc.id without hw.mac");
+    pr_trace_msg(trace_channel, 9,
+      "unable to discover aws.vpc-id without aws.mac");
     errno = EPERM;
     return -1;
   }
@@ -470,6 +471,63 @@ static int get_vpc_id(pool *p, CURL *curl, struct aws_info *info) {
     /* Clear the response data for 404 responses. */
     info->vpc_idsz = 0;
     info->vpc_id = NULL;
+  }
+
+  return res;
+}
+
+/* Subnet ID */
+static size_t subnet_id_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct aws_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->subnet_idsz == 0) {
+    info->subnet_idsz = datasz;
+    ptr = info->subnet_id = palloc(info->pool, info->subnet_idsz);
+
+  } else {
+    ptr = info->subnet_id;
+    info->subnet_id = palloc(info->pool, info->subnet_idsz + datasz);
+    memcpy(info->subnet_id, ptr, info->subnet_idsz);
+
+    ptr = info->subnet_id + info->subnet_idsz;
+    info->subnet_idsz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_subnet_id(pool *p, CURL *curl, struct aws_info *info) {
+  int res;
+  const char *url;
+
+  /* If we don't know the MAC, then we cannot find the Subnet ID. */
+  if (info->hw_mac == NULL) {
+    pr_trace_msg(trace_channel, 9,
+      "unable to discover aws.subnet-id without aws.mac");
+    errno = EPERM;
+    return -1;
+  }
+
+  url = pstrcat(p, AWS_INSTANCE_METADATA_URL, "/network/interfaces/macs/",
+    info->hw_mac, "/subnet-id", NULL);
+
+  res = get_metadata(p, curl, info, url, subnet_id_cb);
+  if (res < 0 &&
+      errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->subnet_idsz = 0;
+    info->subnet_id = NULL;
   }
 
   return res;
@@ -899,6 +957,12 @@ static int get_info(pool *p, CURL *curl, struct aws_info *info) {
   }
 
   res = get_vpc_id(p, curl, info);
+  if (res < 0 &&
+      errno == ESRCH) {
+    return -1;
+  }
+
+  res = get_subnet_id(p, curl, info);
   if (res < 0 &&
       errno == ESRCH) {
     return -1;
