@@ -23,7 +23,7 @@
  *
  * -----DO NOT EDIT BELOW THIS LINE-----
  * $Archive: mod_aws.a $
- * $Libraries: -lcurl -lcrypto$
+ * $Libraries: -lcurl -lxml2 -lcrypto$
  */
 
 #include "mod_aws.h"

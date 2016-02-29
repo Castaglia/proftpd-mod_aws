@@ -34,17 +34,20 @@
 # include <sys/mman.h>
 #endif
 
-/* Define if you have the curl.h header.  */
+/* Define if you have the curl/curl.h header.  */
 #undef HAVE_CURL_CURL_H
 #if !defined(HAVE_CURL_CURL_H)
 # error "libcurl library/headers required"
 #endif
 
-/* Define if you have the random(3) function.  */
-#undef HAVE_RANDOM
+/* Define if you have the libxml2 libxml/parser.h header.  */
+#undef HAVE_LIBXML_PARSER_H
+#if !defined(HAVE_LIBXML_PARSER_H)
+# error "libxml2 library/headers required"
+#endif
 
-/* Define if you have the srandom(3) function.  */
-#undef HAVE_SRANDOM
+/* Define if you have the uuid/uuid.h header.  */
+#undef HAVE_UUID_UUID_H
 
 #define MOD_AWS_VERSION		"mod_aws/0.0"
 

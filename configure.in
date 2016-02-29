@@ -64,8 +64,7 @@ AC_ARG_WITH(libraries,
   ])
 
 AC_HEADER_STDC
-AC_CHECK_HEADERS(curl/curl.h stdlib.h unistd.h)
-AC_CHECK_FUNCS(random srandom)
+AC_CHECK_HEADERS(stdlib.h unistd.h curl/curl.h libxml/parser.h uuid/uuid.h)
 
 INCLUDES="$ac_build_addl_includes"
 LIBDIRS="$ac_build_addl_libdirs"
