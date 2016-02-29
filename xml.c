@@ -24,40 +24,221 @@
 
 #include "mod_aws.h"
 #include "xml.h"
+#include "error.h"
 
 #ifdef HAVE_LIBXML_PARSER_H
 # include <libxml/parser.h>
 # include <libxml/tree.h>
 #endif
 
+static int xml_parse_opts = XML_PARSE_COMPACT|XML_PARSE_NOBLANKS|XML_PARSE_NONET|XML_PARSE_PEDANTIC;
+
 static const char *trace_channel = "aws.xml";
 
-void *aws_xml_alloc(pool *p, const char *data, size_t datasz) {
-  xmlDocPtr doc;
-  int doc_opts = XML_PARSE_NONET;
+static int has_name(xmlNodePtr elt, const char *name, size_t name_len) {
+  if (elt == NULL) {
+    return FALSE;
+  }
 
-  doc = xmlReadMemory(data, (int) datasz, "error.xml", NULL, doc_opts);
-  if (doc == NULL) {
-/* XXX libxml2 error reporting? */
+  if (strncmp((const char *) elt->name, name, name_len) != 0) {
+    pr_trace_msg(trace_channel, 2,
+      "unexpected <%s> element for error (expected <%s>)", elt->name, name);
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static int is_element(xmlNodePtr elt) {
+  if (elt == NULL) {
+    return FALSE;
+  }
+
+  if (elt->type != XML_ELEMENT_NODE) {
+    pr_trace_msg(trace_channel, 2,
+      "unexpected non-element <%s> node (type %d)", elt->name, (int) elt->type);
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static int is_text(xmlNodePtr elt) {
+  if (elt == NULL) {
+    return FALSE;
+  }
+
+  if (elt->type != XML_TEXT_NODE) {
+    pr_trace_msg(trace_channel, 2,
+      "unexpected non-text <%s> node (type %d)", elt->name, (int) elt->type);
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static const char *get_text(pool *p, xmlNodePtr elt) {
+  xmlChar *content;
+  char *text;
+
+  if (is_text(elt) == FALSE) {
     errno = EINVAL;
     return NULL;
   }
 
-  return doc;
-}
-
-int aws_xml_destroy(pool *p, void *xml) {
-  xmlDocPtr doc;
-
-  if (xml == NULL) {
-    errno = EINVAL;
-    return -1;
+  content = XML_GET_CONTENT(elt);
+  if (content == NULL) {
+    return NULL;
   }
 
-  doc = xml;
-  xmlFreeDoc(doc);
+  text = pstrdup(p, (const char *) content);
+  return text;
+}
 
-  return 0;
+struct aws_error *aws_xml_parse_error(pool *p, const char *data,
+    size_t datasz) {
+  xmlDocPtr doc;
+  xmlNodePtr response, errors, error, elt, req_id;
+  pool *err_pool;
+  struct aws_error *err;
+  unsigned long count;
+
+  doc = xmlReadMemory(data, (int) datasz, "error.xml", NULL, xml_parse_opts);
+  if (doc == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  response = xmlDocGetRootElement(doc);
+  if (response == NULL) {
+    /* Malformed XML. */
+    xmlFreeDoc(doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  if (is_element(response) == FALSE) {
+    xmlFreeDoc(doc);
+    errno = EINVAL;
+    return NULL;
+  }
+
+  if (has_name(response, "Response", 9) == FALSE) {
+    xmlFreeDoc(doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  /* We expect only 2 child elements: <Errors> and <RequestID> */
+  count = xmlChildElementCount(response);
+  if (count != 2) {
+    pr_trace_msg(trace_channel, 2,
+      "unexpected count of child elements (%lu != 2)", count);
+
+    xmlFreeDoc(doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  errors = xmlFirstElementChild(response);
+  if (is_element(errors) == FALSE) {
+    xmlFreeDoc(doc);
+    errno = EINVAL;
+    return NULL;
+  }
+
+  if (has_name(errors, "Errors", 7) == FALSE) {
+    xmlFreeDoc(doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  count = xmlChildElementCount(errors);
+  if (count != 1) {
+    pr_trace_msg(trace_channel, 5,
+      "expected 1 error element, found %lu", count);
+  }
+
+  error = errors->children;
+  if (is_element(error) == FALSE) {
+    xmlFreeDoc(doc);
+    errno = EINVAL;
+    return NULL;
+  }
+
+  if (has_name(error, "Error", 6) == FALSE) {
+    xmlFreeDoc(doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  elt = error->children;
+  if (is_element(elt) == FALSE) {
+    xmlFreeDoc(doc);
+    errno = EINVAL;
+    return NULL;
+  }
+
+  if (has_name(elt, "Code", 5) == FALSE) {
+    xmlFreeDoc(doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  err_pool = make_sub_pool(p);
+  pr_pool_tag(err_pool, "AWS Error Pool");
+  err = palloc(err_pool, sizeof(struct aws_error));
+  err->pool = err_pool;
+
+  err->err_code = aws_error_get_code(err->pool,
+    get_text(err->pool, elt->children));
+
+  elt = elt->next;
+  if (is_element(elt) == FALSE) {
+    destroy_pool(err->pool);
+    xmlFreeDoc(doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  if (has_name(elt, "Message", 8) == FALSE) {
+    destroy_pool(err->pool);
+    xmlFreeDoc(doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  err->err_msg = get_text(err->pool, elt->children);
+
+  req_id = xmlLastElementChild(response);
+  if (is_element(req_id) == FALSE) {
+    destroy_pool(err->pool);
+    xmlFreeDoc(doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  if (has_name(req_id, "RequestID", 10) == FALSE) {
+    destroy_pool(err->pool);
+    xmlFreeDoc(doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  err->req_id = get_text(err->pool, req_id->children);
+
+  xmlFreeDoc(doc);
+  return err;
 }
 
 /* Generic error reporting callback. */
@@ -71,6 +252,9 @@ static void xml_error_cb(void *ctx, const char *fmt, ...) {
 
 int aws_xml_init(pool *p) {
   (void) p;
+
+  /* Let libxml2 does its version self-check. */
+  LIBXML_TEST_VERSION
 
   xmlInitParser();
   xmlSetGenericErrorFunc(NULL, xml_error_cb);

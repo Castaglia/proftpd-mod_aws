@@ -1,15 +1,9 @@
 
 NEXT:
-  http.c
-    Allow expected Content-Type for response?
-  
   use <uuid/uuid.h> for request IDs; see uuid_generate(3), uuid_unparse_lower(3)
   man pages.  Add autoconf detection (what to do if not present)?
 
   use aws4c as template for signature-v4.c (and libaws, if needed)
-
-  use libxml2 to parse XML response for errors
-    http://docs.aws.amazon.com/AWSEC2/latest/APIReference/errors-overview.html#api-error-response
 
   First request: DescribeSecurityGroups
     http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeSecurityGroups.html

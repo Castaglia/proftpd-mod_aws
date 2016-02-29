@@ -31,6 +31,8 @@
 #define AWS_HTTP_RESPONSE_CODE_BAD_REQUEST	400L
 #define AWS_HTTP_RESPONSE_CODE_NOT_FOUND	404L
 
+#define AWS_HTTP_CONTENT_TYPE_XML		"application/xml"
+
 void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
   unsigned long max_request_secs, const char *cacerts);
 int aws_http_destroy(pool *p, void *http);
@@ -42,7 +44,7 @@ const char *aws_http_urlencode(pool *p, void *http, const char *item,
 
 int aws_http_get(pool *p, void *http, const char *url,
   size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
-  long *resp_code);
+  long *resp_code, const char **content_type);
 
 /* API lifetime functions, for mod_aws use only. */
 int aws_http_init(pool *p, unsigned long *feature_flags,

@@ -91,11 +91,10 @@ static void clear_http_response(void) {
 
 int aws_http_get(pool *p, void *http, const char *url,
     size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
-    long *resp_code) {
+    long *resp_code, const char **content_type) {
   CURL *curl;
   CURLcode curl_code;
   double content_len, rcvd_bytes, total_secs;
-  char *content_type = NULL;
 
   curl = http;
 
@@ -215,17 +214,19 @@ int aws_http_get(pool *p, void *http, const char *url,
       curl_easy_strerror(curl_code));
   }
 
-  curl_code = curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
-  if (curl_code == CURLE_OK) {
-    if (content_type != NULL) {
-      pr_trace_msg(trace_channel, 15,
-        "received Content-Type '%s' for '%s' request", content_type, url);
-    }
+  if (content_type != NULL) {
+    curl_code = curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, content_type);
+    if (curl_code == CURLE_OK) {
+      if (*content_type != NULL) {
+        pr_trace_msg(trace_channel, 15,
+          "received Content-Type '%s' for '%s' request", *content_type, url);
+      }
 
-  } else {
-    pr_trace_msg(trace_channel, 3,
-      "unable to get CURLINFO_CONTENT_TYPE: %s",
-      curl_easy_strerror(curl_code));
+    } else {
+      pr_trace_msg(trace_channel, 3,
+        "unable to get CURLINFO_CONTENT_TYPE: %s",
+        curl_easy_strerror(curl_code));
+    }
   }
 
   curl_code = curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, &total_secs);

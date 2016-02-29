@@ -25,6 +25,7 @@
 #include "mod_aws.h"
 #include "http.h"
 #include "instance.h"
+#include "xml.h"
 #include "error.h"
 #include "ec2.h"
 
@@ -82,15 +83,40 @@ static int ec2_get(pool *p, void *http, const char *url,
     void *user_data) {
   int res;
   long resp_code;
-struct ec2_conn *ec2 = user_data;
+  const char *content_type = NULL;
 
-  res = aws_http_get(p, http, url, resp_body, user_data, &resp_code);
+  res = aws_http_get(p, http, url, resp_body, user_data, &resp_code,
+    &content_type);
   if (res < 0) {
     return -1;
   }
 
-(void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "DescribeSecurityGroups: respsz = %lu (%p)", (unsigned long) ec2->respsz, ec2->resp);
-(void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "DescribeSecurityGroups: '%.*s'", (int) ec2->respsz, ec2->resp);
+  if (resp_code != AWS_HTTP_RESPONSE_CODE_OK) {
+    pr_trace_msg(trace_channel, 2,
+      "received %ld response code for '%s' request", resp_code, url);
+
+    if (resp_code >= 400L) {
+      /* If we received an error, AND no Content-Type, then ASSUME that
+       * the response is XML.  (Thanks, AWS.)
+       */
+      if (content_type == NULL ||
+          strcmp(content_type, AWS_HTTP_CONTENT_TYPE_XML) == 0) {
+        struct aws_error *err;
+
+        err = aws_xml_parse_error(p, ec2->resp, ec2->respsz);
+        if (err == NULL) {
+          pr_trace_msg(trace_channel, 3,
+            "unable to parse XML error response: %s", strerror(errno));
+
+        } else {
+          (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+            "received error: code = %s (%u), msg = %s, req_id = %s",
+            aws_error_get_name(err->err_code), err->err_code, err->err_msg,
+            err->req_id);
+        }
+      }
+    }
+  }
 
   /* Note: should we handle other response codes? */
   switch (resp_code) {
@@ -98,20 +124,14 @@ struct ec2_conn *ec2 = user_data;
       break;
 
     case AWS_HTTP_RESPONSE_CODE_BAD_REQUEST:
-      pr_trace_msg(trace_channel, 2,
-        "received %ld response code for '%s' request", resp_code, url);
       errno = EINVAL;
       return -1;
 
     case AWS_HTTP_RESPONSE_CODE_NOT_FOUND:
-      pr_trace_msg(trace_channel, 2,
-        "received %ld response code for '%s' request", resp_code, url);
       errno = ENOENT;
       return -1;
 
     default:
-      pr_trace_msg(trace_channel, 2,
-        "received %ld response code for '%s' request", resp_code, url);
       errno = EPERM;
       return -1;
   }

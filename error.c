@@ -24,31 +24,74 @@
 
 #include "mod_aws.h"
 #include "error.h"
-#include "xml.h"
 
 static const char *trace_channel = "aws.error";
 
-/*
-Example doc to parse:
+struct err_info {
+  const char *err_name;
+  size_t err_namelen;
+  unsigned int err_code;
+};
 
-<?xml version="1.0" encoding="UTF-8"?>
-<Response><Errors><Error><Code>MissingParameter</Code><Message>The request must contain the parameter AWSAccessKeyId</Message></Error></Errors><RequestID>e03bfe35-249e-42ee-8671-f9a1c6201ceb</RequestID></Response>
+static struct err_info errs[] = {
 
- */
+  { "AuthFailure", 12,
+    AWS_ERROR_CODE_AUTH_FAILURE },
 
-/* XXX Will need a string table, matching <code> string to our error code */
+  { "IncompleteSignature", 20,
+    AWS_ERROR_CODE_INCOMPLETE_SIGNATURE },
 
-struct aws_error *aws_error_parse(pool *p, const char *data, size_t datasz) {
-  void *xml;
+  { "MissingAction", 14,
+    AWS_ERROR_CODE_MISSING_ACTION },
 
-  xml = aws_xml_alloc(p, data, datasz);
-  if (xml == NULL) {
-    errno = EINVAL;
-    return NULL;
+  { "MissingAuthenticationToken", 27,
+    AWS_ERROR_CODE_MISSING_AUTH_TOKEN },
+
+  { "MissingParameter", 17,
+    AWS_ERROR_CODE_MISSING_PARAMETER },
+
+  /* Sentinel */
+  { NULL, 0, 0 }
+};
+
+unsigned int aws_error_get_code(pool *p, const char *err_name) {
+  register unsigned int i;
+  unsigned int err_code;
+
+  err_code = AWS_ERROR_CODE_UNKNOWN;
+
+  if (err_name == NULL) {
+    return err_code;
   }
 
-  aws_xml_destroy(p, xml);
+/* XXX Basic sanity checks about max/min known error name lengths. */
 
-  errno = ENOSYS;
-  return NULL;
+  for (i = 0; errs[i].err_name != NULL; i++) {
+    if (errs[i].err_name[0] != err_name[0]) {
+      continue;
+    }
+
+    if (strncmp(errs[i].err_name, err_name, errs[i].err_namelen + 1) == 0) {
+      err_code = errs[i].err_code;
+      break;
+    }
+  }
+
+  return err_code;
+}
+
+const char *aws_error_get_name(unsigned int err_code) {
+  register unsigned int i;
+  const char *err_name;
+
+  err_name = "<unknown>";
+
+  for (i = 0; errs[i].err_name != NULL; i++) {
+    if (errs[i].err_code == err_code) {
+      err_name = errs[i].err_name;
+      break;
+    }
+  }
+
+  return err_name;
 }

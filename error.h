@@ -32,7 +32,7 @@
  */
 
 /* General client errors */
-#define AWS_ERROR_CODE_UNKNOWN					-1
+#define AWS_ERROR_CODE_UNKNOWN					0
 #define AWS_ERROR_CODE_AUTH_FAILURE				1
 #define AWS_ERROR_CODE_BLOCKED					2
 #define AWS_ERROR_CODE_DRY_RUN_OPERATION			3
@@ -102,13 +102,13 @@ struct aws_error {
 
   unsigned int err_code;
   const char *err_msg;
-  const char *request_id;
+  const char *req_id;
 };
 
-struct aws_error *aws_error_parse(pool *p, const char *data, size_t datasz);
+/* Look up the appropriate error code for the given error name string. */
+unsigned int aws_error_get_code(pool *p, const char *err_name);
 
-/* API lifetime functions, for mod_aws use only. */
-int aws_error_init(pool *p);
-int aws_error_free(void);
+/* Return the error name for a given error code. */
+const char *aws_error_get_name(unsigned int err_code);
 
 #endif /* MOD_AWS_ERROR_H */

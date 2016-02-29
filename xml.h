@@ -23,12 +23,12 @@
  */
 
 #include "mod_aws.h"
+#include "error.h"
 
 #ifndef MOD_AWS_XML_H
 #define MOD_AWS_XML_H
 
-void *aws_xml_alloc(pool *p, const char *data, size_t datasz);
-int aws_xml_destroy(pool *p, void *xml);
+struct aws_error *aws_xml_parse_error(pool *p, const char *data, size_t datasz);
 
 /* API lifetime functions, for mod_aws use only. */
 int aws_xml_init(pool *p);
