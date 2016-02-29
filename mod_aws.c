@@ -29,6 +29,7 @@
 #include "mod_aws.h"
 #include "http.h"
 #include "instance.h"
+#include "ec2.h"
 
 /* How long (in secs) to wait to connect to real server? */
 #define AWS_CONNECT_DEFAULT_TIMEOUT	5
@@ -464,6 +465,18 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
   }
 
   log_instance_info(aws_pool, aws_info);
+
+  if (aws_info->iam_role != NULL) {
+    if (aws_info->security_groups != NULL) {
+      (void) aws_ec2_get_security_groups(aws_pool, aws_info->security_groups);
+    }
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "no IAM role configured for this instance, unable to auto-configure");
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "recommended commands will thus be logged");
+  }
 
   /* XXX Scan server list, and check SG settings (if allowed by IAM).
    *
