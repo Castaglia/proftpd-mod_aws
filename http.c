@@ -454,6 +454,14 @@ int aws_http_destroy(pool *p, CURL *curl) {
   (void) p;
 
   if (curl != NULL) {
+    CURLcode curl_code;
+
+    curl_code = curl_easy_setopt(curl, CURLOPT_SHARE, NULL);
+    if (curl_code != CURLE_OK) {
+      pr_trace_msg(trace_channel, 1,
+        "error removing CURLOPT_SHARE: %s", curl_easy_strerror(curl_code));
+    }
+
     curl_easy_cleanup(curl);
   }
 
