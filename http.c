@@ -355,7 +355,6 @@ CURL *aws_http_alloc(pool *p, unsigned long max_connect_secs,
       curl_easy_strerror(curl_code));
   }
 
-/* XXX */
   /* SSL-isms. */
 
   if (cacerts != NULL) {
@@ -375,14 +374,18 @@ CURL *aws_http_alloc(pool *p, unsigned long max_connect_secs,
     curl_code = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
     if (curl_code != CURLE_OK) {
       pr_trace_msg(trace_channel, 1,
-        "error setting CURLOPT_SSL_VERIFYPEER: %s",
+        "error setting CURLOPT_SSL_VERIFYHOST: %s",
         curl_easy_strerror(curl_code));
     }
 
     /* XXX Ideally we'd also set CURLOPT_SSL_VERIFYSTATUS, but we don't know
-     * if AWS is supporting OCSP stapling; right now (2016-02-28), using
-     * `openssl s_client -connect ec2.amazonaws.com:443 -status` shows that
-     * AWS does NOT provide a stapled OCSP response.
+     * if AWS is supporting OCSP stapling.
+     *
+     * Right now (2016-02-28), using:
+     *
+     *   `openssl s_client -connect ec2.amazonaws.com:443 -status`
+     *
+     * shows that AWS does NOT provide a stapled OCSP response.
      */
   }
 
