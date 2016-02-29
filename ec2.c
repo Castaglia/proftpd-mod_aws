@@ -28,7 +28,42 @@
 
 static const char *trace_channel = "aws.ec2";
 
-int aws_ec2_get_security_groups(pool *p, array_header *security_groups) {
+struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
+    unsigned long max_request_secs, const char *cacerts, const char *domain) {
+  pool *ec2_pool;
+  struct ec2_conn *ec2;
+  CURL *curl;
+
+  curl = aws_http_alloc(p, max_connect_secs, max_request_secs, cacerts);
+  if (curl == NULL) {
+    return NULL;
+  }
+
+  ec2_pool = make_sub_pool(p);
+  pr_pool_tag(ec2_pool, "EC2 Connection Pool");
+
+  ec2 = pcalloc(ec2_pool, sizeof(struct ec2_conn));
+  ec2->pool = ec2_pool;
+  ec2->curl = curl;
+  ec2->domain = pstrdup(ec2->pool, domain);
+
+  return ec2;
+}
+
+int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2) {
+  int res, xerrno;
+
+  res = aws_http_destroy(p, ec2->curl);
+  xerrno = errno;
+
+  destroy_pool(ec2->pool);
+
+  errno = xerrno;
+  return res;
+}
+
+int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
+    array_header *security_groups) {
   errno = ENOSYS;
   return -1;
 }

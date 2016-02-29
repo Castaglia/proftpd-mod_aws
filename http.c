@@ -287,7 +287,7 @@ static int http_trace_cb(CURL *curl, curl_infotype data_type, char *data,
 }
 
 CURL *aws_http_alloc(pool *p, unsigned long max_connect_secs,
-    unsigned long max_request_secs, char *cacerts) {
+    unsigned long max_request_secs, const char *cacerts) {
   CURL *curl;
   CURLcode curl_code;
 
@@ -472,7 +472,6 @@ int aws_http_init(pool *p, unsigned long *feature_flags,
     const char **http_details) {
   CURLcode curl_code;
   CURLSHcode share_code;
-  curl_version_info_data *curl_info;
   long curl_flags = CURL_GLOBAL_ALL;
 
   (void) p;
@@ -519,19 +518,24 @@ int aws_http_init(pool *p, unsigned long *feature_flags,
       curl_share_strerror(share_code));
   }
 
-  curl_info = curl_version_info(CURLVERSION_NOW);
-  if (curl_info != NULL) {
-    pr_log_debug(DEBUG5, MOD_AWS_VERSION
-      ": libcurl version: %s", curl_info->version);
+  if (feature_flags != NULL) {
+    curl_version_info_data *curl_info;
 
-    if (!(curl_info->features & CURL_VERSION_SSL)) {
-      pr_log_pri(PR_LOG_INFO, MOD_AWS_VERSION
-        ": libcurl compiled without SSL support, disabling mod_aws");
-      *feature_flags |= AWS_FL_CURL_NO_SSL;
-
-    } else {
+    curl_info = curl_version_info(CURLVERSION_NOW);
+    if (curl_info != NULL) {
       pr_log_debug(DEBUG5, MOD_AWS_VERSION
-        ": libcurl compiled using OpenSSL version: %s", curl_info->ssl_version);
+        ": libcurl version: %s", curl_info->version);
+
+      if (!(curl_info->features & CURL_VERSION_SSL)) {
+        pr_log_pri(PR_LOG_INFO, MOD_AWS_VERSION
+          ": libcurl compiled without SSL support, disabling mod_aws");
+        *feature_flags |= AWS_FL_CURL_NO_SSL;
+
+      } else {
+        pr_log_debug(DEBUG5, MOD_AWS_VERSION
+          ": libcurl compiled using OpenSSL version: %s",
+          curl_info->ssl_version);
+      }
     }
   }
 

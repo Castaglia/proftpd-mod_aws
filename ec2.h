@@ -27,6 +27,17 @@
 #ifndef MOD_AWS_EC2_H
 #define MOD_AWS_EC2_H
 
-int aws_ec2_get_security_groups(pool *p, array_header *security_groups);
+struct ec2_conn {
+  pool *pool;
+  CURL *curl;
+  const char *domain;
+};
+
+struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
+  unsigned long max_request_secs, const char *cacerts, const char *domain);
+int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2);
+
+int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
+  array_header *security_groups);
 
 #endif /* MOD_AWS_EC2_H */

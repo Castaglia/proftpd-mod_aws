@@ -467,9 +467,17 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
   log_instance_info(aws_pool, aws_info);
 
   if (aws_info->iam_role != NULL) {
+    struct ec2_conn *ec2;
+
+    ec2 = aws_ec2_conn_alloc(aws_pool, aws_connect_timeout_secs,
+      aws_request_timeout_secs, aws_cacerts, aws_info->domain);
+
     if (aws_info->security_groups != NULL) {
-      (void) aws_ec2_get_security_groups(aws_pool, aws_info->security_groups);
+      (void) aws_ec2_get_security_groups(aws_pool, ec2,
+        aws_info->security_groups);
     }
+
+    aws_ec2_conn_destroy(aws_pool, ec2);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -486,6 +494,9 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 
   /* XXX Register with ELB, or Route53 */
 
+  /* XXX Watch out for any fds that should NOT be opened (0, 1, 2), but
+   * which may be help open by e.g. libcurl.  If necessary, force-close them.
+   */
 }
 
 /* XXX Do we want to support any Controls/ftpctl actions? */

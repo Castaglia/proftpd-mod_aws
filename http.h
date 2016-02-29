@@ -29,7 +29,7 @@
 #define MOD_AWS_HTTP_H
 
 CURL *aws_http_alloc(pool *p, unsigned long max_connect_secs,
-  unsigned long max_request_secs, char *cacerts);
+  unsigned long max_request_secs, const char *cacerts);
 int aws_http_destroy(pool *p, CURL *curl);
 
 int aws_http_get(pool *p, CURL *curl, const char *url,
