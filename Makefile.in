@@ -13,6 +13,7 @@ VPATH=@srcdir@
 MODULE_NAME=mod_aws
 MODULE_OBJS=mod_aws.o \
   stacktrace.o \
+  utils.o \
   http.o \
   xml.o \
   instance.o \
@@ -22,6 +23,7 @@ MODULE_OBJS=mod_aws.o \
 
 SHARED_MODULE_OBJS=mod_aws.lo \
   stacktrace.lo \
+  utils.lo \
   http.lo \
   xml.lo \
   instance.lo \
