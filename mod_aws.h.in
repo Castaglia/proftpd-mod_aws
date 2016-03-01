@@ -46,6 +46,9 @@
 # error "libxml2 library/headers required"
 #endif
 
+/* Define if you have OpenSSL with SHA256 support. */
+#undef HAVE_OPENSSL_SHA256
+
 /* Define if you have the uuid/uuid.h header.  */
 #undef HAVE_UUID_UUID_H
 
