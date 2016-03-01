@@ -27,7 +27,11 @@
 #include "instance.h"
 #include "xml.h"
 #include "error.h"
+#include "sign.h"
 #include "ec2.h"
+
+/* The AWS service name */
+static const char *aws_service = "ec2";
 
 static const char *trace_channel = "aws.ec2";
 
@@ -43,7 +47,7 @@ static void clear_response(struct ec2_conn *ec2) {
 
 struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
     unsigned long max_request_secs, const char *cacerts, const char *region,
-    const char *domain, const char *api_version) {
+    const char *domain, const char *api_version, const char *iam_role) {
   pool *ec2_pool;
   struct ec2_conn *ec2;
   void *http;
@@ -62,6 +66,7 @@ struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
   ec2->region = pstrdup(ec2->pool, region);
   ec2->domain = pstrdup(ec2->pool, domain);
   ec2->api_version = pstrdup(ec2->pool, api_version);
+  ec2->iam_role = pstrdup(ec2->pool, iam_role);
 
   return ec2;
 }
@@ -90,15 +95,96 @@ int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2) {
  * request.  MUCH easier.
  */
 
-static int ec2_get(pool *p, void *http, const char *url,
-    size_t (*resp_body)(char *, size_t, size_t, void *),
-    void *user_data) {
+static int ec2_get(pool *p, void *http, const char *path,
+    array_header *query_params,
+    size_t (*resp_body)(char *, size_t, size_t, void *), struct ec2_conn *ec2) {
+  array_header *http_headers;
   int res;
   long resp_code;
-  const char *content_type = NULL;
+  const char *base_url, *content_type = NULL, *host = NULL, *url = NULL;
+  time_t request_time;
+  char *iso_date;
+  size_t iso_datesz;
+  struct tm *gmt_tm;
 
-  res = aws_http_get(p, http, url, NULL, resp_body, user_data, &resp_code,
-    &content_type);
+  if (ec2->iam_info == NULL) {
+    /* Need to get the temporary IAM credentials for signing. */
+
+    ec2->iam_info = aws_instance_get_iam_credentials(ec2->pool, ec2->iam_role);
+    if (ec2->iam_info == NULL) {
+      pr_trace_msg(trace_channel, 1,
+        "error obtaining IAM credentials for role '%s': %s", ec2->iam_role,
+        strerror(errno));
+      errno = EPERM;
+      return -1;
+    }
+  }
+
+  time(&request_time);
+
+  gmt_tm = pr_gmtime(p, &request_time);
+  if (gmt_tm == NULL) {
+    int xerrno = errno;
+
+    pr_trace_msg(trace_channel, 1,
+      "error obtaining gmtime: %s", strerror(xerrno));
+
+    errno = xerrno;
+    return -1;
+  }
+
+  host = pstrcat(p, aws_service, ".", ec2->region, ".", ec2->domain, NULL);
+
+  http_headers = make_array(p, 1, sizeof(char *));
+  *((char **) push_array(http_headers)) = pstrcat(p,
+    AWS_HTTP_HEADER_HOST, ": ", host, NULL);
+
+  /* XXX Add X-Amz-Date header */
+  iso_datesz = 16;
+  iso_date = pcalloc(p, iso_datesz + 1);
+  (void) strftime(iso_date, iso_datesz, "%Y%m%dT%H%M%SZ", gmt_tm);
+
+  *((char **) push_array(http_headers)) = pstrcat(p,
+    AWS_HTTP_HEADER_X_AMZ_DATE, ": ", iso_date, NULL);
+
+  base_url = pstrcat(p, "https://", host, NULL);
+
+  if (query_params->nelts > 0) {
+    register unsigned int i;
+    char **elts;
+
+    url = pstrcat(p, base_url, path, "?", NULL);
+
+    elts = query_params->elts;
+    for (i = 0; i < query_params->nelts; i++) {
+      url = pstrcat(p, url, i != 0 ? "&" : "", elts[i], NULL);
+    }
+
+  } else {
+    url = pstrcat(p, base_url, path, NULL);
+  }
+
+  res = aws_sign_v4_generate(p,
+    ec2->iam_info->access_key_id, ec2->iam_info->secret_access_key,
+    ec2->region, aws_service, http, "GET", path, query_params, http_headers, "",
+    request_time);
+  if (res < 0) {
+    int xerrno = errno;
+
+    pr_trace_msg(trace_channel, 2, "error calculating request signature: %s",
+      strerror(xerrno));
+
+    errno = xerrno;
+    return -1;
+  }
+
+/* XXX NOTE: there are multiple conditions where we might want to retry
+ * these requests: connection reset by peer, stale credentials (refetch from
+ * instance API), etc.
+ */
+
+  res = aws_http_get(p, http, url, http_headers, resp_body, (void *) ec2,
+    &resp_code, &content_type);
   if (res < 0) {
     return -1;
   }
@@ -113,10 +199,8 @@ static int ec2_get(pool *p, void *http, const char *url,
        */
       if (content_type == NULL ||
           strstr(content_type, AWS_HTTP_CONTENT_TYPE_XML) != NULL) {
-        struct ec2_conn *ec2;
         struct aws_error *err;
 
-        ec2 = user_data;
         err = aws_xml_parse_error(p, ec2->resp, ec2->respsz);
         if (err == NULL) {
           pr_trace_msg(trace_channel, 3,
@@ -219,28 +303,29 @@ static size_t ec2_resp_cb(char *data, size_t item_sz, size_t item_count,
 int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
     array_header *security_groups) {
   int res;
-  const char *url;
+  const char *path;
   pool *req_pool;
+  array_header *query_params;
 
   req_pool = make_sub_pool(ec2->pool);
   pr_pool_tag(req_pool, "EC2 Request Pool");
   ec2->req_pool = req_pool;
 
+  path = "/";
+
   /* Note: do any of these query parameters need to be URL-encoded?  Per the
    * AWS docs, the answer is "yes".
-   *
-   * ALWAYS sort the query parameters in alphabetical order, for signature
-   * generation.
    */
-  url = pstrcat(req_pool, "https://ec2.", ec2->region, ".", ec2->domain,
-    "/?Action=DescribeSecurityGroups",
-    "&Action=FooBar",
-    "&AWSAccessKeyId=BazQuxxQuzz",
-    "&DryRun=",
-    "&Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
-    NULL);
 
-  res = ec2_get(p, ec2->http, url, ec2_resp_cb, ec2);
+  query_params = make_array(req_pool, 1, sizeof(char *));
+  *((char **) push_array(query_params)) = pstrdup(req_pool,
+    "Action=DescribeSecurityGroups");
+  *((char **) push_array(query_params)) = pstrcat(req_pool,
+    "Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
+    NULL);
+  *((char **) push_array(query_params)) = pstrdup(req_pool, "DryRun=");
+
+  res = ec2_get(p, ec2->http, path, query_params, ec2_resp_cb, ec2);
   if (res == 0) {
 /* XXX Parse response data */
   }

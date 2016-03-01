@@ -517,10 +517,11 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 
 aws_info->region = "us-west-2";
 aws_info->api_version = "2010-08-31";
+aws_info->iam_role = "admin";
 
     ec2 = aws_ec2_conn_alloc(aws_pool, aws_connect_timeout_secs,
       aws_request_timeout_secs, aws_cacerts, aws_info->region, domain,
-      aws_info->api_version);
+      aws_info->api_version, aws_info->iam_role);
 
     if (aws_info->security_groups != NULL || TRUE) {
       (void) aws_ec2_get_security_groups(aws_pool, ec2,

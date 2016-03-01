@@ -37,6 +37,7 @@ struct ec2_conn {
   const char *api_version;
 
   /* To be refreshed whenever the credentials are deemed too old. */
+  const char *iam_role;
   struct iam_info *iam_info;
 
   /* For handling request/response documents. */
@@ -47,7 +48,7 @@ struct ec2_conn {
 
 struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
   unsigned long max_request_secs, const char *cacerts, const char *region,
-  const char *domain, const char *api_version);
+  const char *domain, const char *api_version, const char *iam_role);
 int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2);
 
 int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,

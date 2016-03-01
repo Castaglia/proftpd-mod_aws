@@ -1,5 +1,5 @@
 /*
- * ProFTPD - mod_aws AWS signatures version 4
+ * ProFTPD - mod_aws AWS signatures
  * Copyright (c) 2016 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,12 +23,14 @@
  */
 
 #include "mod_aws.h"
-#include "sign-v4.h"
 
-const char *aws_sign_v4_generate(pool *p, const char *aws_service,
-    const char *aws_region, const char *http_method, const char *http_uri,
-    array_header *query_params, array_header *http_headers,
-    const char *http_body) {
-  errno = ENOSYS;
-  return NULL;
-}
+#ifndef MOD_AWS_SIGN_H
+#define MOD_AWS_SIGN_H
+
+int aws_sign_v4_generate(pool *p, const char *access_key_id,
+  const char *secret_access_key, const char *region, const char *service,
+  void *http, const char *http_method, const char *http_path,
+  array_header *query_params, array_header *http_headers,
+  const char *http_body, time_t request_time);
+
+#endif /* MOD_AWS_SIGN_H */
