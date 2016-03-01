@@ -89,11 +89,12 @@ static void clear_http_response(void) {
   http_resp_msg = NULL;
 }
 
-int aws_http_get(pool *p, void *http, const char *url,
+int aws_http_get(pool *p, void *http, const char *url, array_header *headers,
     size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
     long *resp_code, const char **content_type) {
   CURL *curl;
   CURLcode curl_code;
+  struct curl_slist *slist = NULL;
   double content_len, rcvd_bytes, total_secs;
 
   curl = http;
@@ -129,6 +130,23 @@ int aws_http_get(pool *p, void *http, const char *url,
     return -1;
   }
 
+  if (headers != NULL) {
+    register unsigned int i;
+    char **http_headers;
+
+    http_headers = headers->elts;
+    for (i = 0; i < headers->nelts; i++) {
+      slist = curl_slist_append(slist, http_headers[i]);
+    }
+
+    curl_code = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
+    if (curl_code != CURLE_OK) {
+      pr_trace_msg(trace_channel, 1,
+        "error setting CURLOPT_HTTPHEADER: %s",
+        curl_easy_strerror(curl_code));
+    }
+  }
+
   /* Clear error buffer, response message before performing request,
    * per docs.
    */
@@ -137,6 +155,11 @@ int aws_http_get(pool *p, void *http, const char *url,
   http_resp_pool = make_sub_pool(p);
 
   curl_code = curl_easy_perform(curl);
+
+  if (slist != NULL) {
+    curl_slist_free_all(slist);
+  }
+
   if (curl_code != CURLE_OK) {
     size_t error_len;
     int xerrno = EPERM;

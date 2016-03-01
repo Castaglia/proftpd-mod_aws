@@ -54,7 +54,7 @@ const char *aws_http_urldecode(pool *p, void *http, const char *item,
 const char *aws_http_urlencode(pool *p, void *http, const char *item,
   size_t item_len);
 
-int aws_http_get(pool *p, void *http, const char *url,
+int aws_http_get(pool *p, void *http, const char *url, array_header *headers,
   size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
   long *resp_code, const char **content_type);
 

@@ -17,6 +17,7 @@ MODULE_OBJS=mod_aws.o \
   xml.o \
   instance.o \
   error.o \
+  sign-v4.o \
   ec2.o
 
 SHARED_MODULE_OBJS=mod_aws.lo \
@@ -25,6 +26,7 @@ SHARED_MODULE_OBJS=mod_aws.lo \
   xml.lo \
   instance.lo \
   error.lo \
+  sign-v4.lo \
   ec2.lo
 
 # Necessary redefinitions

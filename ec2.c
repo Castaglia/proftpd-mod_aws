@@ -78,6 +78,18 @@ int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2) {
   return res;
 }
 
+/* NOTE: for an ec2_post() function, we will need to set a Content-Type
+ * request header of "application/x-www-form-urlencoded; charset=utf-8".
+ *
+ * Thus the HTTP API will need a way to associate more headers with the
+ * request (e.g. using curl_slist), AND free up those headers when done.
+ * This suggests a 'void *http_headers' handle in the ec2 struct, which
+ * is actually the slist pointer.  OR, for better visibility into the items
+ * in that list, perhaps use an array_header.  As part of making the request,
+ * convert that array_header into an slist, and free up the slist after the
+ * request.  MUCH easier.
+ */
+
 static int ec2_get(pool *p, void *http, const char *url,
     size_t (*resp_body)(char *, size_t, size_t, void *),
     void *user_data) {
@@ -85,7 +97,7 @@ static int ec2_get(pool *p, void *http, const char *url,
   long resp_code;
   const char *content_type = NULL;
 
-  res = aws_http_get(p, http, url, resp_body, user_data, &resp_code,
+  res = aws_http_get(p, http, url, NULL, resp_body, user_data, &resp_code,
     &content_type);
   if (res < 0) {
     return -1;
@@ -216,13 +228,16 @@ int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
 
   /* Note: do any of these query parameters need to be URL-encoded?  Per the
    * AWS docs, the answer is "yes".
+   *
+   * ALWAYS sort the query parameters in alphabetical order, for signature
+   * generation.
    */
   url = pstrcat(req_pool, "https://ec2.", ec2->region, ".", ec2->domain,
     "/?Action=DescribeSecurityGroups",
     "&Action=FooBar",
-    "&Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
-    "&DryRun",
     "&AWSAccessKeyId=BazQuxxQuzz",
+    "&DryRun=",
+    "&Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
     NULL);
 
   res = ec2_get(p, ec2->http, url, ec2_resp_cb, ec2);

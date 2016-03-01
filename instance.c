@@ -47,7 +47,8 @@ static int get_metadata(pool *p, void *http, const char *url,
   int res;
   long resp_code;
 
-  res = aws_http_get(p, http, url, resp_body, user_data, &resp_code, NULL);
+  res = aws_http_get(p, http, url, NULL, resp_body, user_data, &resp_code,
+    NULL);
   if (res < 0) {
     return -1;
   }
