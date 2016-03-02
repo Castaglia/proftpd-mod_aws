@@ -85,14 +85,6 @@ int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2) {
 
 /* NOTE: for an ec2_post() function, we will need to set a Content-Type
  * request header of "application/x-www-form-urlencoded; charset=utf-8".
- *
- * Thus the HTTP API will need a way to associate more headers with the
- * request (e.g. using curl_slist), AND free up those headers when done.
- * This suggests a 'void *http_headers' handle in the ec2 struct, which
- * is actually the slist pointer.  OR, for better visibility into the items
- * in that list, perhaps use an array_header.  As part of making the request,
- * convert that array_header into an slist, and free up the slist after the
- * request.  MUCH easier.
  */
 
 static int ec2_get(pool *p, void *http, const char *path,
