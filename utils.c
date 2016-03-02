@@ -28,27 +28,38 @@
 array_header *aws_utils_table2array(pool *p, pr_table_t *tab) {
   array_header *list;
   int listsz;
-  void *name;
+  void *key;
 
   listsz = pr_table_count(tab);
   list = make_array(p, listsz, sizeof(char *));
 
   pr_table_rewind(tab);
 
-  name = pr_table_next(tab);
-  while (name != NULL) {
+  key = pr_table_next(tab);
+  while (key != NULL) {
     void *value;
 
     pr_signals_handle();
 
-    value = pr_table_get(tab, (const char *) name, NULL);
+    value = pr_table_get(tab, (const char *) key, NULL);
     if (value != NULL) {
-      *((char **) push_array(list)) = pstrcat(p, (char *) name, ": ",
+      *((char **) push_array(list)) = pstrcat(p, (char *) key, ": ",
         (char *) value, NULL);
     }
 
-    name = pr_table_next(tab);
+    key = pr_table_next(tab);
   }
 
   return list;
+}
+
+char *aws_utils_str_trim(pool *p, const char *str) {
+  if (p == NULL ||
+      str == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  errno = ENOSYS;
+  return NULL;
 }

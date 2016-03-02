@@ -32,4 +32,11 @@
  */
 array_header *aws_utils_table2array(pool *p, pr_table_t *tab);
 
+/* Trim any leading/trailing whitespace from the given string.
+ *
+ * A copy of the given string is made from the pool, and that copy is
+ * then modified as needed; a pointer to the modified string is returned.
+ */
+char *aws_utils_str_trim(pool *p, const char *str);
+
 #endif /* MOD_AWS_UTILS_H */
