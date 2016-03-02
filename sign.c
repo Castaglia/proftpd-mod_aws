@@ -25,6 +25,7 @@
 #include "mod_aws.h"
 #include "sign.h"
 #include "http.h"
+#include "utils.h"
 
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -105,49 +106,163 @@ static const char *create_canon_uri(pool *p, void *http, const char *uri) {
   return canon_uri;
 }
 
-static const char *create_canon_query(pool *p, void *http,
-    array_header *query_param) {
-  errno = ENOSYS;
-  return NULL;
+static int ascii_cmp(const void *a, const void *b) {
+  return strcmp(*((const char **) a), *((const char **) b));
 }
 
-static const char *create_canon_headers(pool *p, void *http,
-    array_header *http_headers) {
-  errno = ENOSYS;
-  return NULL;
+static const char *create_canon_query(pool *p, array_header *query_params) {
+  register unsigned int i, last_idx;
+  char *canon_query = NULL, **elts;
+
+  if (query_params->nelts == 0) {
+    return pstrdup(p, "");
+  }
+
+  qsort(query_params->elts, query_params->nelts, sizeof(char *), ascii_cmp);
+
+  elts = query_params->elts;
+  last_idx = query_params->nelts - 1;
+
+  for (i = 0; i < query_params->nelts; i++) {
+    pr_signals_handle();
+
+    canon_query = pstrcat(p,
+      canon_query != NULL ? canon_query : "", elts[i],
+      i != last_idx ? "&" : "", NULL);
+  }
+
+  return canon_query;
 }
 
-static const char *create_signed_headers(pool *p, void *http,
-    array_header *http_headers) {
-  errno = ENOSYS;
-  return NULL;
+static const char *create_canon_headers(pool *p, pr_table_t *headers) {
+  register unsigned int i;
+  int header_count;
+  array_header *http_headers;
+  char *canon_headers = NULL, **elts;
+  void *key;
+
+  header_count = pr_table_count(headers);
+  if (header_count == 0) {
+    return pstrdup(p, "");
+  }
+
+  http_headers = make_array(p, header_count, sizeof(char *));
+
+  pr_table_rewind(headers);
+  key = pr_table_next(headers);
+  while (key != NULL) {
+    void *value;
+    char *name, *header_name, *header_value;
+
+    pr_signals_handle();
+
+    value = pr_table_get(headers, key, NULL);
+    if (value == NULL) {
+      key = pr_table_next(headers);
+      continue;
+    }
+
+    /* Convert this header name to all lowercase, per the AWS docs. */
+    name = (char *) key;
+    header_name = pstrdup(p, name);
+    for (i = 0; name[i]; i++) {
+      header_name[i] = tolower((int) name[i]);
+    }
+
+    /* Trim off leading/trailing whitespace on the value, per the AWS docs. */
+    header_value = aws_utils_str_trim(p, (const char *) value);
+
+    *((char **) push_array(http_headers)) = pstrcat(p,
+      header_name, ":", header_value, NULL);
+    key = pr_table_next(headers);
+  }
+
+  qsort(http_headers->elts, http_headers->nelts, sizeof(char *), ascii_cmp);
+
+  elts = http_headers->elts;
+  for (i = 0; i < http_headers->nelts; i++) {
+    pr_signals_handle();
+
+    canon_headers = pstrcat(p,
+      canon_headers != NULL ? canon_headers : "", elts[i], "\n", NULL);
+  }
+
+  return canon_headers;
+}
+
+static const char *create_signed_headers(pool *p, pr_table_t *headers) {
+  register unsigned int i, last_idx;
+  int header_count;
+  array_header *header_names;
+  char *signed_headers = NULL, **elts;
+  void *key;
+
+  header_count = pr_table_count(headers);
+  if (header_count == 0) {
+    return pstrdup(p, "");
+  }
+
+  header_names = make_array(p, header_count, sizeof(char *));
+
+  pr_table_rewind(headers);
+  key = pr_table_next(headers);
+  while (key != NULL) {
+    char *name, *header;
+
+    pr_signals_handle();
+
+    /* Convert this header name to all lowercase, per the AWS docs. */
+    name = (char *) key;
+    header = pstrdup(p, name);
+    for (i = 0; name[i]; i++) {
+      header[i] = tolower((int) name[i]);
+    }
+
+    *((char **) push_array(header_names)) = header;
+    key = pr_table_next(headers);
+  }
+
+  qsort(header_names->elts, header_names->nelts, sizeof(char *), ascii_cmp);
+
+  elts = header_names->elts;
+  last_idx = header_names->nelts - 1;
+
+  for (i = 0; i < header_names->nelts; i++) {
+    pr_signals_handle();
+
+    signed_headers = pstrcat(p,
+      signed_headers != NULL ? signed_headers : "", elts[i],
+      i != last_idx ? ";" : "", NULL);
+  }
+
+  return signed_headers;
 }
 
 static const char *create_canon_request(pool *p, void *http,
-    const char *http_method, const char *http_uri, array_header *query_params,
-    array_header *http_headers, const char *http_body,
+    const char *http_method, const char *http_path, array_header *query_params,
+    pr_table_t *http_headers, const char *http_body,
     const char **signed_headers) {
   char *canon_request;
   unsigned char buf[SHA256_DIGEST_LENGTH];
   size_t http_bodylen;
   const char *canon_uri, *canon_query, *canon_headers, *payload_hash;
 
-  canon_uri = create_canon_uri(p, http, http_uri);
+  canon_uri = create_canon_uri(p, http, http_path);
   if (canon_uri == NULL) {
     return NULL;
   }
 
-  canon_query = create_canon_query(p, http, query_params);
+  canon_query = create_canon_query(p, query_params);
   if (canon_query == NULL) {
     return NULL;
   }
 
-  canon_headers = create_canon_headers(p, http, http_headers);
+  canon_headers = create_canon_headers(p, http_headers);
   if (canon_headers == NULL) {
     return NULL;
   }
 
-  *signed_headers = create_signed_headers(p, http, http_headers);
+  *signed_headers = create_signed_headers(p, http_headers);
   if (*signed_headers == NULL) {
     return NULL;
   }
@@ -293,8 +408,8 @@ static const char *calculate_signature(pool *p, time_t request_time,
   }
 
   /* Use the signing key on our string to sign, to get the signature. */
-  if (HMAC(md, signing_key, buflen, string_to_sign, strlen(string_to_sign),
-      buf, &buflen) == NULL) {
+  if (HMAC(md, signing_key, buflen, (const unsigned char *) string_to_sign,
+      strlen(string_to_sign), buf, &buflen) == NULL) {
     pr_trace_msg(trace_channel, 1,
       "HMAC-SHA256 error calculating signature: %s", get_errors(p));
     errno = EPERM;
@@ -319,11 +434,12 @@ static const char *calculate_signature(pool *p, time_t request_time,
 int aws_sign_v4_generate(pool *p, const char *access_key_id,
     const char *secret_access_key, const char *region, const char *service,
     void *http, const char *http_method, const char *http_path,
-    array_header *query_params, array_header *http_headers,
+    array_header *query_params, pr_table_t *http_headers,
     const char *http_body, time_t request_time) {
+  int res;
   const char *credential_scope, *canon_request, *signature, *signed_headers;
   const char *string_to_sign;
-  char *authz_header;
+  char *authz;
 
   if (p == NULL ||
       access_key_id == NULL ||
@@ -379,10 +495,20 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
    * our calculated signature et al.
    */
 
-  authz_header = pstrcat(p, AWS_HTTP_HEADER_AUTHZ, ": ", sign_v4_algo,
+  authz = pstrcat(p, sign_v4_algo,
     " Credential=", access_key_id, "/", credential_scope,
-    ", SignedHeaders=", signed_headers, ", Signature=", signature);
+    ", SignedHeaders=", signed_headers, ", Signature=", signature, NULL);
 
-  *((char **) push_array(http_headers)) = authz_header;
+  res = pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_AUTHZ), authz, 0);
+  if (res < 0) {
+    int xerrno = errno;
+
+    pr_trace_msg(trace_channel, 3, "error adding %s header: %s",
+      AWS_HTTP_HEADER_AUTHZ, strerror(xerrno));
+
+    errno = xerrno;
+    return -1;
+  }
+
   return 0;
 }
