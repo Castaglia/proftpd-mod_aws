@@ -19,7 +19,8 @@ MODULE_OBJS=mod_aws.o \
   instance.o \
   error.o \
   sign.o \
-  ec2.o
+  ec2.o \
+  route53.o
 
 SHARED_MODULE_OBJS=mod_aws.lo \
   stacktrace.lo \
@@ -29,7 +30,8 @@ SHARED_MODULE_OBJS=mod_aws.lo \
   instance.lo \
   error.lo \
   sign.lo \
-  ec2.lo
+  ec2.lo \
+  route53.lo
 
 # Necessary redefinitions
 INCLUDES=-I. -I./include -I../.. -I../../include @INCLUDES@
