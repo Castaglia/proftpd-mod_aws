@@ -273,6 +273,13 @@ static const char *create_canon_request(pool *p, void *http,
   }
   pr_trace_msg(trace_channel, 19, "signed headers: '%s'", *signed_headers);
 
+  /* Note: If/when the body length exceeds a certain size, we'll need to
+   * use SHA256_{Init,Update,Final} in a more streamy fashion, rather than
+   * using this oneshot SHA256() function.  Also, for such large payloads,
+   * consider streaming it from a file descriptor/handle, rather than having
+   * callers load it all into memory.
+   */
+
   http_bodylen = strlen(http_body);
   if (SHA256((unsigned char *) http_body, http_bodylen, buf) == NULL) {
     pr_trace_msg(trace_channel, 2,
