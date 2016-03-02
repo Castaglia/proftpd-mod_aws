@@ -98,12 +98,12 @@ int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2) {
 static int ec2_get(pool *p, void *http, const char *path,
     array_header *query_params,
     size_t (*resp_body)(char *, size_t, size_t, void *), struct ec2_conn *ec2) {
-  array_header *http_headers;
+  pr_table_t *http_headers;
   int res;
   long resp_code;
-  const char *base_url, *content_type = NULL, *host = NULL, *url = NULL;
+  const char *content_type = NULL;
+  char *base_url, *host = NULL, *iso_date, *url = NULL;
   time_t request_time;
-  char *iso_date;
   size_t iso_datesz;
   struct tm *gmt_tm;
 
@@ -135,17 +135,16 @@ static int ec2_get(pool *p, void *http, const char *path,
 
   host = pstrcat(p, aws_service, ".", ec2->region, ".", ec2->domain, NULL);
 
-  http_headers = make_array(p, 1, sizeof(char *));
-  *((char **) push_array(http_headers)) = pstrcat(p,
-    AWS_HTTP_HEADER_HOST, ": ", host, NULL);
+  http_headers = pr_table_nalloc(p, 0, 2);
+  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_HOST), host, 0);
 
   /* XXX Add X-Amz-Date header */
   iso_datesz = 16;
   iso_date = pcalloc(p, iso_datesz + 1);
   (void) strftime(iso_date, iso_datesz, "%Y%m%dT%H%M%SZ", gmt_tm);
 
-  *((char **) push_array(http_headers)) = pstrcat(p,
-    AWS_HTTP_HEADER_X_AMZ_DATE, ": ", iso_date, NULL);
+  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_X_AMZ_DATE),
+    iso_date, 0);
 
   base_url = pstrcat(p, "https://", host, NULL);
 
