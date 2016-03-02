@@ -344,7 +344,7 @@ static const char *create_string_to_sign(pool *p, time_t request_time,
     return NULL;
   }
 
-  iso_datesz = 16;
+  iso_datesz = 18;
   iso_date = pcalloc(p, iso_datesz + 1);
   (void) strftime(iso_date, iso_datesz, "%Y%m%dT%H%M%SZ", gmt_tm);
 
@@ -389,8 +389,8 @@ static const char *calculate_signature(pool *p, time_t request_time,
     return NULL;
   }
 
-  utc_datesz = 8;
-  utc_date = pcalloc(p, utc_datesz+1);
+  utc_datesz = 10;
+  utc_date = pcalloc(p, utc_datesz + 1);
   (void) strftime(utc_date, utc_datesz, "%Y%m%d", gmt_tm);
 
   secret_key = (unsigned char *) pstrcat(p, "AWS4", secret_access_key, NULL);
