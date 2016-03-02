@@ -283,7 +283,6 @@ int aws_http_get(pool *p, void *http, const char *url, pr_table_t *headers,
 
 static size_t http_header_cb(char *data, size_t itemsz, size_t item_count,
     void *user_data) {
-  CURL *curl;
   size_t datasz;
 
   curl = user_data;
@@ -589,7 +588,7 @@ int aws_http_init(pool *p, unsigned long *feature_flags,
 
   share_code = curl_share_setopt(curl_share, CURLSHOPT_SHARE,
     CURL_LOCK_DATA_COOKIE);
-  if (curl_code != CURLSHE_OK) {
+  if (share_code != CURLSHE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURL_LOCK_DATA_COOKIE: %s",
       curl_share_strerror(share_code));
@@ -597,14 +596,14 @@ int aws_http_init(pool *p, unsigned long *feature_flags,
 
   share_code = curl_share_setopt(curl_share, CURLSHOPT_SHARE,
     CURL_LOCK_DATA_DNS);
-  if (curl_code != CURLSHE_OK) {
+  if (share_code != CURLSHE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURL_LOCK_DATA_DNS: %s", curl_share_strerror(share_code));
   }
 
   share_code = curl_share_setopt(curl_share, CURLSHOPT_SHARE,
     CURL_LOCK_DATA_SSL_SESSION);
-  if (curl_code != CURLSHE_OK) {
+  if (share_code != CURLSHE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURL_LOCK_DATA_SSL_SESSION: %s",
       curl_share_strerror(share_code));
