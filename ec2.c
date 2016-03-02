@@ -138,7 +138,6 @@ static int ec2_get(pool *p, void *http, const char *path,
   http_headers = pr_table_nalloc(p, 0, 2);
   (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_HOST), host, 0);
 
-  /* XXX Add X-Amz-Date header */
   iso_datesz = 16;
   iso_date = pcalloc(p, iso_datesz + 1);
   (void) strftime(iso_date, iso_datesz, "%Y%m%dT%H%M%SZ", gmt_tm);
@@ -317,6 +316,7 @@ int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
    */
 
   query_params = make_array(req_pool, 1, sizeof(char *));
+
   *((char **) push_array(query_params)) = pstrdup(req_pool,
     "Action=DescribeSecurityGroups");
   *((char **) push_array(query_params)) = pstrcat(req_pool,
@@ -327,6 +327,8 @@ int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
   res = ec2_get(p, ec2->http, path, query_params, ec2_resp_cb, ec2);
   if (res == 0) {
 /* XXX Parse response data */
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "security groups response: '%.*s'", (int) ec2->respsz, ec2->resp);
   }
 
   clear_response(ec2);

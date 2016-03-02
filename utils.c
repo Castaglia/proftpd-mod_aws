@@ -54,12 +54,39 @@ array_header *aws_utils_table2array(pool *p, pr_table_t *tab) {
 }
 
 char *aws_utils_str_trim(pool *p, const char *str) {
+  const char *start, *end;
+  char *trimmed = NULL;
+  size_t len;
+
   if (p == NULL ||
       str == NULL) {
     errno = EINVAL;
     return NULL;
   }
 
-  errno = ENOSYS;
-  return NULL;
+  len = strlen(str);
+  if (len == 0) {
+    return pstrdup(p, "");
+  }
+
+  /* "Trim" the leading whitespace by skipping over it, to find the "start"
+   * of our string to copy.
+   */
+  start = str;
+  while (PR_ISSPACE(*start)) {
+    pr_signals_handle();
+    start++;
+  }
+
+  /* Similarly, "trim" the trailing whitepsace by skipping it in our copy
+   * by finding the non-whitespace "end" of the string.
+   */
+  end = &str[len-1];
+  while (PR_ISSPACE(*end)) {
+    pr_signals_handle();
+    end--;
+  }
+
+  trimmed = pstrndup(p, start, end - start + 1);
+  return trimmed;
 }

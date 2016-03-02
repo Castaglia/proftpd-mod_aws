@@ -171,6 +171,8 @@ static const char *create_canon_headers(pool *p, pr_table_t *headers) {
 
     /* Trim off leading/trailing whitespace on the value, per the AWS docs. */
     header_value = aws_utils_str_trim(p, (const char *) value);
+    pr_trace_msg(trace_channel, 19, "trimmed '%s' value '%s' to '%s'",
+      name, (const char *) value, header_value);
 
     *((char **) push_array(http_headers)) = pstrcat(p,
       header_name, ":", header_value, NULL);
@@ -241,31 +243,35 @@ static const char *create_signed_headers(pool *p, pr_table_t *headers) {
 static const char *create_canon_request(pool *p, void *http,
     const char *http_method, const char *http_path, array_header *query_params,
     pr_table_t *http_headers, const char *http_body,
-    const char **signed_headers) {
+    const char **signed_headers, const char **canon_request_hash) {
   char *canon_request;
   unsigned char buf[SHA256_DIGEST_LENGTH];
-  size_t http_bodylen;
+  size_t canon_requestlen, http_bodylen;
   const char *canon_uri, *canon_query, *canon_headers, *payload_hash;
 
   canon_uri = create_canon_uri(p, http, http_path);
   if (canon_uri == NULL) {
     return NULL;
   }
+  pr_trace_msg(trace_channel, 19, "canonical URI: '%s'", canon_uri);
 
   canon_query = create_canon_query(p, query_params);
   if (canon_query == NULL) {
     return NULL;
   }
+  pr_trace_msg(trace_channel, 19, "canonical query: '%s'", canon_query);
 
   canon_headers = create_canon_headers(p, http_headers);
   if (canon_headers == NULL) {
     return NULL;
   }
+  pr_trace_msg(trace_channel, 19, "canonical headers: '%s'", canon_headers);
 
   *signed_headers = create_signed_headers(p, http_headers);
   if (*signed_headers == NULL) {
     return NULL;
   }
+  pr_trace_msg(trace_channel, 19, "signed headers: '%s'", *signed_headers);
 
   http_bodylen = strlen(http_body);
   if (SHA256((unsigned char *) http_body, http_bodylen, buf) == NULL) {
@@ -282,6 +288,7 @@ static const char *create_canon_request(pool *p, void *http,
     errno = EINVAL;
     return NULL;
   }
+  pr_trace_msg(trace_channel, 19, "payload hash: '%s'", payload_hash);
 
   canon_request = pstrcat(p,
     http_method, "\n",
@@ -290,6 +297,26 @@ static const char *create_canon_request(pool *p, void *http,
     canon_headers, "\n",
     *signed_headers, "\n",
     payload_hash, NULL);
+
+  canon_requestlen = strlen(canon_request);
+  if (SHA256((unsigned char *) canon_request, canon_requestlen, buf) == NULL) {
+    pr_trace_msg(trace_channel, 2,
+      "error calculating SHA256 digest of canonical request: %s",
+      get_errors(p));
+    errno = EINVAL;
+    return NULL;
+  }
+
+  *canon_request_hash = pr_str_bin2hex(p, buf, sizeof(buf),
+    PR_STR_FL_HEX_USE_LC);
+  if (*canon_request_hash == NULL) {
+    pr_trace_msg(trace_channel, 1,
+      "error hex-encoding canonical request digest: %s", strerror(errno));
+    errno = EINVAL;
+    return NULL;
+  }
+  pr_trace_msg(trace_channel, 19, "canonical request hash: '%s'",
+    *canon_request_hash);
 
   return canon_request;
 }
@@ -327,9 +354,10 @@ static const char *create_string_to_sign(pool *p, time_t request_time,
 
   *credential_scope = pstrcat(p, utc_date, "/", region, "/", service,
     "/aws4_request", NULL);
+  pr_trace_msg(trace_channel, 19, "credential scope: '%s'", *credential_scope);
 
   string_to_sign = pstrcat(p, sign_v4_algo, "\n", iso_date, "\n",
-    *credential_scope, "\n", request_hash);
+    *credential_scope, "\n", request_hash, NULL);
 
   return string_to_sign;
 }
@@ -427,17 +455,14 @@ static const char *calculate_signature(pool *p, time_t request_time,
   return signature;
 }
 
-/* XXX Need to get access key ID (for generating "credentials_scope"),
- * and secret access key.
- */
-
 int aws_sign_v4_generate(pool *p, const char *access_key_id,
     const char *secret_access_key, const char *region, const char *service,
     void *http, const char *http_method, const char *http_path,
     array_header *query_params, pr_table_t *http_headers,
     const char *http_body, time_t request_time) {
   int res;
-  const char *credential_scope, *canon_request, *signature, *signed_headers;
+  const char *credential_scope, *canon_request, *canon_request_hash;
+  const char *signature, *signed_headers;
   const char *string_to_sign;
   char *authz;
 
@@ -456,7 +481,8 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
   }
 
   canon_request = create_canon_request(p, http, http_method, http_path,
-    query_params, http_headers, http_body, &signed_headers);
+    query_params, http_headers, http_body, &signed_headers,
+    &canon_request_hash);
   if (canon_request == NULL) {
     int xerrno = errno;
 
@@ -466,9 +492,10 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
     errno = xerrno;
     return -1;
   }
+  pr_trace_msg(trace_channel, 19, "canonical request: '%s'", canon_request);
 
   string_to_sign = create_string_to_sign(p, request_time, region, service,
-    canon_request, &credential_scope);
+    canon_request_hash, &credential_scope);
   if (string_to_sign == NULL) {
     int xerrno = errno;
 
@@ -478,6 +505,7 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
     errno = xerrno;
     return -1;
   }
+  pr_trace_msg(trace_channel, 19, "string to sign: '%s'", string_to_sign);
 
   signature = calculate_signature(p, request_time, region, service,
     string_to_sign, secret_access_key);
@@ -490,6 +518,7 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
     errno = xerrno;
     return -1;
   }
+  pr_trace_msg(trace_channel, 19, "v4 signature: '%s'", signature);
 
   /* Now we can finally construct and add an Authorization header with
    * our calculated signature et al.
@@ -509,6 +538,8 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
     errno = xerrno;
     return -1;
   }
+
+  /* XXX Are we also going to need the IAM token, to add as a token header? */
 
   return 0;
 }
