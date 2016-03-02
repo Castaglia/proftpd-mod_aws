@@ -285,7 +285,6 @@ static size_t http_header_cb(char *data, size_t itemsz, size_t item_count,
     void *user_data) {
   size_t datasz;
 
-  curl = user_data;
   datasz = itemsz * item_count;
 
   /* Fortunately, only COMPLETE headers are passed to us, so that we do not
