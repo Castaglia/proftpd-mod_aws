@@ -456,7 +456,8 @@ static const char *calculate_signature(pool *p, time_t request_time,
 }
 
 int aws_sign_v4_generate(pool *p, const char *access_key_id,
-    const char *secret_access_key, const char *region, const char *service,
+    const char *secret_access_key, const char *token,
+    const char *region, const char *service,
     void *http, const char *http_method, const char *http_path,
     array_header *query_params, pr_table_t *http_headers,
     const char *http_body, time_t request_time) {
@@ -539,7 +540,19 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
     return -1;
   }
 
-  /* XXX Are we also going to need the IAM token, to add as a token header? */
+  if (token != NULL) {
+    res = pr_table_add(http_headers,
+        pstrdup(p, AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN), token, 0);
+    if (res < 0) {
+      int xerrno = errno;
+
+      pr_trace_msg(trace_channel, 3, "error adding %s header: %s",
+        AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN, strerror(xerrno));
+
+      errno = xerrno;
+      return -1;
+    }
+  }
 
   return 0;
 }

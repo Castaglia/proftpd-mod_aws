@@ -28,10 +28,12 @@
 #define MOD_AWS_HTTP_H
 
 /* HTTP headers */
+#define AWS_HTTP_HEADER_ACCEPT				"Accept"
 #define AWS_HTTP_HEADER_AUTHZ				"Authorization"
 #define AWS_HTTP_HEADER_CONTENT_TYPE			"Content-Type"
 #define AWS_HTTP_HEADER_HOST				"Host"
 #define AWS_HTTP_HEADER_X_AMZ_DATE			"X-Amz-Date"
+#define AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN		"X-Amz-Security-Token"
 
 /* HTTP response codes */
 #define AWS_HTTP_RESPONSE_CODE_OK			200L

@@ -435,12 +435,17 @@ void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
       curl_easy_strerror(curl_code));
   }
 
+#if 0
+  /* Note: adding this header here, without accounting for it during
+   * signature generation, causes issues.
+   */
   curl_code = curl_easy_setopt(curl, CURLOPT_USERAGENT, MOD_AWS_VERSION);
   if (curl_code != CURLE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURLOPT_USERAGENT: %s",
       curl_easy_strerror(curl_code));
   }
+#endif
 
   /* SSL-isms. */
 

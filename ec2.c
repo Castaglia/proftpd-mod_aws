@@ -137,6 +137,8 @@ static int ec2_get(pool *p, void *http, const char *path,
 
   http_headers = pr_table_nalloc(p, 0, 2);
   (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_HOST), host, 0);
+  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_ACCEPT),
+    "*/*", 0);
 
   iso_datesz = 16;
   iso_date = pcalloc(p, iso_datesz + 1);
@@ -164,8 +166,8 @@ static int ec2_get(pool *p, void *http, const char *path,
 
   res = aws_sign_v4_generate(p,
     ec2->iam_info->access_key_id, ec2->iam_info->secret_access_key,
-    ec2->region, aws_service, http, "GET", path, query_params, http_headers, "",
-    request_time);
+    ec2->iam_info->token, ec2->region, aws_service, http, "GET", path,
+    query_params, http_headers, "", request_time);
   if (res < 0) {
     int xerrno = errno;
 
