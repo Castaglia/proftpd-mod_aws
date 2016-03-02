@@ -348,7 +348,7 @@ static const char *create_string_to_sign(pool *p, time_t request_time,
   iso_date = pcalloc(p, iso_datesz + 1);
   (void) strftime(iso_date, iso_datesz, "%Y%m%dT%H%M%SZ", gmt_tm);
 
-  utc_datesz = 8;
+  utc_datesz = 10;
   utc_date = pcalloc(p, utc_datesz + 1);
   (void) strftime(utc_date, utc_datesz, "%Y%m%d", gmt_tm);
 
@@ -542,7 +542,7 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
 
   if (token != NULL) {
     res = pr_table_add(http_headers,
-        pstrdup(p, AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN), token, 0);
+      pstrdup(p, AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN), (char *) token, 0);
     if (res < 0) {
       int xerrno = errno;
 
