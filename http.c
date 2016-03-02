@@ -24,6 +24,7 @@
 
 #include "mod_aws.h"
 #include "http.h"
+#include "utils.h"
 
 #ifdef HAVE_CURL_CURL_H
 # include <curl/curl.h>
@@ -89,7 +90,7 @@ static void clear_http_response(void) {
   http_resp_msg = NULL;
 }
 
-int aws_http_get(pool *p, void *http, const char *url, array_header *headers,
+int aws_http_get(pool *p, void *http, const char *url, pr_table_t *headers,
     size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
     long *resp_code, const char **content_type) {
   CURL *curl;
@@ -132,11 +133,14 @@ int aws_http_get(pool *p, void *http, const char *url, array_header *headers,
 
   if (headers != NULL) {
     register unsigned int i;
-    char **http_headers;
+    array_header *http_headers;
+    char **elts;
 
-    http_headers = headers->elts;
-    for (i = 0; i < headers->nelts; i++) {
-      slist = curl_slist_append(slist, http_headers[i]);
+    http_headers = aws_utils_table2array(p, headers);
+
+    elts = http_headers->elts;
+    for (i = 0; i < http_headers->nelts; i++) {
+      slist = curl_slist_append(slist, elts[i]);
     }
 
     curl_code = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
