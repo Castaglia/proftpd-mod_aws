@@ -759,11 +759,16 @@ static int get_security_groups(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
-  /* NOTE: In order to look up information about an SG, especially when
-   * in the non-default VPC, we MUST use the SG ID, not the SG name.  Thus
-   * why we look up the IDs here.
-   */
-  url = AWS_INSTANCE_METADATA_URL "/security-group-ids";
+  /* If we don't know the MAC, then we cannot find the SG IDs. */
+  if (info->hw_mac == NULL) {
+    pr_trace_msg(trace_channel, 9,
+      "unable to discover aws.security-groups without aws.mac");
+    errno = EPERM;
+    return -1;
+  }
+
+  url = pstrcat(p, AWS_INSTANCE_METADATA_URL, "/network/interfaces/macs/",
+    info->hw_mac, "/security-group-ids", NULL);
 
   res = get_metadata(p, http, url, security_groups_cb, info);
   if (res == 0) {
