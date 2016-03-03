@@ -59,6 +59,9 @@ static struct err_info errs[] = {
   { "MissingParameter", 17,
     AWS_ERROR_CODE_MISSING_PARAMETER },
 
+  { "UnknownParameter", 17,
+    AWS_ERROR_CODE_UNKNOWN_PARAMETER },
+
   /* General server errors */
 
   /* EC2 error codes */
