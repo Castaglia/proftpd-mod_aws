@@ -38,6 +38,23 @@ static pool *http_resp_pool = NULL;
 
 static const char *trace_channel = "aws.http";
 
+pr_table_t *aws_http_default_headers(pool *p) {
+  pr_table_t *http_headers;
+
+  if (p == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  http_headers = pr_table_nalloc(p, 0, 2);
+  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_ACCEPT),
+    "*/*", 0);
+  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_USER_AGENT),
+    MOD_AWS_VERSION, 0);
+
+  return http_headers;
+}
+
 const char *aws_http_urldecode(pool *p, void *http, const char *item,
     size_t item_len, size_t *decoded_len) {
   CURL *curl;

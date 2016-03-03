@@ -32,6 +32,7 @@
 #define AWS_HTTP_HEADER_AUTHZ				"Authorization"
 #define AWS_HTTP_HEADER_CONTENT_TYPE			"Content-Type"
 #define AWS_HTTP_HEADER_HOST				"Host"
+#define AWS_HTTP_HEADER_USER_AGENT			"User-Agent"
 #define AWS_HTTP_HEADER_X_AMZ_DATE			"X-Amz-Date"
 #define AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN		"X-Amz-Security-Token"
 
@@ -56,6 +57,11 @@
 void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
   unsigned long max_request_secs, const char *cacerts);
 int aws_http_destroy(pool *p, void *http);
+
+/* Return a table populated with the default request headers: Accept,
+ * User-Agent, etc.
+ */
+pr_table_t *aws_http_default_headers(pool *p);
 
 const char *aws_http_urldecode(pool *p, void *http, const char *item,
   size_t item_len, size_t *decoded_len);

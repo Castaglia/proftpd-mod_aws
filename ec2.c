@@ -127,13 +127,11 @@ static int ec2_get(pool *p, void *http, const char *path,
 
   host = pstrcat(p, aws_service, ".", ec2->region, ".", ec2->domain, NULL);
 
-  http_headers = pr_table_nalloc(p, 0, 2);
+  http_headers = aws_http_default_headers(p);
   (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_HOST), host, 0);
-  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_ACCEPT),
-    "*/*", 0);
 
-  iso_datesz = 16;
-  iso_date = pcalloc(p, iso_datesz + 1);
+  iso_datesz = 18;
+  iso_date = pcalloc(p, iso_datesz);
   (void) strftime(iso_date, iso_datesz, "%Y%m%dT%H%M%SZ", gmt_tm);
 
   (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_X_AMZ_DATE),
