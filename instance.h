@@ -79,9 +79,9 @@ struct aws_info {
   char *subnet_id;
   size_t subnet_idsz;
 
-  /* http://169.254.169.254/latest/meta-data/security-groups */
-  char *sg_names;
-  size_t sg_namessz;
+  /* http://169.254.169.254/latest/meta-data/security-group-ids */
+  char *sg_ids;
+  size_t sg_idssz;
   array_header *security_groups;
 
   /* http://169.254.169.254/latest/meta-data/local-ipv4 */

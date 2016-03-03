@@ -738,17 +738,17 @@ static size_t security_groups_cb(char *data, size_t item_sz, size_t item_count,
     return 0;
   }
 
-  if (info->sg_namessz == 0) {
-    info->sg_namessz = datasz;
-    ptr = info->sg_names = palloc(info->pool, info->sg_namessz);
+  if (info->sg_idssz == 0) {
+    info->sg_idssz = datasz;
+    ptr = info->sg_ids = palloc(info->pool, info->sg_idssz);
 
   } else {
-    ptr = info->sg_names;
-    info->sg_names = palloc(info->pool, info->sg_namessz + datasz);
-    memcpy(info->sg_names, ptr, info->sg_namessz);
+    ptr = info->sg_ids;
+    info->sg_ids = palloc(info->pool, info->sg_idssz + datasz);
+    memcpy(info->sg_ids, ptr, info->sg_idssz);
 
-    ptr = info->sg_names + info->sg_namessz;
-    info->sg_namessz += datasz;
+    ptr = info->sg_ids + info->sg_idssz;
+    info->sg_idssz += datasz;
   }
 
   memcpy(ptr, data, datasz);
@@ -759,36 +759,40 @@ static int get_security_groups(pool *p, void *http, struct aws_info *info) {
   int res;
   const char *url;
 
-  url = AWS_INSTANCE_METADATA_URL "/security-groups";
+  /* NOTE: In order to look up information about an SG, especially when
+   * in the non-default VPC, we MUST use the SG ID, not the SG name.  Thus
+   * why we look up the IDs here.
+   */
+  url = AWS_INSTANCE_METADATA_URL "/security-group-ids";
 
   res = get_metadata(p, http, url, security_groups_cb, info);
   if (res == 0) {
     info->security_groups = make_array(info->pool, 0, sizeof(char *));
 
-    if (info->sg_namessz > 0) {
-      char *sg_names, *ptr;
+    if (info->sg_idssz > 0) {
+      char *sg_ids, *ptr;
 
       /* Since strchr(3) wants NUL-terminated strings, we need to make one. */
-      sg_names = pstrndup(info->pool, info->sg_names, info->sg_namessz);
+      sg_ids = pstrndup(info->pool, info->sg_ids, info->sg_idssz);
 
-      /* The list of security groups is LF-delimited; if there is only
+      /* The list of security group IDs is LF-delimited; if there is only
        * one security group, then there is no LF.
        */
-      ptr = strchr(sg_names, '\n');
+      ptr = strchr(sg_ids, '\n');
       if (ptr == NULL) {
         /* Just one SG. */
-        *((char **) push_array(info->security_groups)) = sg_names;
+        *((char **) push_array(info->security_groups)) = sg_ids;
 
       } else {
         char *ptr2;
 
-        ptr = sg_names;
+        ptr = sg_ids;
         ptr2 = strchr(ptr, '\n');
         while (ptr2 != NULL) {
-          char *sg_name;
+          char *sg_id;
 
-          sg_name = pstrndup(info->pool, ptr, ptr2 - ptr);
-          *((char **) push_array(info->security_groups)) = sg_name;
+          sg_id = pstrndup(info->pool, ptr, ptr2 - ptr);
+          *((char **) push_array(info->security_groups)) = sg_id;
 
           ptr = ptr2 + 1;
           ptr2 = strchr(ptr, '\n');
@@ -802,8 +806,8 @@ static int get_security_groups(pool *p, void *http, struct aws_info *info) {
   } else if (res < 0 &&
              errno == ENOENT) {
     /* Clear the response data for 404 responses. */
-    info->sg_namessz = 0;
-    info->sg_names = NULL;
+    info->sg_idssz = 0;
+    info->sg_ids = NULL;
   }
 
   return res;
