@@ -95,6 +95,6 @@ int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2);
  * are the corresponding security group info.
  */
 pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
-  array_header *security_groups);
+  const char *vpc_id, array_header *security_groups);
 
 #endif /* MOD_AWS_EC2_H */

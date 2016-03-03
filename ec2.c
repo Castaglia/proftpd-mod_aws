@@ -298,7 +298,7 @@ static size_t ec2_resp_cb(char *data, size_t item_sz, size_t item_count,
 }
 
 static struct ec2_security_group *get_security_group(pool *p,
-    struct ec2_conn *ec2, const char *group_name) {
+    struct ec2_conn *ec2, const char *vpc_id, const char *group_name) {
   int res;
   const char *path;
   pool *req_pool;
@@ -326,6 +326,14 @@ static struct ec2_security_group *get_security_group(pool *p,
     "Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
     NULL);
 
+  if (vpc_id != NULL) {
+    *((char **) push_array(query_params)) = pstrdup(req_pool,
+      "Filter.1.Name=vpc-id");
+    *((char **) push_array(query_params)) = pstrcat(req_pool,
+      "Filter.1.Value=", aws_http_urlencode(req_pool, ec2->http, vpc_id, 0),
+      NULL);
+  }
+
   res = ec2_get(p, ec2->http, path, query_params, ec2_resp_cb, ec2);
   if (res == 0) {
 /* XXX Parse response data */
@@ -338,11 +346,14 @@ static struct ec2_security_group *get_security_group(pool *p,
 }
 
 pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
-    array_header *security_groups) {
+    const char *vpc_id, array_header *security_groups) {
   register unsigned int i;
   char **elts;
   pr_table_t *info;
 
+  /* Note: the VPC ID can be null, for it may not be applicable for this
+   * instance.
+   */
   if (p == NULL ||
       ec2 == NULL ||
       security_groups == NULL) {
@@ -358,7 +369,7 @@ pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
     struct ec2_security_group *sg;
 
     group_name = elts[i];
-    sg = get_security_group(p, ec2, group_name);
+    sg = get_security_group(p, ec2, vpc_id, group_name);
     if (sg != NULL) {
       if (pr_table_add(info, pstrdup(p, group_name), sg, sizeof(void *)) < 0) {
         (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
