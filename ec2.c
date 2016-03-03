@@ -199,6 +199,11 @@ static int ec2_get(pool *p, void *http, const char *path,
             "unable to parse XML error response: %s", strerror(errno));
 
         } else {
+          if (err->err_code == AWS_ERROR_CODE_UNKNOWN) {
+            pr_trace_msg(trace_channel, 9,
+              "received error response: '%.*s'", (int) ec2->respsz, ec2->resp);
+          }
+
           (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
             "received error: code = %s (%u), msg = %s, req_id = %s",
             aws_error_get_name(err->err_code), err->err_code, err->err_msg,

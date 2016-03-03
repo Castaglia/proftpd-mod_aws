@@ -33,7 +33,16 @@ struct err_info {
   unsigned int err_code;
 };
 
+/* XXX How can/should we keep the error strings for the different AWS services
+ * separate?  For example, both EC2 and something else might use
+ * "InvalidGroup.NotFound".  The _caller_ knows which service they contacted
+ * to receive the error, but that information is not currently provided to
+ * this Error API for looking up the corresponding code.
+ */
+
 static struct err_info errs[] = {
+
+  /* General client errors */
 
   { "AuthFailure", 12,
     AWS_ERROR_CODE_AUTH_FAILURE },
@@ -49,6 +58,13 @@ static struct err_info errs[] = {
 
   { "MissingParameter", 17,
     AWS_ERROR_CODE_MISSING_PARAMETER },
+
+  /* General server errors */
+
+  /* EC2 error codes */
+
+  { "InvalidGroup.NotFound", 22,
+    AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND },
 
   /* Sentinel */
   { NULL, 0, 0 }
