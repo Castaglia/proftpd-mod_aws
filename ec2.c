@@ -315,18 +315,25 @@ static struct ec2_security_group *get_security_group(pool *p,
 
   *((char **) push_array(query_params)) = pstrdup(req_pool,
     "Action=DescribeSecurityGroups");
+
+  /* Although the AWS EC2 docs SAY you can use the GroupId filter, the
+   * docs lie.  You'll get an UnknownParameter error using GroupId.
+   */
+  *((char **) push_array(query_params)) = pstrdup(req_pool,
+    "Filter.1.Name=group-id");
   *((char **) push_array(query_params)) = pstrcat(req_pool,
-    "GroupId.1=", aws_http_urlencode(req_pool, ec2->http, sg_id, 0),
+    "Filter.1.Value=", aws_http_urlencode(req_pool, ec2->http, sg_id, 0),
     NULL);
+
   *((char **) push_array(query_params)) = pstrcat(req_pool,
     "Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
     NULL);
 
   if (vpc_id != NULL) {
     *((char **) push_array(query_params)) = pstrdup(req_pool,
-      "Filter.1.Name=vpc-id");
+      "Filter.2.Name=vpc-id");
     *((char **) push_array(query_params)) = pstrcat(req_pool,
-      "Filter.1.Value=", aws_http_urlencode(req_pool, ec2->http, vpc_id, 0),
+      "Filter.2.Value=", aws_http_urlencode(req_pool, ec2->http, vpc_id, 0),
       NULL);
   }
 
