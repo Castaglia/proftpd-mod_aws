@@ -298,7 +298,7 @@ static size_t ec2_resp_cb(char *data, size_t item_sz, size_t item_count,
 }
 
 static struct ec2_security_group *get_security_group(pool *p,
-    struct ec2_conn *ec2, const char *vpc_id, const char *group_name) {
+    struct ec2_conn *ec2, const char *vpc_id, const char *sg_id) {
   int res;
   const char *path;
   pool *req_pool;
@@ -311,16 +311,12 @@ static struct ec2_security_group *get_security_group(pool *p,
 
   path = "/";
 
-  /* Note: do any of these query parameters need to be URL-encoded?  Per the
-   * AWS docs, the answer is "yes".
-   */
-
   query_params = make_array(req_pool, 1, sizeof(char *));
 
   *((char **) push_array(query_params)) = pstrdup(req_pool,
     "Action=DescribeSecurityGroups");
   *((char **) push_array(query_params)) = pstrcat(req_pool,
-    "GroupName.1=", aws_http_urlencode(req_pool, ec2->http, group_name, 0),
+    "GroupId.1=", aws_http_urlencode(req_pool, ec2->http, sg_id, 0),
     NULL);
   *((char **) push_array(query_params)) = pstrcat(req_pool,
     "Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
@@ -365,15 +361,15 @@ pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
 
   elts = security_groups->elts;
   for (i = 0; i < security_groups->nelts; i++) {
-    char *group_name;
+    char *sg_id;
     struct ec2_security_group *sg;
 
-    group_name = elts[i];
-    sg = get_security_group(p, ec2, vpc_id, group_name);
+    sg_id = elts[i];
+    sg = get_security_group(p, ec2, vpc_id, sg_id);
     if (sg != NULL) {
-      if (pr_table_add(info, pstrdup(p, group_name), sg, sizeof(void *)) < 0) {
+      if (pr_table_add(info, pstrdup(p, sg_id), sg, sizeof(void *)) < 0) {
         (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-          "error adding security group '%s' to result: %s", group_name,
+          "error adding security group '%s' to result: %s", sg_id,
           strerror(errno));
       }
     }
