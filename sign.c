@@ -33,6 +33,12 @@
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 
+/* Space for 18 characters (YYYYMMDDThhmmssZ) plus the trailing NUL. */
+#define AWS_SIGN_ISO8601_BUFSZ		18
+
+/* Space for 8 digits (YYYYMMDD) plus the trailing NUL. */
+#define AWS_SIGN_YYYYMMDD_BUFSZ		9
+
 static const char *sign_v4_algo = "AWS4-HMAC-SHA256";
 
 static const char *trace_channel = "aws.sign";
@@ -351,12 +357,12 @@ static const char *create_string_to_sign(pool *p, time_t request_time,
     return NULL;
   }
 
-  iso_datesz = 18;
-  iso_date = pcalloc(p, iso_datesz + 1);
+  iso_datesz = AWS_SIGN_ISO8601_BUFSZ;
+  iso_date = pcalloc(p, iso_datesz);
   (void) strftime(iso_date, iso_datesz, "%Y%m%dT%H%M%SZ", gmt_tm);
 
-  utc_datesz = 10;
-  utc_date = pcalloc(p, utc_datesz + 1);
+  utc_datesz = AWS_SIGN_YYYYMMDD_BUFSZ;
+  utc_date = pcalloc(p, utc_datesz);
   (void) strftime(utc_date, utc_datesz, "%Y%m%d", gmt_tm);
 
   *credential_scope = pstrcat(p, utc_date, "/", region, "/", service,
@@ -396,8 +402,8 @@ static const char *calculate_signature(pool *p, time_t request_time,
     return NULL;
   }
 
-  utc_datesz = 10;
-  utc_date = pcalloc(p, utc_datesz + 1);
+  utc_datesz = AWS_SIGN_YYYYMMDD_BUFSZ;
+  utc_date = pcalloc(p, utc_datesz);
   (void) strftime(utc_date, utc_datesz, "%Y%m%d", gmt_tm);
 
   secret_key = (unsigned char *) pstrcat(p, "AWS4", secret_access_key, NULL);
