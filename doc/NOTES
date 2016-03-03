@@ -1,12 +1,23 @@
 
 NEXT:
-  use <uuid/uuid.h> for request IDs; see uuid_generate(3), uuid_unparse_lower(3)
-  man pages.  Add autoconf detection (what to do if not present)?
-
-  use aws4c as template for signature-v4.c (and libaws, if needed)
+  Make XML parser tolerant of DIFFERENT node ordering.  Ugh.
 
   First request: DescribeSecurityGroups
     http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeSecurityGroups.html
+
+   struct security_group_info {
+     pool *pool;
+
+     const char *name;
+     const char *id;
+   };
+
+  Check inbound ports AND outbound ports!
+
+  HTTP "/ping" health check listener.
+
+  Retries
+    RequestLimitExceeded (parse N seconds out of error message?)
 
 Reading material:
 
@@ -109,15 +120,39 @@ Reading material:
     Logins succeed, but transfers fail
       MasqueradeAddress, PassivePorts, SGs, NACLs
 
+  * MasqueradeAddress for ELB setup for DNS RoundRobin (use ELB DNS as
+    masq addr or not, and why)
+
+  * Limit on number of listeners on ELB?  Limit on number of rules in SG?
+    (Think standard/default PassivePorts range, and one SG rule/ELB listener
+    per port.)
+
+    http://docs.aws.amazon.com/ElasticLoadBalancing/latest/DeveloperGuide/elb-listener-config.html
+
+    Interestingly, if you are using a VPC, then your ELB can have listeners
+    on any ports (necessary for FTP).  If you are using Classic, then you
+    CANNOT use an ELB for FTP, at least if you NEED FTP to listen on port 21
+    on the ELB.  If you map the port to e.g. 2121, then you can.
+
+    PROXY protocol, mod_proxy_protocol
+
+  * ELB idle connection timeouts!
+
+    http://docs.aws.amazon.com/ElasticLoadBalancing/latest/DeveloperGuide/config-idle-timeout.html
+
+    Point out the KeepAlive doc, setting connection timeouts high!  Can
+    idle timeouts be disabled?  Or configured incredibly long (24 hours?)
+
+  * SGs (Class vs VPC)
+
+    http://docs.aws.amazon.com/cli/latest/userguide/cli-ec2-sg.html#configuring-a-security-group
+
+    $ aws ec2 authorize-security-group-ingress --group-id SG --protocol tcp --port PASV_MIN_PORT-PASV_MAX_PORT --cidr 0.0.0.0
+
   Importance of running `ntpd`, gotchas
 
 
 Source layout/APIs:
-
-  http.c
-    signatures
-
-    Make sure to cache/reuse SSL session data!
 
   instance.c
     Retrieve the instance metadata, store it in session.notes.  Environment
@@ -132,20 +167,26 @@ Source layout/APIs:
     Auto-registration, deregistration
 
   s3.c
+    FUTURE
 
   ebs.c (for auto-mounting volumes?)
+    FUTURE
 
   sqs.c
     Queue-based notifications
+    FUTURE
 
   sns.c
     Push notifications!
+    FUTURE
 
   ses.c
     Email notifications!
+    FUTURE
 
   cloudwatch.c
     Publish custom metrics?
+    FUTURE
 
   health.c
     Basic HTTP server, just to handle HTTP request to "/ping"/"/healthy"
@@ -161,6 +202,8 @@ Source layout/APIs:
     "Cache-Control: private, no-cache, no-store\r\n"
     "Date: ...\r\n"
     "Expires: ...\r\n"
+    "Last-Modified: ...\r\n"
+    "\r\n"
 
   http.c
   health.c
@@ -168,6 +211,9 @@ Source layout/APIs:
     instance.c
     ec2.c
     ...
+
+  Prepares the code more for a CAWS (CLAWS) library packaging.
+
 
 Existing libraries/SDKs:
 
@@ -185,6 +231,11 @@ Eventually extract my own C code into a libclaws library ("C Library for AWS"),
 not be confused with Claws Mail:
 
   http://www.claws-mail.org/
+
+Or maybe libcaws (C-AWS)?
+
+  http://png.clipart.me/graphics/thumbs/487/raven_48796600.jpg
+  http://media.pixcove.com/O/0/2/Crow-Caw-Raven-Bird-Free-Vector-Graphics-Free-Imag-7512.jpg
 
 On startup, make HTTP calls to AWS instance metadata.  NOTE: some of these
 resources return JSON, some do NOT.
