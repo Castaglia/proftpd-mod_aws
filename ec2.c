@@ -292,12 +292,13 @@ static size_t ec2_resp_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
-    array_header *security_groups) {
+static struct ec2_security_group *get_security_group(pool *p,
+    struct ec2_conn *ec2, const char *group_name) {
   int res;
   const char *path;
   pool *req_pool;
   array_header *query_params;
+  struct ec2_security_group *sg = NULL;
 
   req_pool = make_sub_pool(ec2->pool);
   pr_pool_tag(req_pool, "EC2 Request Pool");
@@ -314,9 +315,11 @@ int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
   *((char **) push_array(query_params)) = pstrdup(req_pool,
     "Action=DescribeSecurityGroups");
   *((char **) push_array(query_params)) = pstrcat(req_pool,
+    "GroupName.1=", aws_http_urlencode(req_pool, ec2->http, group_name, 0),
+    NULL);
+  *((char **) push_array(query_params)) = pstrcat(req_pool,
     "Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
     NULL);
-  *((char **) push_array(query_params)) = pstrdup(req_pool, "DryRun=");
 
   res = ec2_get(p, ec2->http, path, query_params, ec2_resp_cb, ec2);
   if (res == 0) {
@@ -326,7 +329,39 @@ int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
   }
 
   clear_response(ec2);
+  return sg;
+}
 
-  errno = EINVAL;
-  return -1;
+pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
+    array_header *security_groups) {
+  register unsigned int i;
+  char **elts;
+  pr_table_t *info;
+
+  if (p == NULL ||
+      ec2 == NULL ||
+      security_groups == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  info = pr_table_nalloc(p, 0, security_groups->nelts);
+
+  elts = security_groups->elts;
+  for (i = 0; i < security_groups->nelts; i++) {
+    char *group_name;
+    struct ec2_security_group *sg;
+
+    group_name = elts[i];
+    sg = get_security_group(p, ec2, group_name);
+    if (sg != NULL) {
+      if (pr_table_add(info, pstrdup(p, group_name), sg, sizeof(void *)) < 0) {
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "error adding security group '%s' to result: %s", group_name,
+          strerror(errno));
+      }
+    }
+  }
+
+  return info;
 }

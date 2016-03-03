@@ -28,6 +28,7 @@
 #ifndef MOD_AWS_EC2_H
 #define MOD_AWS_EC2_H
 
+/* EC2 Connections */
 struct ec2_conn {
   pool *pool;
 
@@ -46,12 +47,54 @@ struct ec2_conn {
   size_t respsz;
 };
 
+/* EC2 Security Groups */
+
+/* Maps to the EC2 IpRange data type. */
+struct ec2_ip_range {
+  const char *cidr;
+
+  /* XXX Note: maybe add a netacl-type mask here? */
+};
+
+/* Maps to the EC2 IpPermission data type. */
+struct ec2_ip_perm {
+  /* Note that this could be: 'tcp', 'udp', 'icmp', OR it could be
+   * a number, indicating one of the other IANA-registered protocols; see:
+   *
+   *  http://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
+   */
+  const char *proto;
+
+  int from_port;
+  int to_port;
+
+  array_header *inbound_ranges;
+  array_header *outbound_ranges;
+};
+
+/* Maps to the EC2 SecurityGroup data type. */
+struct ec2_security_group {
+  pool *pool;
+
+  const char *id;
+  const char *name;
+  const char *desc;
+  const char *owner_id;
+  const char *vpc_id;
+  array_header *inbound_perms;
+  array_header *outbound_perms;
+  array_header *tags;
+};
+
 struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
   unsigned long max_request_secs, const char *cacerts, const char *region,
   const char *domain, const char *api_version, const char *iam_role);
 int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2);
 
-int aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
+/* Returns a table whose keys are the security group names, and the values
+ * are the corresponding security group info.
+ */
+pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
   array_header *security_groups);
 
 #endif /* MOD_AWS_EC2_H */
