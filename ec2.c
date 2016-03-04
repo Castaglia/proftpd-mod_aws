@@ -297,7 +297,7 @@ static size_t ec2_resp_cb(char *data, size_t item_sz, size_t item_count,
 
 static array_header *parse_sg_ranges(pool *p, void *parent) {
   pool *tmp_pool;
-  void *kid;
+  void *item;
   unsigned long count;
   array_header *ranges = NULL;
 
@@ -309,31 +309,29 @@ static array_header *parse_sg_ranges(pool *p, void *parent) {
   }
 
   tmp_pool = make_sub_pool(p);
-  kid = aws_xml_elt_get_child(p, parent, NULL, 0);
-  while (kid != NULL) {
-    void *elt, *item;
+  item = aws_xml_elt_get_child(p, parent, "item", 4);
+  while (item != NULL) {
+    void *elt;
 
     pr_signals_handle();
-
-    item = aws_xml_elt_get_child(p, kid, "item", 4);
-    if (item == NULL) {
-      kid = aws_xml_elt_get_child(p, kid, NULL, 0);
-      continue;
-    }
 
     elt = aws_xml_elt_get_child(p, item, "cidrIp", 6);
     if (elt != NULL) {
       char *elt_text;
       pr_netacl_t *range;
 
-      elt_text = (char *) aws_xml_elt_get_text(tmp_pool, kid);
+      elt_text = (char *) aws_xml_elt_get_text(tmp_pool, elt);
       range = pr_netacl_create(p, elt_text);
       if (range != NULL) {
         *((pr_netacl_t **) push_array(ranges)) = range;
+
+      } else {
+        pr_trace_msg(trace_channel, 8,
+          "error parsing '%s' as netacl: %s", elt_text, strerror(errno));
       }
     }
 
-    kid = aws_xml_elt_get_child(p, kid, NULL, 0);
+    item = aws_xml_elt_get_next(p, item);
   }
 
   destroy_pool(tmp_pool);
@@ -421,7 +419,7 @@ static array_header *parse_sg_rules(pool *p, void *parent, const char *name,
   (void) aws_xml_elt_get_child_count(p, elt, &count);
   ip_rules = make_array(p, count, sizeof(struct ec2_ip_rule));
 
-  kid = aws_xml_elt_get_child(p, elt, NULL, 0);
+  kid = aws_xml_elt_get_child(p, elt, "item", 4);
   while (kid != NULL) {
     struct ec2_ip_rule *rule;
 
@@ -432,7 +430,7 @@ static array_header *parse_sg_rules(pool *p, void *parent, const char *name,
       *((struct ec2_ip_rule **) push_array(ip_rules)) = rule;
     }
 
-    kid = aws_xml_elt_get_child(p, kid, NULL, 0);
+    kid = aws_xml_elt_get_next(p, kid);
   }
 
   return ip_rules;
