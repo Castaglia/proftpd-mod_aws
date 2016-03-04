@@ -1,23 +1,70 @@
 
 NEXT:
-  Make XML parser tolerant of DIFFERENT node ordering.  Ugh.
+  per-vhost:
+    IFF have public-ipv4, set/recommend MasqueradeAddress as that
 
-  First request: DescribeSecurityGroups
-    http://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeSecurityGroups.html
+    Check inbound ports against control port
 
-   struct security_group_info {
-     pool *pool;
+    IFF SFTPEngine on
+      next
 
-     const char *name;
-     const char *id;
-   };
+    IFF no PassivePorts, SET the default range
 
-  Check inbound ports AND outbound ports!
+    Check inbound ports against PassivePorts (for PASV/EPSV transfers)
 
-  HTTP "/ping" health check listener.
+      $ aws ec2 authorize-security-group-ingress --group-id SG --protocol tcp --port PASV_MIN_PORT-PASV_MAX_PORT --cidr 0.0.0.0/0
+
+    Check outbound ports (for PORT/EPRT transfers)
+
+      $ aws ec2 authorize-security-group-egress --group-id SG --protocol tcp --port 1024-max --cidr <same CIDR as INGRESS rule!>
+
+    This would prevent "FTP bounce" attacks by blocking egress to any address
+    other than what's allowed for _incoming_ addresses.
 
   Retries
     RequestLimitExceeded (parse N seconds out of error message?)
+
+  Route53
+    Need to know the hosted zone, and resource record, on which to act.
+    Difference between public and private zones?
+
+    + GET ListHostedZones
+      needed to find the zone ID for a given zone name (and whether it's
+       public/private)
+      NOTE that given name might be e.g. "example.com", but in the
+      <HostedZone>'s <Name> element, the text would be "example.com."; note
+      the trailing period.  Watch out for this!
+
+    + GET GetHostedZone (zone)
+
+    + GET ListResourceRecordSets
+      name=DNS name
+      type=A
+
+    ...
+
+     + GetHealthCheck
+     + CreateHealthCheck
+     + DeleteHealthCheck
+
+  SQS
+    AWSLogQueue name [region]
+      + use GetQueueUrl to get queue URL from SQS using the given name
+      + use GetQueueAttributes to describe the queue.  In particular:
+        CreatedTimestamp (log)
+        MaximumMessageSize
+        MessageRetentionPeriod
+        QueueArn (log)
+        DelaySeconds
+
+    AWSLogFlush count time
+      How often to call SendMessageBatch.  Note that SendMessageBatch
+      has a max of 10 messages; if count is more than 10, then we'd do
+      multiple SendMessageBatch calls.  Max payload size is 256KB.
+
+
+  Route53
+    HTTP "/ping" health check listener.
 
 Reading material:
 
