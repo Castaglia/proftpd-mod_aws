@@ -311,11 +311,17 @@ static array_header *parse_sg_ranges(pool *p, void *parent) {
   tmp_pool = make_sub_pool(p);
   kid = aws_xml_elt_get_child(p, parent, NULL, 0);
   while (kid != NULL) {
-    void *elt;
+    void *elt, *item;
 
     pr_signals_handle();
 
-    elt = aws_xml_elt_get_child(p, kid, "cidrIp", 6);
+    item = aws_xml_elt_get_child(p, kid, "item", 4);
+    if (item == NULL) {
+      kid = aws_xml_elt_get_child(p, kid, NULL, 0);
+      continue;
+    }
+
+    elt = aws_xml_elt_get_child(p, item, "cidrIp", 6);
     if (elt != NULL) {
       char *elt_text;
       pr_netacl_t *range;
