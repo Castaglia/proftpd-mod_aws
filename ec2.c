@@ -27,6 +27,7 @@
 #include "instance.h"
 #include "error.h"
 #include "sign.h"
+#include "xml.h"
 #include "ec2.h"
 
 /* The AWS service name */
@@ -294,6 +295,128 @@ static size_t ec2_resp_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
+static struct ec2_security_group *parse_sg_xml(pool *p, const char *data,
+    size_t datasz) {
+  void *doc, *root, *req_id, *info, *item, *elt;
+  pool *sg_pool;
+  struct ec2_security_group *sg;
+  unsigned long count;
+  const char *elt_name;
+  size_t elt_namelen;
+
+  doc = aws_xml_doc_parse(p, data, (int) datasz);
+  if (doc == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  root = aws_xml_doc_get_root_elt(p, doc);
+  if (root == NULL) {
+    /* Malformed XML. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  elt_name = aws_xml_elt_get_name(p, root, &elt_namelen);
+  if (elt_namelen != 30 ||
+      strncmp(elt_name, "DescribeSecurityGroupsResponse",
+        elt_namelen + 1) != 0) {
+
+    /* Not the root element we expected. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  req_id = aws_xml_elt_get_child(p, root, "requestId", 9);
+  if (req_id == NULL) {
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  sg_pool = make_sub_pool(p);
+  pr_pool_tag(sg_pool, "AWS Security Group Pool");
+  sg = pcalloc(sg_pool, sizeof(struct ec2_security_group));
+  sg->pool = sg_pool;
+
+  sg->req_id = aws_xml_elt_get_text(sg->pool, req_id);
+
+  info = aws_xml_elt_get_child(p, root, "securityGroupInfo", 17);
+  if (info == NULL) {
+    destroy_pool(sg_pool);
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  /* Since we only requested ONE security group by ID, we expect only ONE
+   * child in this element.
+   */
+
+  (void) aws_xml_elt_get_child_count(p, info, &count);
+  if (count != 1) {
+    pr_trace_msg(trace_channel, 5,
+      "expected 1 error element, found %lu", count);
+  }
+
+  item = aws_xml_elt_get_child(p, info, "item", 4);
+  if (item == NULL) {
+    destroy_pool(sg_pool);
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  /* ownerId */
+  elt = aws_xml_elt_get_child(p, item, "ownerId", 7);
+  if (elt == NULL) {
+    destroy_pool(sg_pool);
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  sg->owner_id = aws_xml_elt_get_text(sg->pool, elt);
+
+  /* groupName */
+  elt = aws_xml_elt_get_child(p, item, "groupName", 9);
+  if (elt == NULL) {
+    destroy_pool(sg_pool);
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  sg->name = aws_xml_elt_get_text(sg->pool, elt);
+
+  /* groupDescription */
+  elt = aws_xml_elt_get_child(p, item, "groupDescription", 16);
+  if (elt == NULL) {
+    destroy_pool(sg_pool);
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  sg->desc = aws_xml_elt_get_text(sg->pool, elt);
+
+
+  aws_xml_doc_free(p, doc);
+
+  errno = ENOSYS;
+  return NULL;
+}
+
 static struct ec2_security_group *get_security_group(pool *p,
     struct ec2_conn *ec2, const char *vpc_id, const char *sg_id) {
   int res;
@@ -336,12 +459,32 @@ static struct ec2_security_group *get_security_group(pool *p,
 
   res = ec2_get(p, ec2->http, path, query_params, ec2_resp_cb, ec2);
   if (res == 0) {
-/* XXX Parse response data */
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+    pr_trace_msg(trace_channel, 19,
       "security groups response: '%.*s'", (int) ec2->respsz, ec2->resp);
+    sg = parse_sg_xml(p, ec2->resp, ec2->respsz);
+    if (sg == NULL) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "error parsing security group XML response: %s", strerror(errno));
+    }
   }
 
   clear_response(ec2);
+
+  if (sg != NULL) {
+    if (sg->id == NULL) {
+      sg->id = pstrdup(sg->pool, sg_id);
+    }
+
+    if (sg->vpc_id == NULL) {
+      sg->vpc_id = pstrdup(sg->pool, vpc_id);
+    }
+
+    pr_trace_msg(trace_channel, 15,
+      "received security group: id = %s, name = %s, desc = %s, owner_id = %s, "
+      "vpc_id = %s, req_id = %s", sg->id, sg->name, sg->desc, sg->owner_id,
+      sg->vpc_id, sg->req_id);
+  }
+
   return sg;
 }
 

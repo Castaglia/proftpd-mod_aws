@@ -75,6 +75,8 @@ struct ec2_security_group {
   const char *desc;
   const char *owner_id;
   const char *vpc_id;
+  const char *req_id;
+
   array_header *inbound_perms;
   array_header *outbound_perms;
 };
