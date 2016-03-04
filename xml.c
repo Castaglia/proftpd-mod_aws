@@ -89,7 +89,8 @@ void *aws_xml_elt_get_child(pool *p, void *ptr, const char *name,
     return NULL;
   }
 
-  if (name_len == 0) {
+  if (name != NULL &&
+      name_len == 0) {
     name_len = strlen(name);
   }
 
