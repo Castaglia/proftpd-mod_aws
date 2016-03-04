@@ -31,6 +31,7 @@ int aws_xml_elt_get_child_count(pool *p, void *elt, unsigned long *count);
 void *aws_xml_elt_get_child(pool *p, void *elt, const char *name,
   size_t name_len);
 const char *aws_xml_elt_get_name(pool *p, void *elt, size_t *name_len);
+void *aws_xml_elt_get_next(pool *p, void *elt);
 const char *aws_xml_elt_get_text(pool *p, void *elt);
 
 void *aws_xml_doc_parse(pool *p, const char *data, size_t datasz);

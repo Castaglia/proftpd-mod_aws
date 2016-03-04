@@ -119,6 +119,20 @@ void *aws_xml_elt_get_child(pool *p, void *ptr, const char *name,
   return NULL;
 }
 
+void *aws_xml_elt_get_next(pool *p, void *ptr) {
+  xmlNodePtr elt;
+
+  (void) p;
+
+  if (ptr == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  elt = ptr;
+  return elt->next;
+}
+
 const char *aws_xml_elt_get_name(pool *p, void *ptr, size_t *name_len) {
   xmlNodePtr elt;
   const char *name;
