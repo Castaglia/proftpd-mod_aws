@@ -111,4 +111,7 @@ unsigned int aws_error_get_code(pool *p, const char *err_name);
 /* Return the error name for a given error code. */
 const char *aws_error_get_name(unsigned int err_code);
 
+/* Parse an error response XML document into an error object. */
+struct aws_error *aws_error_parse_xml(pool *p, const char *data, size_t datasz);
+
 #endif /* MOD_AWS_ERROR_H */

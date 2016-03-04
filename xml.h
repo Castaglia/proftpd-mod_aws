@@ -23,7 +23,6 @@
  */
 
 #include "mod_aws.h"
-#include "error.h"
 
 #ifndef MOD_AWS_XML_H
 #define MOD_AWS_XML_H
@@ -37,9 +36,6 @@ const char *aws_xml_elt_get_text(pool *p, void *elt);
 void *aws_xml_doc_parse(pool *p, const char *data, size_t datasz);
 void aws_xml_doc_free(pool *p, void *xml);
 void *aws_xml_doc_get_root_elt(pool *p, void *xml);
-
-/* XXX Ideally this would be in the Error API, as aws_error_parse_xml() */
-struct aws_error *aws_xml_parse_error(pool *p, const char *data, size_t datasz);
 
 /* API lifetime functions, for mod_aws use only. */
 int aws_xml_init(pool *p);

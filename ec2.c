@@ -25,7 +25,6 @@
 #include "mod_aws.h"
 #include "http.h"
 #include "instance.h"
-#include "xml.h"
 #include "error.h"
 #include "sign.h"
 #include "ec2.h"
@@ -191,7 +190,7 @@ static int ec2_get(pool *p, void *http, const char *path,
           strstr(content_type, AWS_HTTP_CONTENT_TYPE_XML) != NULL) {
         struct aws_error *err;
 
-        err = aws_xml_parse_error(p, ec2->resp, ec2->respsz);
+        err = aws_error_parse_xml(p, ec2->resp, ec2->respsz);
         if (err == NULL) {
           pr_trace_msg(trace_channel, 3,
             "unable to parse XML error response: %s", strerror(errno));
