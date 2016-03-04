@@ -432,8 +432,20 @@ static void aws_shutdown_ev(const void *event_data, void *user_data) {
   }
 }
 
+static pr_netaddr_t *get_addr(pool *p, const char *data, size_t datasz) {
+  char *name
+  pr_netaddr_t *addr;
+
+  name = pstrndup(p, data, datasz);
+  addr = pr_netaddr_get_addr(p, name, NULL);
+  return addr;
+}
+
 static void aws_startup_ev(const void *event_data, void *user_data) {
+  server_rec *s = NULL;
   struct aws_info *aws_info;
+  struct ec2_conn *ec2 = NULL;
+  pr_table_t *security_groups = NULL;
 
   if (aws_engine == FALSE) {
     return;
@@ -485,7 +497,6 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
     return;
   }
 
-#if 0
   if (aws_info->domain == NULL) {
     /* Assume that we are not running within AWS EC2. */
     pr_log_debug(DEBUG0, MOD_AWS_VERSION
@@ -502,33 +513,27 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 
     return;
   }
-#endif
 
   log_instance_info(aws_pool, aws_info);
 
-  if (aws_info->iam_role != NULL || TRUE) {
-    struct ec2_conn *ec2;
+  if (aws_info->iam_role != NULL) {
     const char *domain;
 
-#if 0
     domain = pstrndup(aws_pool, aws_info->domain, aws_info->domainsz);
-#endif
-    domain = "amazonaws.com";
-
-aws_info->region = "us-west-2";
-aws_info->api_version = "2010-08-31";
-aws_info->iam_role = "admin";
-
     ec2 = aws_ec2_conn_alloc(aws_pool, aws_connect_timeout_secs,
       aws_request_timeout_secs, aws_cacerts, aws_info->region, domain,
       aws_info->api_version, aws_info->iam_role);
 
-    if (aws_info->security_groups != NULL || TRUE) {
-      (void) aws_ec2_get_security_groups(aws_pool, ec2,
+    if (aws_info->security_groups != NULL) {
+      const char *vpc_id = NULL;
+
+      if (aws_info->vpc_id != NULL) {
+        vpc_id = pstrndup(aws_pool, aws_info->vpc_id, aws_info->vpc_idsz);
+      }
+
+      security_groups = aws_ec2_get_security_groups(aws_pool, ec2, vpc_id,
         aws_info->security_groups);
     }
-
-    aws_ec2_conn_destroy(aws_pool, ec2);
 
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -537,13 +542,56 @@ aws_info->iam_role = "admin";
       "recommended commands will thus be logged");
   }
 
-  /* XXX Scan server list, and check SG settings (if allowed by IAM).
+  /* XXX Scan server list, and check SG settings.
    *
    * Make sure to see if MasqueradeAddress is set (if not, suggest/set it),
    * if PassivePorts are set (if not, suggest/set them AND check SGs).
    */
 
-  /* XXX Register with ELB, or Route53 */
+  for (s = (server_rec *) server_list->xas_list; s; s = s->next) {
+    config_rec *c;
+
+    /* XXX Should we use public_hostname here instead? */
+    if (aws_info->public_ipv4 != NULL) {
+      pr_netaddr_t *public_addr;
+
+      public_addr = get_addr(s->pool, aws_info->public_ipv4,
+        aws_info->public_ipv4sz);
+
+      c = find_config(s->conf, "MasqueradeAddress", FALSE);
+      if (c != NULL) {
+        pr_netaddr_t *masq_addr;
+        char *masq_name;
+
+        masq_addr = c->argv[0];
+        masq_name = c->argv[1];
+
+        if (pr_netaddr_cmp(masq_addr, public_addr) != 0) {
+          /* XXX Automatically correct/adjust this config? */
+          (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+            "existing 'MasqueradeAddress %s' for %s vhost is INCORRECT",
+            masq_name, s->ServerName);
+          (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+            "consider using 'MasqueradeAddress %s' instead for %s vhost for "
+            "passive data transfers", pr_netaddr_get_ipstr(public_addr),
+            s->ServerName);
+        }
+
+      } else {
+        /* XXX Automatically correct/add this config? */
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "consider adding 'MasqueradeAddress %s' to %s vhost for "
+          "passive data transfers", pr_netaddr_get_ipstr(public_addr),
+          s->ServerName);
+      }
+    }
+  }
+
+  /* XXX Register with Route53 */
+
+  if (ec2 != NULL) {
+    aws_ec2_conn_destroy(aws_pool, ec2);
+  }
 
   /* XXX Watch out for any fds that should NOT be opened (0, 1, 2), but
    * which may be help open by e.g. libcurl.  If necessary, force-close them.
