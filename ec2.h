@@ -49,13 +49,6 @@ struct ec2_conn {
 
 /* EC2 Security Groups */
 
-/* Maps to the EC2 IpRange data type. */
-struct ec2_ip_range {
-  const char *cidr;
-
-  /* XXX Note: maybe add a netacl-type mask here? */
-};
-
 /* Maps to the EC2 IpPermission data type. */
 struct ec2_ip_perm {
   /* Note that this could be: 'tcp', 'udp', 'icmp', OR it could be
@@ -68,8 +61,9 @@ struct ec2_ip_perm {
   int from_port;
   int to_port;
 
-  array_header *inbound_ranges;
-  array_header *outbound_ranges;
+  /* Arrays of pr_netacl_t ACLs. Maps to the EC2 IpRange data type. */
+  array_header *inbound_acls;
+  array_header *outbound_acls;
 };
 
 /* Maps to the EC2 SecurityGroup data type. */
@@ -83,7 +77,6 @@ struct ec2_security_group {
   const char *vpc_id;
   array_header *inbound_perms;
   array_header *outbound_perms;
-  array_header *tags;
 };
 
 struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
