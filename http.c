@@ -372,18 +372,12 @@ static int http_trace_cb(CURL *curl, curl_infotype data_type, char *data,
       break;
 
     case CURLINFO_SSL_DATA_IN:
-      pr_trace_msg(trace_channel, 19,
-        "[debug] SSL DATA IN: (%ld bytes)", datasz);
-      break;
-
     case CURLINFO_SSL_DATA_OUT:
-      pr_trace_msg(trace_channel, 19,
-        "[debug] SSL DATA OUT: (%ld bytes)", datasz);
       break;
 
     default:
       pr_trace_msg(trace_channel, 3,
-        "[debug] UNKNOWN DEBUG DATA: %d", (int) data_type);
+        "[debug] UNKNOWN DEBUG DATA: %d (%ld bytes)", (int) data_type, datasz);
       break;
   }
 
