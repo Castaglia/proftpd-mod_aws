@@ -636,17 +636,17 @@ static struct ec2_security_group *get_security_group(pool *p,
     for (i = 0; i < sg->inbound_rules->nelts; i++) {
       register unsigned int j;
       struct ec2_ip_rule *rule;
-      pr_netacl_t **ranges;
+      pr_netacl_t **acls;
 
       rule = rules[i];
       pr_trace_msg(trace_channel, 15,
-        "  inbound rule #%u: proto = %s, ports %d-%d, ranges:", i+1,
-        rule->proto, rule->from_port, rule->to_port);
+        "  inbound rule #%u: proto = %s, ports %d-%d, ranges (%d):", i+1,
+        rule->proto, rule->from_port, rule->to_port, rule->ranges->nelts);
 
-      ranges = rule->ranges->elts;
+      acls = rule->ranges->elts;
       for (j = 0; j < rule->ranges->nelts; j++) {
         pr_trace_msg(trace_channel, 15,
-          "    range: %s", pr_netacl_get_str(sg->pool, ranges[j]));
+          "    range: %s", pr_netacl_get_str(sg->pool, acls[j]));
       }
     }
 
@@ -654,17 +654,17 @@ static struct ec2_security_group *get_security_group(pool *p,
     for (i = 0; i < sg->outbound_rules->nelts; i++) {
       register unsigned int j;
       struct ec2_ip_rule *rule;
-      pr_netacl_t **ranges;
+      pr_netacl_t **acls;
 
       rule = rules[i];
       pr_trace_msg(trace_channel, 15,
-        "  outbound rule #%u: proto = %s, ports %d-%d, ranges:", i+1,
-        rule->proto, rule->from_port, rule->to_port);
+        "  outbound rule #%u: proto = %s, ports %d-%d, ranges (%d):", i+1,
+        rule->proto, rule->from_port, rule->to_port, rule->ranges->nelts);
 
-      ranges = rule->ranges->elts;
+      acls = rule->ranges->elts;
       for (j = 0; j < rule->ranges->nelts; j++) {
         pr_trace_msg(trace_channel, 15,
-          "    range: %s", pr_netacl_get_str(sg->pool, ranges[j]));
+          "    range: %s", pr_netacl_get_str(sg->pool, acls[j]));
       }
     }
   }
