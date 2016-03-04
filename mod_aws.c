@@ -59,7 +59,216 @@ static const char *aws_cacerts = PR_CONFIG_DIR "/aws-cacerts.pem";
 static unsigned long aws_connect_timeout_secs = 15;
 static unsigned long aws_request_timeout_secs = 30;
 
+/* The IANA registered ephemeral port range. */
+#define AWS_PASSIVE_PORT_MIN_DEFAULT		49152
+#define AWS_PASSIVE_PORT_MAX_DEFAULT		65534
+
 static const char *trace_channel = "aws";
+
+static pr_netaddr_t *get_addr(pool *p, const char *data, size_t datasz) {
+  char *name;
+  pr_netaddr_t *addr;
+
+  name = pstrndup(p, data, datasz);
+  addr = pr_netaddr_get_addr(p, name, NULL);
+  return addr;
+}
+
+static void verify_ctrl_port(pool *p, struct aws_info *info, server_rec *s,
+    pr_table_t *security_groups) {
+  void *key;
+  const char *sg_id;
+  int ctrl_port_allowed = FALSE;
+
+  if (s->ServerPort == 0) {
+    /* Skip disabled vhosts. */
+    return;
+  }
+
+  if (security_groups == NULL) {
+    /* No SGs to check. */
+    pr_trace_msg(trace_channel, 5,
+      "unable to verify whether Port %u for vhost '%s' allowed by security "
+      "groups: no security groups found", s->ServerPort, s->ServerName);
+    return;
+  }
+
+  pr_table_rewind(security_groups);
+  key = pr_table_next(security_groups);
+  while (key != NULL) {
+    struct ec2_security_group *sg;
+
+    pr_signals_handle();
+
+    if (ctrl_port_allowed) {
+      break;
+    }
+
+    sg = pr_table_get(security_groups, key, NULL);
+    if (sg != NULL) {
+      register unsigned int i;
+      struct ec2_ip_rule **rules;
+
+      sg_id = key;
+
+      rules = sg->inbound_rules->elts;
+      for (i = 0; i < sg->inbound_rules->nelts; i++) {
+        struct ec2_ip_rule *rule;
+
+        rule = rules[i];
+        if (rule->from_port >= s->ServerPort &&
+            rule->to_port <= s->ServerPort) {
+          /* This SG allows access for our control port.  Good. */
+
+          (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+            "vhost '%s' control port %u allowed by security group ID %s (%s)",
+            s->ServerName, s->ServerPort, sg_id, sg->name);
+          ctrl_port_allowed = TRUE;
+          break;
+        }
+      }
+    }
+
+    key = pr_table_next(security_groups);
+  }
+
+  if (ctrl_port_allowed == FALSE) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "vhost '%s' control port %u is NOT ALLOWED by any security group",
+      s->ServerName, s->ServerPort);
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "consider allowing this port using:\n  aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port %u --cidr 0.0.0.0/0",
+      sg_id, s->ServerPort);
+  }
+}
+
+static void verify_masq_addr(pool *p, struct aws_info *info, server_rec *s) {
+  config_rec *c;
+  pr_netaddr_t *public_addr;
+
+  /* XXX Should we use public_hostname here instead? */
+  if (info->public_ipv4 == NULL) {
+    return;
+  }
+
+  public_addr = get_addr(s->pool, info->public_ipv4, info->public_ipv4sz);
+
+  c = find_config(s->conf, CONF_PARAM, "MasqueradeAddress", FALSE);
+  if (c != NULL) {
+    pr_netaddr_t *masq_addr;
+    char *masq_name;
+
+    masq_addr = c->argv[0];
+    masq_name = c->argv[1];
+
+    if (pr_netaddr_cmp(masq_addr, public_addr) != 0) {
+      /* XXX Automatically correct/adjust this config? */
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "existing 'MasqueradeAddress %s' for vhost '%s' is INCORRECT",
+        masq_name, s->ServerName);
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "consider using 'MasqueradeAddress %s' instead for vhost '%s' for "
+        "passive data transfers", pr_netaddr_get_ipstr(public_addr),
+        s->ServerName);
+    }
+
+  } else {
+    /* XXX Automatically correct/add this config? */
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "consider adding 'MasqueradeAddress %s' to vhost '%s' for "
+      "passive data transfers", pr_netaddr_get_ipstr(public_addr),
+      s->ServerName);
+  }
+}
+
+static void verify_pasv_ports(pool *p, struct aws_info *info, server_rec *s,
+    pr_table_t *security_groups) {
+  config_rec *c;
+  int pasv_min_port, pasv_max_port;
+  void *key;
+  const char *sg_id;
+  int pasv_ports_allowed = FALSE;
+
+  /* If this vhost is for mod_sftp, then PassivePorts have no effect/meaning */
+  c = find_config(s->conf, CONF_PARAM, "SFTPEngine", FALSE);
+  if (c != NULL) {
+    pr_trace_msg(trace_channel, 5,
+      "vhost '%s' uses mod_sftp, skipping PassivePorts check", s->ServerName);
+    return;
+  }
+
+  c = find_config(s->conf, CONF_PARAM, "PassivePorts", FALSE);
+  if (c == NULL) {
+    pasv_min_port = AWS_PASSIVE_PORT_MIN_DEFAULT;
+    pasv_max_port = AWS_PASSIVE_PORT_MAX_DEFAULT;
+
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "consider adding 'PassivePorts %d %d' to vhost '%s' for "
+      "passive data transfers", pasv_min_port, pasv_max_port, s->ServerName);
+
+  } else {
+    pasv_min_port = *((int *) c->argv[0]);
+    pasv_max_port = *((int *) c->argv[0]);
+  }
+
+  if (security_groups == NULL) {
+    /* No SGs to check. */
+    pr_trace_msg(trace_channel, 5,
+      "unable to verify whether PassivePorts %d-%d for vhost '%s' allowed by "
+      "security groups: no security groups found", pasv_min_port, pasv_max_port,
+      s->ServerName);
+    return;
+  }
+
+  pr_table_rewind(security_groups);
+  key = pr_table_next(security_groups);
+  while (key != NULL) {
+    struct ec2_security_group *sg;
+
+    pr_signals_handle();
+
+    if (pasv_ports_allowed) {
+      break;
+    }
+
+    sg = pr_table_get(security_groups, key, NULL);
+    if (sg != NULL) {
+      register unsigned int i;
+      struct ec2_ip_rule **rules;
+
+      sg_id = key;
+
+      rules = sg->inbound_rules->elts;
+      for (i = 0; i < sg->inbound_rules->nelts; i++) {
+        struct ec2_ip_rule *rule;
+
+        rule = rules[i];
+        if (rule->from_port >= pasv_min_port &&
+            rule->to_port <= pasv_max_port) {
+          /* This SG allows access for our PassivePorts.  Good. */
+
+          (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+            "vhost '%s' PassivePorts %d-%d allowed by security group ID %s "
+            "(%s)", s->ServerName, pasv_min_port, pasv_max_port, sg_id,
+            sg->name);
+          pasv_ports_allowed = TRUE;
+          break;
+        }
+      }
+    }
+
+    key = pr_table_next(security_groups);
+  }
+
+  if (pasv_ports_allowed == FALSE) {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "vhost '%s' PassivePorts %d-%d are NOT ALLOWED by any security group",
+      s->ServerName, pasv_min_port, pasv_max_port);
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "consider allowing these ports using:\n  aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port %d-%d --cidr 0.0.0.0/0",
+      sg_id, pasv_min_port, pasv_max_port);
+  }
+}
 
 static void log_instance_info(pool *p, struct aws_info *info) {
 
@@ -432,15 +641,6 @@ static void aws_shutdown_ev(const void *event_data, void *user_data) {
   }
 }
 
-static pr_netaddr_t *get_addr(pool *p, const char *data, size_t datasz) {
-  char *name
-  pr_netaddr_t *addr;
-
-  name = pstrndup(p, data, datasz);
-  addr = pr_netaddr_get_addr(p, name, NULL);
-  return addr;
-}
-
 static void aws_startup_ev(const void *event_data, void *user_data) {
   server_rec *s = NULL;
   struct aws_info *aws_info;
@@ -549,42 +749,14 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
    */
 
   for (s = (server_rec *) server_list->xas_list; s; s = s->next) {
-    config_rec *c;
+    /* Verify control port access */
+    verify_ctrl_port(aws_pool, aws_info, s, security_groups);
 
-    /* XXX Should we use public_hostname here instead? */
-    if (aws_info->public_ipv4 != NULL) {
-      pr_netaddr_t *public_addr;
+    /* Verify MasqueradeAddress */
+    verify_masq_addr(aws_pool, aws_info, s);
 
-      public_addr = get_addr(s->pool, aws_info->public_ipv4,
-        aws_info->public_ipv4sz);
-
-      c = find_config(s->conf, "MasqueradeAddress", FALSE);
-      if (c != NULL) {
-        pr_netaddr_t *masq_addr;
-        char *masq_name;
-
-        masq_addr = c->argv[0];
-        masq_name = c->argv[1];
-
-        if (pr_netaddr_cmp(masq_addr, public_addr) != 0) {
-          /* XXX Automatically correct/adjust this config? */
-          (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-            "existing 'MasqueradeAddress %s' for %s vhost is INCORRECT",
-            masq_name, s->ServerName);
-          (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-            "consider using 'MasqueradeAddress %s' instead for %s vhost for "
-            "passive data transfers", pr_netaddr_get_ipstr(public_addr),
-            s->ServerName);
-        }
-
-      } else {
-        /* XXX Automatically correct/add this config? */
-        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-          "consider adding 'MasqueradeAddress %s' to %s vhost for "
-          "passive data transfers", pr_netaddr_get_ipstr(public_addr),
-          s->ServerName);
-      }
-    }
+    /* Verify PassivePorts access */
+    verify_pasv_ports(aws_pool, aws_info, s, security_groups);
   }
 
   /* XXX Register with Route53 */
