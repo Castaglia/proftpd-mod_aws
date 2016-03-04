@@ -392,13 +392,13 @@ static struct ec2_ip_rule *parse_sg_rule(pool *p, void *parent) {
 
   /* ipRanges */
   elt = aws_xml_elt_get_child(p, parent, "ipRanges", 8);
-  if (elt == NULL) {
-    destroy_pool(tmp_pool);
-    errno = EINVAL;
-    return NULL;
-  }
+  if (elt != NULL) {
+    rule->ranges = parse_sg_ranges(p, elt);
 
-  rule->ranges = parse_sg_ranges(p, elt);
+  } else {
+    /* Make an empty list. */
+    rule->ranges = make_array(p, 0, sizeof(pr_netacl_t *));
+  }
 
   destroy_pool(tmp_pool);
   return rule;
@@ -413,11 +413,11 @@ static array_header *parse_sg_rules(pool *p, void *parent, const char *name,
   elt = aws_xml_elt_get_child(p, parent, name, name_len);
   if (elt == NULL) {
     /* Return an empty list. */
-    return make_array(p, 0, sizeof(struct ec2_ip_rule));
+    return make_array(p, 0, sizeof(struct ec2_ip_rule *));
   }
 
   (void) aws_xml_elt_get_child_count(p, elt, &count);
-  ip_rules = make_array(p, count, sizeof(struct ec2_ip_rule));
+  ip_rules = make_array(p, count, sizeof(struct ec2_ip_rule *));
 
   kid = aws_xml_elt_get_child(p, elt, "item", 4);
   while (kid != NULL) {
