@@ -50,6 +50,9 @@ static struct err_info errs[] = {
   { "IncompleteSignature", 20,
     AWS_ERROR_CODE_INCOMPLETE_SIGNATURE },
 
+  { "InvalidParameterValue" 22,
+    AWS_ERROR_CODE_INVALID_PARAMETER_VALUE },
+
   { "MissingAction", 14,
     AWS_ERROR_CODE_MISSING_ACTION },
 
