@@ -217,7 +217,7 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
   err->err_msg = aws_xml_elt_get_text(err->pool, elt);
 
   req_id = aws_xml_elt_get_child(p, response, "RequestID", 9);
-  if (errors == NULL) {
+  if (req_id == NULL) {
     destroy_pool(err->pool);
     aws_xml_doc_free(p, doc);
 
