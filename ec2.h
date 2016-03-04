@@ -50,7 +50,7 @@ struct ec2_conn {
 /* EC2 Security Groups */
 
 /* Maps to the EC2 IpPermission data type. */
-struct ec2_ip_perm {
+struct ec2_ip_rule {
   /* Note that this could be: 'tcp', 'udp', 'icmp', OR it could be
    * a number, indicating one of the other IANA-registered protocols; see:
    *
@@ -62,8 +62,7 @@ struct ec2_ip_perm {
   int to_port;
 
   /* Arrays of pr_netacl_t ACLs. Maps to the EC2 IpRange data type. */
-  array_header *inbound_acls;
-  array_header *outbound_acls;
+  array_header *ranges;
 };
 
 /* Maps to the EC2 SecurityGroup data type. */
@@ -77,8 +76,8 @@ struct ec2_security_group {
   const char *vpc_id;
   const char *req_id;
 
-  array_header *inbound_perms;
-  array_header *outbound_perms;
+  array_header *inbound_rules;
+  array_header *outbound_rules;
 };
 
 struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,

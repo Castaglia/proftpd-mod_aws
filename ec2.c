@@ -295,6 +295,143 @@ static size_t ec2_resp_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
+static array_header *parse_sg_ranges(pool *p, void *parent) {
+  pool *tmp_pool;
+  void *kid;
+  unsigned long count;
+  array_header *ranges = NULL;
+
+  (void) aws_xml_elt_get_child_count(p, parent, &count);
+  ranges = make_array(p, count, sizeof(pr_netacl_t *));
+
+  if (count == 0) {
+    return ranges;
+  }
+
+  tmp_pool = make_sub_pool(p);
+  kid = aws_xml_elt_get_child(p, parent, NULL, 0);
+  while (kid != NULL) {
+    void *elt;
+
+    pr_signals_handle();
+
+    elt = aws_xml_elt_get_child(p, kid, "cidrIp", 6);
+    if (elt != NULL) {
+      char *elt_text;
+      pr_netacl_t *range;
+
+      elt_text = (char *) aws_xml_elt_get_text(tmp_pool, kid);
+      range = pr_netacl_create(p, elt_text);
+      if (range != NULL) {
+        *((pr_netacl_t **) push_array(ranges)) = range;
+      }
+    }
+
+    kid = aws_xml_elt_get_child(p, kid, NULL, 0);
+  }
+
+  destroy_pool(tmp_pool);
+  return ranges;
+}
+
+static struct ec2_ip_rule *parse_sg_rule(pool *p, void *parent) {
+  pool *tmp_pool;
+  void *elt;
+  const char *elt_text;
+  struct ec2_ip_rule *rule = NULL;
+
+  /* ipProtocol */
+  elt = aws_xml_elt_get_child(p, parent, "ipProtocol", 10);
+  if (elt == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  tmp_pool = make_sub_pool(p);
+
+  /* Filter out any protocol other than 'tcp'. */
+  elt_text = aws_xml_elt_get_text(tmp_pool, elt);
+  if (strncmp(elt_text, "tcp", 4) != 0) {
+    pr_trace_msg(trace_channel, 9,
+      "ignoring security group permission for '%s' protocol", elt_text);
+    destroy_pool(tmp_pool);
+    errno = ENOENT;
+    return NULL;
+  }
+
+  rule = pcalloc(p, sizeof(struct ec2_ip_rule));
+  rule->proto = pstrdup(p, elt_text);
+
+  /* fromPort */
+  elt = aws_xml_elt_get_child(p, parent, "fromPort", 8);
+  if (elt == NULL) {
+    destroy_pool(tmp_pool);
+    errno = EINVAL;
+    return NULL;
+  }
+
+  elt_text = aws_xml_elt_get_text(tmp_pool, elt);
+  rule->from_port = atoi(elt_text);
+
+  /* toPort */
+  elt = aws_xml_elt_get_child(p, parent, "toPort", 6);
+  if (elt == NULL) {
+    destroy_pool(tmp_pool);
+    errno = EINVAL;
+    return NULL;
+  }
+
+  elt_text = aws_xml_elt_get_text(tmp_pool, elt);
+  rule->to_port = atoi(elt_text);
+
+  /* XXX groups, i.e. security groups */
+
+  /* ipRanges */
+  elt = aws_xml_elt_get_child(p, parent, "ipRanges", 8);
+  if (elt == NULL) {
+    destroy_pool(tmp_pool);
+    errno = EINVAL;
+    return NULL;
+  }
+
+  rule->ranges = parse_sg_ranges(p, elt);
+
+  destroy_pool(tmp_pool);
+  return rule;
+}
+
+static array_header *parse_sg_rules(pool *p, void *parent, const char *name,
+    size_t name_len) {
+  void *elt, *kid;
+  unsigned long count;
+  array_header *ip_rules = NULL;
+
+  elt = aws_xml_elt_get_child(p, parent, name, name_len);
+  if (elt == NULL) {
+    /* Return an empty list. */
+    return make_array(p, 0, sizeof(struct ec2_ip_rule));
+  }
+
+  (void) aws_xml_elt_get_child_count(p, elt, &count);
+  ip_rules = make_array(p, count, sizeof(struct ec2_ip_rule));
+
+  kid = aws_xml_elt_get_child(p, elt, NULL, 0);
+  while (kid != NULL) {
+    struct ec2_ip_rule *rule;
+
+    pr_signals_handle();
+
+    rule = parse_sg_rule(p, kid);
+    if (rule != NULL) {
+      *((struct ec2_ip_rule **) push_array(ip_rules)) = rule;
+    }
+
+    kid = aws_xml_elt_get_child(p, kid, NULL, 0);
+  }
+
+  return ip_rules;
+}
+
 static struct ec2_security_group *parse_sg_xml(pool *p, const char *data,
     size_t datasz) {
   void *doc, *root, *req_id, *info, *item, *elt;
@@ -410,11 +547,13 @@ static struct ec2_security_group *parse_sg_xml(pool *p, const char *data,
 
   sg->desc = aws_xml_elt_get_text(sg->pool, elt);
 
+  sg->inbound_rules = parse_sg_rules(sg->pool, item,
+    "ipPermissions", 13);
+  sg->outbound_rules = parse_sg_rules(sg->pool, item,
+    "ipPermissionsEgress", 19);
 
   aws_xml_doc_free(p, doc);
-
-  errno = ENOSYS;
-  return NULL;
+  return sg;
 }
 
 static struct ec2_security_group *get_security_group(pool *p,
@@ -471,6 +610,9 @@ static struct ec2_security_group *get_security_group(pool *p,
   clear_response(ec2);
 
   if (sg != NULL) {
+    register unsigned int i;
+    struct ec2_ip_rule **rules;
+
     if (sg->id == NULL) {
       sg->id = pstrdup(sg->pool, sg_id);
     }
@@ -481,8 +623,46 @@ static struct ec2_security_group *get_security_group(pool *p,
 
     pr_trace_msg(trace_channel, 15,
       "received security group: id = %s, name = %s, desc = %s, owner_id = %s, "
-      "vpc_id = %s, req_id = %s", sg->id, sg->name, sg->desc, sg->owner_id,
-      sg->vpc_id, sg->req_id);
+      "vpc_id = %s, req_id = %s, inbound rule count = %d, "
+      "outbound rule count = %d", sg->id, sg->name, sg->desc, sg->owner_id,
+      sg->vpc_id, sg->req_id, sg->inbound_rules->nelts,
+      sg->outbound_rules->nelts);
+
+    rules = sg->inbound_rules->elts;
+    for (i = 0; i < sg->inbound_rules->nelts; i++) {
+      register unsigned int j;
+      struct ec2_ip_rule *rule;
+      pr_netacl_t **ranges;
+
+      rule = rules[i];
+      pr_trace_msg(trace_channel, 15,
+        "  inbound rule #%u: proto = %s, ports %d-%d, ranges:", i+1,
+        rule->proto, rule->from_port, rule->to_port);
+
+      ranges = rule->ranges->elts;
+      for (j = 0; j < rule->ranges->nelts; j++) {
+        pr_trace_msg(trace_channel, 15,
+          "    range: %s", pr_netacl_get_str(sg->pool, ranges[j]));
+      }
+    }
+
+    rules = sg->outbound_rules->elts;
+    for (i = 0; i < sg->outbound_rules->nelts; i++) {
+      register unsigned int j;
+      struct ec2_ip_rule *rule;
+      pr_netacl_t **ranges;
+
+      rule = rules[i];
+      pr_trace_msg(trace_channel, 15,
+        "  outbound rule #%u: proto = %s, ports %d-%d, ranges:", i+1,
+        rule->proto, rule->from_port, rule->to_port);
+
+      ranges = rule->ranges->elts;
+      for (j = 0; j < rule->ranges->nelts; j++) {
+        pr_trace_msg(trace_channel, 15,
+          "    range: %s", pr_netacl_get_str(sg->pool, ranges[j]));
+      }
+    }
   }
 
   return sg;
