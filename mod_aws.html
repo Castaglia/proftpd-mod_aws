@@ -14,7 +14,13 @@
 <p>
 The purpose of the <code>mod_aws</code> module is
 
-Requires curl (libcurl4-dev), OpenSSL (openssl-dev), libxml2 (libxml2-dev)
+<p>
+The <code>mod_aws</code> module relies on the following libraries:
+<ul>
+  <li>curl (<i>e.g.</i> the <code>libcurl4-dev</code> package)
+  <li>OpenSSL (<i>e.g.</i> the <code>openssl-dev</code> package)
+  <li>libxml2 (<i>e.g.</i> the <code>libxml2-dev</code> package)
+</ul>
 
 <p>
 Installation instructions are discussed <a href="#Installation">here</a>;
@@ -161,6 +167,34 @@ in seconds, to use when waiting for a response from any of the AWS services.
 <b>Logging</b><br>
 The <code>mod_aws</code> module supports different forms of logging.  The
 main module logging is done via the <code>AWSLog</code> directive.
+
+<p>
+The EC2 instance metadata that <code>mod_aws</code> discovers, on startup,
+is made available for logging in <i>e.g.</i> <code>ExtendedLogs</code> and
+<code>SQLLog</code> queries, using the "notes" syntax, <i>i.e.</i>:
+<pre>
+  %{note:<em>name</em>}
+</pre>
+The following lists the note <em>names</em> that <code>mod_aws</code> provides:
+<ul>
+  <li><code>aws.account-id</code>
+  <li><code>aws.ami-id</code>
+  <li><code>aws.api-version</code>
+  <li><code>aws.avail-zone</code>
+  <li><code>aws.domain</code>
+  <li><code>aws.iam-role</code>
+  <li><code>aws.instance-id</code>
+  <li><code>aws.instance-type</code>
+  <li><code>aws.local-hostname</code>
+  <li><code>aws.local-ipv4</code>
+  <li><code>aws.mac</code>
+  <li><code>aws.public-hostname</code>
+  <li><code>aws.public-ipv4</code>
+  <li><code>aws.region</code>
+  <li><code>aws.security-groups</code>
+  <li><code>aws.subnet-id</code>
+  <li><code>aws.vpc-id</code>
+</ul>
 
 <p>
 For debugging purposes, the module also uses
