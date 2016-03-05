@@ -62,6 +62,9 @@ static unsigned long aws_request_timeout_secs = AWS_REQUEST_DEFAULT_TIMEOUT;
 #define AWS_PASSIVE_PORT_MIN_DEFAULT		49152
 #define AWS_PASSIVE_PORT_MAX_DEFAULT		65534
 
+/* For holding onto the EC2 instance metadata for e.g. session processes' use */
+static const struct aws_info *instance_info = NULL;
+
 static const char *trace_channel = "aws";
 
 static pr_netaddr_t *get_addr(pool *p, const char *data, size_t datasz) {
@@ -73,8 +76,8 @@ static pr_netaddr_t *get_addr(pool *p, const char *data, size_t datasz) {
   return addr;
 }
 
-static void verify_ctrl_port(pool *p, struct aws_info *info, server_rec *s,
-    pr_table_t *security_groups) {
+static void verify_ctrl_port(pool *p, const struct aws_info *info,
+    server_rec *s, pr_table_t *security_groups) {
   void *key;
   const char *sg_id;
   int ctrl_port_allowed = FALSE;
@@ -141,8 +144,8 @@ static void verify_ctrl_port(pool *p, struct aws_info *info, server_rec *s,
   }
 }
 
-static void verify_masq_addr(pool *p, struct aws_info *info, server_rec *s) {
-  config_rec *c;
+static void verify_masq_addr(pool *p, const struct aws_info *info,
+    server_rec *s) { config_rec *c;
   pr_netaddr_t *public_addr;
 
   /* XXX Should we use public_hostname here instead? */
@@ -180,8 +183,8 @@ static void verify_masq_addr(pool *p, struct aws_info *info, server_rec *s) {
   }
 }
 
-static void verify_pasv_ports(pool *p, struct aws_info *info, server_rec *s,
-    pr_table_t *security_groups) {
+static void verify_pasv_ports(pool *p, const struct aws_info *info,
+    server_rec *s, pr_table_t *security_groups) {
   config_rec *c;
   int pasv_min_port, pasv_max_port;
   void *key;
@@ -269,7 +272,7 @@ static void verify_pasv_ports(pool *p, struct aws_info *info, server_rec *s,
   }
 }
 
-static void log_instance_info(pool *p, struct aws_info *info) {
+static void log_instance_info(pool *p, const struct aws_info *info) {
 
   /* AWS domain */
   if (info->domain != NULL) {
@@ -450,6 +453,13 @@ static void log_instance_info(pool *p, struct aws_info *info) {
   } else {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
       "aws.security-groups = unavailable");
+  }
+}
+
+static void set_sess_note(pool *p, const char *key, void *val, size_t valsz) {
+  if (pr_table_add(session.notes, pstrdup(p, key), val, valsz) < 0) {
+    pr_trace_msg(trace_channel, 2,
+      "error stashing '%s' note: %s", key, strerror(errno));
   }
 }
 
@@ -646,7 +656,6 @@ static void aws_shutdown_ev(const void *event_data, void *user_data) {
 
 static void aws_startup_ev(const void *event_data, void *user_data) {
   server_rec *s = NULL;
-  struct aws_info *aws_info;
   struct ec2_conn *ec2 = NULL;
   pr_table_t *security_groups = NULL;
 
@@ -683,8 +692,8 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
     }
   }
 
-  aws_info = aws_instance_get_info(aws_pool);
-  if (aws_info == NULL) {
+  instance_info = aws_instance_get_info(aws_pool);
+  if (instance_info == NULL) {
     pr_log_debug(DEBUG0, MOD_AWS_VERSION
       ": unable to discover EC2 instance metadata: %s", strerror(errno));
     aws_engine = FALSE;
@@ -700,7 +709,7 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  if (aws_info->domain == NULL) {
+  if (instance_info->domain == NULL) {
     /* Assume that we are not running within AWS EC2. */
     pr_log_debug(DEBUG0, MOD_AWS_VERSION
       ": not running within AWS EC2, disabling mod_aws");
@@ -713,29 +722,39 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 
     destroy_pool(aws_pool);
     aws_pool = NULL;
+    instance_info = NULL;
 
     return;
   }
 
-  log_instance_info(aws_pool, aws_info);
+  log_instance_info(aws_pool, instance_info);
 
-  if (aws_info->iam_role != NULL) {
-    const char *domain;
+  /* Assume that we can only perform discovery/configuration via AWS services
+   * if we have an IAM role, which in turn means we have the necessary
+   * credentials for constructing the necessary signatures for talking to
+   * AWS services.
+   */
+  if (instance_info->iam_role != NULL) {
+    const char *domain, *iam_role;
 
-    domain = pstrndup(aws_pool, aws_info->domain, aws_info->domainsz);
+    domain = pstrndup(aws_pool, instance_info->domain, instance_info->domainsz);
+    iam_role = pstrndup(aws_pool, instance_info->iam_role,
+      instance_info->iam_rolesz);
+
     ec2 = aws_ec2_conn_alloc(aws_pool, aws_connect_timeout_secs,
-      aws_request_timeout_secs, aws_cacerts, aws_info->region, domain,
-      aws_info->api_version, aws_info->iam_role);
+      aws_request_timeout_secs, aws_cacerts, instance_info->region, domain,
+      instance_info->api_version, iam_role);
 
-    if (aws_info->security_groups != NULL) {
+    if (instance_info->security_groups != NULL) {
       const char *vpc_id = NULL;
 
-      if (aws_info->vpc_id != NULL) {
-        vpc_id = pstrndup(aws_pool, aws_info->vpc_id, aws_info->vpc_idsz);
+      if (instance_info->vpc_id != NULL) {
+        vpc_id = pstrndup(aws_pool, instance_info->vpc_id,
+          instance_info->vpc_idsz);
       }
 
       security_groups = aws_ec2_get_security_groups(aws_pool, ec2, vpc_id,
-        aws_info->security_groups);
+        instance_info->security_groups);
     }
 
   } else {
@@ -745,21 +764,15 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
       "recommended commands will thus be logged");
   }
 
-  /* XXX Scan server list, and check SG settings.
-   *
-   * Make sure to see if MasqueradeAddress is set (if not, suggest/set it),
-   * if PassivePorts are set (if not, suggest/set them AND check SGs).
-   */
-
   for (s = (server_rec *) server_list->xas_list; s; s = s->next) {
     /* Verify control port access */
-    verify_ctrl_port(aws_pool, aws_info, s, security_groups);
+    verify_ctrl_port(aws_pool, instance_info, s, security_groups);
 
     /* Verify MasqueradeAddress */
-    verify_masq_addr(aws_pool, aws_info, s);
+    verify_masq_addr(aws_pool, instance_info, s);
 
     /* Verify PassivePorts access */
-    verify_pasv_ports(aws_pool, aws_info, s, security_groups);
+    verify_pasv_ports(aws_pool, instance_info, s, security_groups);
   }
 
   /* XXX Register with Route53 */
@@ -809,6 +822,144 @@ static int aws_init(void) {
   return 0;
 }
 
+static int aws_sess_init(void) {
+  const char *key;
+
+  if (aws_engine == FALSE) {
+    return 0;
+  }
+
+  if (instance_info == NULL) {
+    return 0;
+  }
+
+  /* Make all of the instance metadata available for logging by stashing the
+   * metadata in the session's notes table.
+   */
+
+  key = "aws.domain";
+  set_sess_note(session.pool, key, instance_info->domain,
+    instance_info->domainsz);
+
+  if (instance_info->account_id != NULL) {
+    key = "aws.account-id";
+
+    set_sess_note(session.pool, key, instance_info->account_id, 0);
+  }
+
+  if (instance_info->api_version != NULL) {
+    key = "aws.api-version";
+
+    set_sess_note(session.pool, key, instance_info->api_version, 0);
+  }
+
+  if (instance_info->region != NULL) {
+    key = "aws.region";
+
+    set_sess_note(session.pool, key, instance_info->region, 0);
+  }
+
+  if (instance_info->avail_zone != NULL) {
+    key = "aws.avail-zone";
+
+    set_sess_note(session.pool, key, instance_info->avail_zone,
+      instance_info->avail_zonesz);
+  }
+
+  if (instance_info->instance_type != NULL) {
+    key = "aws.instance-type";
+
+    set_sess_note(session.pool, key, instance_info->instance_type,
+      instance_info->instance_typesz);
+  }
+
+  if (instance_info->instance_id != NULL) {
+    key = "aws.instance-id";
+
+    set_sess_note(session.pool, key, instance_info->instance_id,
+      instance_info->instance_idsz);
+  }
+
+  if (instance_info->ami_id != NULL) {
+    key = "aws.ami-id";
+
+    set_sess_note(session.pool, key, instance_info->ami_id,
+      instance_info->ami_idsz);
+  }
+
+  if (instance_info->iam_role != NULL) {
+    key = "aws.iam-role";
+
+    set_sess_note(session.pool, key, instance_info->iam_role,
+      instance_info->iam_rolesz);
+  }
+
+  if (instance_info->hw_mac != NULL) {
+    key = "aws.mac";
+
+    set_sess_note(session.pool, key, instance_info->hw_mac,
+      instance_info->hw_macsz);
+  }
+
+  if (instance_info->vpc_id != NULL) {
+    key = "aws.vpc-id";
+
+    set_sess_note(session.pool, key, instance_info->vpc_id,
+      instance_info->vpc_idsz);
+  }
+
+  if (instance_info->subnet_id != NULL) {
+    key = "aws.subnet-id";
+
+    set_sess_note(session.pool, key, instance_info->subnet_id,
+      instance_info->subnet_idsz);
+  }
+
+  if (instance_info->local_ipv4 != NULL) {
+    key = "aws.local-ipv4";
+
+    set_sess_note(session.pool, key, instance_info->local_ipv4,
+      instance_info->local_ipv4sz);
+  }
+
+  if (instance_info->local_hostname != NULL) {
+    key = "aws.local-hostname";
+
+    set_sess_note(session.pool, key, instance_info->local_hostname,
+      instance_info->local_hostnamesz);
+  }
+
+  if (instance_info->public_ipv4 != NULL) {
+    key = "aws.public-ipv4";
+
+    set_sess_note(session.pool, key, instance_info->public_ipv4,
+      instance_info->public_ipv4sz);
+  }
+
+  if (instance_info->public_hostname != NULL) {
+    key = "aws.public-hostname";
+
+    set_sess_note(session.pool, key, instance_info->public_hostname,
+      instance_info->public_hostnamesz);
+  }
+
+  if (instance_info->security_groups != NULL) {
+    register unsigned int i;
+    char **elts, *sg_ids = "";
+
+    elts = instance_info->security_groups->elts;
+    for (i = 0; i < instance_info->security_groups->nelts; i++) {
+      sg_ids = pstrcat(session.pool, sg_ids, *sg_ids ? ", " : "", elts[i],
+        NULL);
+    }
+
+    key = "aws.security-groups";
+    set_sess_note(session.pool, key, sg_ids, 0);
+  }
+
+  return 0;
+}
+
 /* Module API tables
  */
 
@@ -846,7 +997,7 @@ module aws_module = {
   aws_init,
 
   /* Session initialization */
-  NULL,
+  aws_sess_init,
 
   /* Module version */
   MOD_AWS_VERSION
