@@ -33,10 +33,10 @@
 #include "ec2.h"
 
 /* How long (in secs) to wait to connect to real server? */
-#define AWS_CONNECT_DEFAULT_TIMEOUT	5
+#define AWS_CONNECT_DEFAULT_TIMEOUT	3
 
 /* How long (in secs) to wait for the response? */
-#define AWS_REQUEST_DEFAULT_TIMEOUT	3
+#define AWS_REQUEST_DEFAULT_TIMEOUT	5
 
 extern xaset_t *server_list;
 
@@ -55,9 +55,8 @@ static unsigned long aws_flags = 0UL;
 static const char *aws_logfile = NULL;
 static const char *aws_cacerts = PR_CONFIG_DIR "/aws-cacerts.pem";
 
-/* XXX Make these named constants. Reset them during restart_ev. */
-static unsigned long aws_connect_timeout_secs = 15;
-static unsigned long aws_request_timeout_secs = 30;
+static unsigned long aws_connect_timeout_secs = AWS_CONNECT_DEFAULT_TIMEOUT;
+static unsigned long aws_request_timeout_secs = AWS_REQUEST_DEFAULT_TIMEOUT;
 
 /* The IANA registered ephemeral port range. */
 #define AWS_PASSIVE_PORT_MIN_DEFAULT		49152
@@ -622,6 +621,10 @@ static void aws_restart_ev(const void *event_data, void *user_data) {
   destroy_pool(aws_pool);
   aws_pool = make_sub_pool(permanent_pool);
   pr_pool_tag(aws_pool, MOD_AWS_VERSION);
+
+  /* Reset timeouts. */
+  aws_connect_timeout_secs = AWS_CONNECT_DEFAULT_TIMEOUT;
+  aws_request_timeout_secs = AWS_REQUEST_DEFAULT_TIMEOUT;
 
   /* XXX Close/reopen AWSLog? */
 }
