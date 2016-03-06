@@ -38,6 +38,8 @@ NEXT:
         MessageRetentionPeriod
         QueueArn (log)
         DelaySeconds
+        ApproximateNumberOfMessages (log)
+        ApproximateNumberOfMessagesNotVisible (log)
 
     AWSLogFlush count time
       How often to call SendMessageBatch.  Note that SendMessageBatch
