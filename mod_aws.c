@@ -456,8 +456,22 @@ static void log_instance_info(pool *p, const struct aws_info *info) {
   }
 }
 
-static void set_sess_note(pool *p, const char *key, void *val, size_t valsz) {
-  if (pr_table_add(session.notes, pstrdup(p, key), val, valsz) < 0) {
+static void set_sess_note(pool *p, const char *key, const char *val,
+    size_t valsz) {
+  if (val == NULL) {
+    val = "";
+    valsz = 0;
+
+  } else if (valsz == 0) {
+    valsz = strlen(val);
+  }
+
+  /* Watch out for the non-NUL-terminated strings. */
+  if (valsz > 0) {
+    val = pstrndup(p, val, valsz);
+  }
+
+  if (pr_table_add(session.notes, pstrdup(p, key), (void *) val, valsz) < 0) {
     pr_trace_msg(trace_channel, 2,
       "error stashing '%s' note: %s", key, strerror(errno));
   }
@@ -823,8 +837,6 @@ static int aws_init(void) {
 }
 
 static int aws_sess_init(void) {
-  const char *key;
-
   if (aws_engine == FALSE) {
     return 0;
   }
@@ -837,111 +849,35 @@ static int aws_sess_init(void) {
    * metadata in the session's notes table.
    */
 
-  key = "aws.domain";
-  set_sess_note(session.pool, key, instance_info->domain,
+  set_sess_note(session.pool, "aws.domain", instance_info->domain,
     instance_info->domainsz);
-
-  if (instance_info->account_id != NULL) {
-    key = "aws.account-id";
-
-    set_sess_note(session.pool, key, instance_info->account_id, 0);
-  }
-
-  if (instance_info->api_version != NULL) {
-    key = "aws.api-version";
-
-    set_sess_note(session.pool, key, instance_info->api_version, 0);
-  }
-
-  if (instance_info->region != NULL) {
-    key = "aws.region";
-
-    set_sess_note(session.pool, key, instance_info->region, 0);
-  }
-
-  if (instance_info->avail_zone != NULL) {
-    key = "aws.avail-zone";
-
-    set_sess_note(session.pool, key, instance_info->avail_zone,
-      instance_info->avail_zonesz);
-  }
-
-  if (instance_info->instance_type != NULL) {
-    key = "aws.instance-type";
-
-    set_sess_note(session.pool, key, instance_info->instance_type,
-      instance_info->instance_typesz);
-  }
-
-  if (instance_info->instance_id != NULL) {
-    key = "aws.instance-id";
-
-    set_sess_note(session.pool, key, instance_info->instance_id,
-      instance_info->instance_idsz);
-  }
-
-  if (instance_info->ami_id != NULL) {
-    key = "aws.ami-id";
-
-    set_sess_note(session.pool, key, instance_info->ami_id,
-      instance_info->ami_idsz);
-  }
-
-  if (instance_info->iam_role != NULL) {
-    key = "aws.iam-role";
-
-    set_sess_note(session.pool, key, instance_info->iam_role,
-      instance_info->iam_rolesz);
-  }
-
-  if (instance_info->hw_mac != NULL) {
-    key = "aws.mac";
-
-    set_sess_note(session.pool, key, instance_info->hw_mac,
-      instance_info->hw_macsz);
-  }
-
-  if (instance_info->vpc_id != NULL) {
-    key = "aws.vpc-id";
-
-    set_sess_note(session.pool, key, instance_info->vpc_id,
-      instance_info->vpc_idsz);
-  }
-
-  if (instance_info->subnet_id != NULL) {
-    key = "aws.subnet-id";
-
-    set_sess_note(session.pool, key, instance_info->subnet_id,
-      instance_info->subnet_idsz);
-  }
-
-  if (instance_info->local_ipv4 != NULL) {
-    key = "aws.local-ipv4";
-
-    set_sess_note(session.pool, key, instance_info->local_ipv4,
-      instance_info->local_ipv4sz);
-  }
-
-  if (instance_info->local_hostname != NULL) {
-    key = "aws.local-hostname";
-
-    set_sess_note(session.pool, key, instance_info->local_hostname,
-      instance_info->local_hostnamesz);
-  }
-
-  if (instance_info->public_ipv4 != NULL) {
-    key = "aws.public-ipv4";
-
-    set_sess_note(session.pool, key, instance_info->public_ipv4,
-      instance_info->public_ipv4sz);
-  }
-
-  if (instance_info->public_hostname != NULL) {
-    key = "aws.public-hostname";
-
-    set_sess_note(session.pool, key, instance_info->public_hostname,
-      instance_info->public_hostnamesz);
-  }
+  set_sess_note(session.pool, "aws.account-id", instance_info->account_id, 0);
+  set_sess_note(session.pool, "aws.api-version", instance_info->api_version, 0);
+  set_sess_note(session.pool, "aws.region", instance_info->region, 0);
+  set_sess_note(session.pool, "aws.avail-zone", instance_info->avail_zone,
+    instance_info->avail_zonesz);
+  set_sess_note(session.pool, "aws.instance-type", instance_info->instance_type,
+    instance_info->instance_typesz);
+  set_sess_note(session.pool, "aws.instance-id", instance_info->instance_id,
+    instance_info->instance_idsz);
+  set_sess_note(session.pool, "aws.ami-id", instance_info->ami_id,
+    instance_info->ami_idsz);
+  set_sess_note(session.pool, "aws.iam-role", instance_info->iam_role,
+    instance_info->iam_rolesz);
+  set_sess_note(session.pool, "aws.mac", instance_info->hw_mac,
+    instance_info->hw_macsz);
+  set_sess_note(session.pool, "aws.vpc-id", instance_info->vpc_id,
+    instance_info->vpc_idsz);
+  set_sess_note(session.pool, "aws.subnet-id", instance_info->subnet_id,
+    instance_info->subnet_idsz);
+  set_sess_note(session.pool, "aws.local-ipv4", instance_info->local_ipv4,
+    instance_info->local_ipv4sz);
+  set_sess_note(session.pool, "aws.local-hostname",
+    instance_info->local_hostname, instance_info->local_hostnamesz);
+  set_sess_note(session.pool, "aws.public-ipv4", instance_info->public_ipv4,
+    instance_info->public_ipv4sz);
+  set_sess_note(session.pool, "aws.public-hostname",
+    instance_info->public_hostname, instance_info->public_hostnamesz);
 
   if (instance_info->security_groups != NULL) {
     register unsigned int i;
@@ -953,8 +889,10 @@ static int aws_sess_init(void) {
         NULL);
     }
 
-    key = "aws.security-groups";
-    set_sess_note(session.pool, key, sg_ids, 0);
+    set_sess_note(session.pool, "aws.security-groups", sg_ids, 0);
+
+  } else {
+    set_sess_note(session.pool, "aws.security-groups", NULL, 0);
   }
 
   return 0;
