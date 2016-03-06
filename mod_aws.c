@@ -148,7 +148,7 @@ static void verify_masq_addr(pool *p, const struct aws_info *info,
     server_rec *s) { config_rec *c;
   pr_netaddr_t *public_addr;
 
-  /* XXX Should we use public_hostname here instead? */
+  /* Should we use public_hostname here instead? */
   if (info->public_ipv4 == NULL) {
     return;
   }
@@ -456,6 +456,39 @@ static void log_instance_info(pool *p, const struct aws_info *info) {
   }
 }
 
+static void open_logfile(void) {
+  int res, xerrno;
+
+  if (aws_logfile == NULL) {
+    return;
+  }
+
+  pr_signals_block();
+  PRIVS_ROOT
+  res = pr_log_openfile(aws_logfile, &aws_logfd, PR_LOG_SYSTEM_MODE);
+  xerrno = errno;
+  PRIVS_RELINQUISH
+  pr_signals_unblock();
+
+  if (res < 0) {
+    if (res == -1) {
+      pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
+        ": notice: unable to open AWSLog '%s': %s", aws_logfile,
+        strerror(xerrno));
+
+    } else if (res == PR_LOG_WRITABLE_DIR) {
+      pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
+        ": notice: unable to open AWSLog '%s': parent directory is "
+        "world-writable", aws_logfile);
+
+    } else if (res == PR_LOG_SYMLINK) {
+      pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
+        ": notice: unable to open AWSLog '%s': cannot log to a symlink",
+        aws_logfile);
+    }
+  }
+}
+
 static void set_sess_note(pool *p, const char *key, const char *val,
     size_t valsz) {
   if (val == NULL) {
@@ -650,7 +683,10 @@ static void aws_restart_ev(const void *event_data, void *user_data) {
   aws_connect_timeout_secs = AWS_CONNECT_DEFAULT_TIMEOUT;
   aws_request_timeout_secs = AWS_REQUEST_DEFAULT_TIMEOUT;
 
-  /* XXX Close/reopen AWSLog? */
+  if (aws_logfd >= 0) {
+    (void) close(aws_logfd);
+    open_logfile();
+  }
 }
 
 static void aws_shutdown_ev(const void *event_data, void *user_data) {
@@ -677,34 +713,7 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
     return;
   }
 
-  if (aws_logfile != NULL) {
-    int res, xerrno;
-
-    pr_signals_block();
-    PRIVS_ROOT
-    res = pr_log_openfile(aws_logfile, &aws_logfd, PR_LOG_SYSTEM_MODE);
-    xerrno = errno;
-    PRIVS_RELINQUISH
-    pr_signals_unblock();
-
-    if (res < 0) {
-      if (res == -1) {
-        pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
-          ": notice: unable to open AWSLog '%s': %s", aws_logfile,
-          strerror(xerrno));
-
-      } else if (res == PR_LOG_WRITABLE_DIR) {
-        pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
-          ": notice: unable to open AWSLog '%s': parent directory is "
-          "world-writable", aws_logfile);
-
-      } else if (res == PR_LOG_SYMLINK) {
-        pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
-          ": notice: unable to open AWSLog '%s': cannot log to a symlink",
-          aws_logfile);
-      }
-    }
-  }
+  open_logfile();
 
   instance_info = aws_instance_get_info(aws_pool);
   if (instance_info == NULL) {
