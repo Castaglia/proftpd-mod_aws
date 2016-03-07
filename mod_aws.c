@@ -31,6 +31,7 @@
 #include "xml.h"
 #include "instance.h"
 #include "ec2.h"
+#include "health.h"
 
 /* How long (in secs) to wait to connect to real server? */
 #define AWS_CONNECT_DEFAULT_TIMEOUT	3
@@ -64,6 +65,11 @@ static unsigned long aws_request_timeout_secs = AWS_REQUEST_DEFAULT_TIMEOUT;
 
 /* For holding onto the EC2 instance metadata for e.g. session processes' use */
 static const struct aws_info *instance_info = NULL;
+
+/* For holding onto the health listener, for shutting down when the daemon
+ * is stopped.
+ */
+struct health *instance_health = NULL;
 
 static const char *trace_channel = "aws";
 
@@ -691,6 +697,15 @@ static void aws_restart_ev(const void *event_data, void *user_data) {
 
 static void aws_shutdown_ev(const void *event_data, void *user_data) {
   /* XXX Unregister from ELB, or Route53 */
+
+  if (instance_health != NULL) {
+    if (aws_health_listener_destroy(aws_pool, instance_health) < 0) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "error destroying healthcheck listener: %s", strerror(errno));
+    }
+
+    instance_health = NULL;
+  }
 
   aws_http_free();
   aws_xml_free();

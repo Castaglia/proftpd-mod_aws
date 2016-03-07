@@ -84,7 +84,11 @@ static const char *health_read_request(pool *p, conn_t *conn) {
   bufsz = AWS_HEALTH_HTTP_REQ_BUFZ;
   buf = palloc(p, bufsz);
 
-  /* Read in the first line, which should be our request line. */
+  /* Read in the first line, which should be our request line.
+   *
+   * Note that pr_netio_telnet_gets2() converts CRLF terminators to just
+   * LF terminators.
+   */
   len = pr_netio_telnet_gets2(buf, bufsz, conn->instrm, conn->outstrm);
   if (len < 0) {
     if (errno == E2BIG) {
@@ -109,15 +113,22 @@ static const char *health_read_request(pool *p, conn_t *conn) {
     return NULL;
   }
 
-  req_line = pstrndup(p, buf, len);
+  pr_trace_msg(trace_channel, 15, "read HTTP request line: '%.*s'", len-1, buf);
+  req_line = pstrndup(p, buf, len-1);
 
   /* Now read in all the remaining data (the headers), for logging. */
   len = pr_netio_telnet_gets2(buf, bufsz, conn->instrm, conn->outstrm);
   while (len > 0) {
     pr_signals_handle();
 
-    pr_trace_msg(trace_channel, 15,
-      "received request header: '%.*s'", len, buf);
+    if (len == 1 &&
+        strcmp(buf, "\n") == 0) {
+      /* End of headers.  We don't care about any content-bearing requests. */
+      break;
+    }
+
+    pr_trace_msg(trace_channel, 19,
+      "received request header: '%.*s'", len-1, buf);
 
     len = pr_netio_telnet_gets2(buf, bufsz, conn->instrm, conn->outstrm);
   }
@@ -148,7 +159,7 @@ static const char *health_fmt_http_date(pool *p, time_t resp_time) {
 
   http_datesz = AWS_HEALTH_HTTP_DATE_BUFSZ;
   http_date = pcalloc(p, http_datesz);
-  (void) strftime(http_date, http_datesz, "%a, %d %b %Y %H:%M:%S %Z", gmt_tm);
+  (void) strftime(http_date, http_datesz, "%a, %d %b %Y %H:%M:%S GMT", gmt_tm);
 
   return http_date;
 }
@@ -253,15 +264,15 @@ static long health_check_request(pool *p, struct health *health,
   }
 
   req_linelen = strlen(req_line);
-  if (pr_strnrstr(req_line, req_linelen, "1.1\r\n", 5, 0) == TRUE) {
+  if (pr_strnrstr(req_line, req_linelen, "1.1", 3, 0) == TRUE) {
     *http_version = "1.1";
 
-  } else if (pr_strnrstr(req_line, req_linelen, "1.0\r\n", 5, 0) == TRUE) {
+  } else if (pr_strnrstr(req_line, req_linelen, "1.0", 3, 0) == TRUE) {
     *http_version = "1.0";
 
   } else {
     pr_trace_msg(trace_channel, 8,
-      "unknown/supported HTTP version requested: %s", req_line);
+      "unknown/unsupported HTTP version requested: %s", req_line);
   }
 
   return resp_code;
@@ -308,8 +319,10 @@ static conn_t *health_accept_conn(pool *p, conn_t *listener) {
 
   fd = pr_inet_accept_nowait(p, listener);
   if (fd < 0) {
-    pr_trace_msg(trace_channel, 19, "unable to accept incoming connection: %s",
-      strerror(errno));
+    if (errno != EAGAIN) {
+      pr_trace_msg(trace_channel, 19,
+        "unable to accept incoming connection: %s", strerror(errno));
+    }
 
     errno = ENOENT;
     return NULL;
@@ -318,6 +331,33 @@ static conn_t *health_accept_conn(pool *p, conn_t *listener) {
   conn = pr_inet_openrw(p, listener, NULL, PR_NETIO_STRM_OTHR, fd, -1, -1,
     FALSE);
   return conn;
+}
+
+static void health_close_conn(conn_t *conn) {
+  if (conn->instrm != NULL) {
+    pr_netio_close(conn->instrm);
+    conn->instrm = NULL;
+  }
+
+  if (conn->outstrm != NULL) {
+    pr_netio_close(conn->outstrm);
+    conn->outstrm = NULL;
+  }
+
+  if (conn->listen_fd != -1) {
+    (void) close(conn->listen_fd);
+    conn->listen_fd = -1;
+  }
+
+  if (conn->rfd != -1) {
+    (void) close(conn->rfd);
+    conn->rfd = -1;
+  }
+
+  if (conn->wfd != -1) {
+    (void) close(conn->wfd);
+    conn->wfd = -1;
+  }
 }
 
 static int health_ping_cb(CALLBACK_FRAME) {
@@ -351,8 +391,12 @@ static int health_ping_cb(CALLBACK_FRAME) {
   pr_trace_msg(trace_channel, 12, "response time: %lu ms",
     (unsigned long) (end_ms - start_ms));
 
+  /* Note that while we might want to call pr_inet_close() here, doing so
+   * causes problems.  So we manually close the connection ourselves.
+   */
+  health_close_conn(conn);
+
   destroy_pool(req_pool);
-  pr_inet_close(health->pool, conn);
 
   /* Always restart the timer. */
   return 1;
@@ -366,8 +410,20 @@ static conn_t *health_make_listener(pool *p, pr_netaddr_t *addr, int port) {
   if (conn == NULL) {
     int xerrno = errno;
 
-    pr_trace_msg(trace_channel, 1,
-      "error listening to %s#%d: %s", pr_netaddr_get_ipstr(addr), port,
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "error creating listener for %s#%d: %s", pr_netaddr_get_ipstr(addr), port,
+      strerror(xerrno));
+
+    errno = xerrno;
+    return NULL;
+  }
+
+  res = pr_inet_listen(p, conn, 5, 0);
+  if (res < 0) {
+    int xerrno = errno;
+
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "error listening on %s#%d: %s", pr_netaddr_get_ipstr(addr), port,
       strerror(xerrno));
 
     errno = xerrno;
@@ -389,6 +445,12 @@ struct health *aws_health_listener_create(pool *p,
   pool *health_pool;
   struct health *health;
 
+  /* If we already have a listener, error out now.  (Ugh, singletons!) */
+  if (health_listener != NULL) {
+    errno = EPERM;
+    return NULL;
+  }
+
   health_pool = make_sub_pool(p);
   pr_pool_tag(health_pool, "AWS Health Listener Pool");
 
@@ -409,6 +471,7 @@ struct health *aws_health_listener_create(pool *p,
 
   health->port = port;
   health->uri = pstrdup(health->pool, uri);
+  health->urisz = strlen(uri);
   health->acls = acls;
 
   health->conn = health_make_listener(health->pool, health->addr, health->port);
@@ -428,6 +491,7 @@ struct health *aws_health_listener_create(pool *p,
       strerror(errno));
   }
 
+  health_listener = health;
   return health;
 }
 
