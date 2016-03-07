@@ -32,6 +32,10 @@ struct err_info {
   const char *err_name;
   size_t err_namelen;
   unsigned int err_code;
+
+  /* Consider adding a notes table here, for additional service-specific
+   * information?
+   */
 };
 
 /* XXX How can/should we keep the error strings for the different AWS services
@@ -39,6 +43,21 @@ struct err_info {
  * "InvalidGroup.NotFound".  The _caller_ knows which service they contacted
  * to receive the error, but that information is not currently provided to
  * this Error API for looking up the corresponding code.
+ *
+ * Could do this by having service-specific error get_code/get_name
+ * functions, such as "aws_ec2_error_get_code".  That function would first
+ * do the lookup of EC2-specific error strings, and only then fallback to
+ * this general Error API.
+ *
+ * The errors below are, for example, EC2-specific:
+ *
+ *  http://docs.aws.amazon.com/AWSEC2/latest/APIReference/errors-overview.html
+ *
+ * SQS provides errrors with code, message, detail, and type:
+ *
+ *  http://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/UnderstandingResponses.html#UnderstandingResponses-structure-of-an-error-response
+ *
+ * And Route53's error might look different, too.
  */
 
 static struct err_info errs[] = {
