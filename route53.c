@@ -25,6 +25,7 @@
 #include "mod_aws.h"
 #include "http.h"
 #include "instance.h"
+#include "xml.h"
 #include "error.h"
 #include "sign.h"
 #include "route53.h"
@@ -131,7 +132,7 @@ static int route53_get(pool *p, void *http, const char *path,
   (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_ACCEPT),
     "*/*", 0);
 
-  iso_datesz = 16;
+  iso_datesz = 18;
   iso_date = pcalloc(p, iso_datesz + 1);
   (void) strftime(iso_date, iso_datesz, "%Y%m%dT%H%M%SZ", gmt_tm);
 
@@ -295,6 +296,140 @@ static size_t route53_resp_cb(char *data, size_t item_sz, size_t item_count,
 
   memcpy(ptr, data, datasz);
   return datasz;
+}
+
+static array_header *parse_ipranges_xml(pool *p, void *parent, const char *name,
+    size_t name_len) {
+  void *elt;
+  unsigned long count = 0;
+  array_header *ranges;
+  pool *tmp_pool;
+
+  ranges = make_array(p, 0, sizeof(pr_netacl_t **));
+
+  (void) aws_xml_elt_get_child_count(p, parent, &count);
+  if (count == 0) {
+    pr_trace_msg(trace_channel, 5,
+      "expected multiple IP ranges, found %lu", count);
+    return ranges;
+  }
+
+  tmp_pool = make_sub_pool(p);
+  elt = aws_xml_elt_get_child(p, parent, name, name_len);
+  while (elt != NULL) {
+    char *elt_text;
+    pr_netacl_t *range;
+
+    pr_signals_handle();
+
+    elt_text = (char *) aws_xml_elt_get_text(tmp_pool, elt);
+    range = pr_netacl_create(p, elt_text);
+    if (range != NULL) {
+      *((pr_netacl_t **) push_array(ranges)) = range;
+
+    } else {
+      pr_trace_msg(trace_channel, 8,
+        "error parsing '%s' as netacl: %s", elt_text, strerror(errno));
+    }
+
+    elt = aws_xml_elt_get_next(p, elt);
+  }
+
+  destroy_pool(tmp_pool);
+  return ranges;
+}
+
+static array_header *parse_ranges_xml(pool *p, const char *data,
+    size_t datasz) {
+  void *doc, *root, *info;
+  array_header *ranges = NULL;
+  const char *elt_name;
+  size_t elt_namelen;
+
+  doc = aws_xml_doc_parse(p, data, (int) datasz);
+  if (doc == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  root = aws_xml_doc_get_root_elt(p, doc);
+  if (root == NULL) {
+    /* Malformed XML. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  elt_name = aws_xml_elt_get_name(p, root, &elt_namelen);
+  if (elt_namelen != 26 ||
+      strncmp(elt_name, "GetCheckerIpRangesResponse",
+        elt_namelen + 1) != 0) {
+
+    /* Not the root element we expected. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  info = aws_xml_elt_get_child(p, root, "CheckerIpRanges", 15);
+  if (info == NULL) {
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  ranges = parse_ipranges_xml(p, info, "member", 6);
+
+  aws_xml_doc_free(p, doc);
+  return ranges;
+}
+
+array_header *aws_route53_get_healthcheck_ranges(pool *p,
+    struct route53_conn *route53) {
+  int res;
+  const char *path;
+  pool *req_pool;
+  array_header *query_params, *ranges = NULL;
+
+  req_pool = make_sub_pool(route53->pool);
+  pr_pool_tag(req_pool, "Route53 Request Pool");
+  route53->req_pool = req_pool;
+
+  path = "/2013-04-01/checkeripranges";
+
+  query_params = make_array(req_pool, 0, sizeof(char *));
+
+  res = route53_get(p, route53->http, path, query_params, route53_resp_cb,
+    route53);
+  if (res == 0) {
+    pr_trace_msg(trace_channel, 19,
+      "healthcheck ranges response: '%.*s'", (int) route53->respsz,
+      route53->resp);
+    ranges = parse_ranges_xml(p, route53->resp, route53->respsz);
+    if (ranges == NULL) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "error parsing healthcheck ranges XML response: %s", strerror(errno));
+    }
+  }
+
+  if (ranges != NULL) {
+    register unsigned int i;
+    pr_netacl_t **acls;
+
+    pr_trace_msg(trace_channel, 15,
+      "received healthcheck range count = %d", ranges->nelts);
+    acls = ranges->elts;
+    for (i = 0; i < ranges->nelts; i++) {
+      pr_trace_msg(trace_channel, 15,
+        "  range: %s", pr_netacl_get_str(req_pool, acls[i]));
+    }
+  }
+
+  clear_response(route53);
+  return ranges;
 }
 
 int aws_route53_get_hosted_zones(pool *p, struct route53_conn *route53,
