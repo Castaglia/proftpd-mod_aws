@@ -25,7 +25,6 @@
 #include "mod_aws.h"
 #include "http.h"
 #include "instance.h"
-#include "xml.h"
 #include "error.h"
 #include "sign.h"
 #include "route53.h"
@@ -193,12 +192,18 @@ static int route53_get(pool *p, void *http, const char *path,
           strstr(content_type, AWS_HTTP_CONTENT_TYPE_XML) != NULL) {
         struct aws_error *err;
 
-        err = aws_xml_parse_error(p, route53->resp, route53->respsz);
+        err = aws_error_parse_xml(p, route53->resp, route53->respsz);
         if (err == NULL) {
           pr_trace_msg(trace_channel, 3,
             "unable to parse XML error response: %s", strerror(errno));
 
         } else {
+          if (err->err_code == AWS_ERROR_CODE_UNKNOWN) {
+            pr_trace_msg(trace_channel, 9,
+              "received error response: '%.*s'", (int) route53->respsz,
+              route53->resp);
+          }
+
           (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
             "received error: code = %s (%u), msg = %s, req_id = %s",
             aws_error_get_name(err->err_code), err->err_code, err->err_msg,
