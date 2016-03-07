@@ -31,6 +31,7 @@
 #include "xml.h"
 #include "instance.h"
 #include "ec2.h"
+#include "health.h"
 
 /* How long (in secs) to wait to connect to real server? */
 #define AWS_CONNECT_DEFAULT_TIMEOUT	3
@@ -64,6 +65,15 @@ static unsigned long aws_request_timeout_secs = AWS_REQUEST_DEFAULT_TIMEOUT;
 
 /* For holding onto the EC2 instance metadata for e.g. session processes' use */
 static const struct aws_info *instance_info = NULL;
+
+static const char *aws_health_addr = NULL;
+static int aws_health_port = 8080;
+static const char *aws_health_uri = "/health";
+
+/* For holding onto the health listener, for shutting down when the daemon
+ * is stopped.
+ */
+struct health *instance_health = NULL;
 
 static const char *trace_channel = "aws";
 
@@ -564,6 +574,49 @@ MODRET set_awsengine(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
+/* usage: AWSHealthCheck uri [address] [port] */
+MODRET set_awshealthcheck(cmd_rec *cmd) {
+  if (cmd->argc < 2 ||
+      cmd->argc > 4) {
+    CONF_ERROR(cmd, "wrong number of parameters");
+  }
+
+  CHECK_CONF(cmd, CONF_ROOT);
+
+  aws_health_uri = pstrdup(aws_pool, (char *) cmd->argv[1]);
+
+  if (cmd->argc == 3) {
+    const char *name;
+    pr_netaddr_t *addr;
+
+    name = cmd->argv[2];
+    addr = pr_netaddr_get_addr(cmd->tmp_pool, name, NULL);
+    if (addr == NULL) {
+      CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "unable to resolve '", name,
+        "': ", strerror(errno), NULL));
+    }
+
+    aws_health_addr = pstrdup(aws_pool, name);
+  }
+
+  if (cmd->argc == 4) {
+    const char *port;
+    int portno;
+
+    port = cmd->argv[3];
+    portno = atoi(port);
+    if (portno < 0 ||
+        portno > 65535) {
+      CONF_ERROR(cmd, pstrcat(cmd->tmp_pool,
+        "invalid port (", port, ")", NULL));
+    }
+
+    aws_health_port = portno;
+  }
+
+  return PR_HANDLED(cmd);
+}
+
 /* usage: AWSLog path */
 MODRET set_awslog(cmd_rec *cmd) {
   CHECK_ARGS(cmd, 1);
@@ -691,6 +744,15 @@ static void aws_restart_ev(const void *event_data, void *user_data) {
 
 static void aws_shutdown_ev(const void *event_data, void *user_data) {
   /* XXX Unregister from ELB, or Route53 */
+
+  if (instance_health != NULL) {
+    if (aws_health_listener_destroy(aws_pool, instance_health) < 0) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "error destroying healthcheck listener: %s", strerror(errno));
+    }
+
+    instance_health = NULL;
+  }
 
   aws_http_free();
   aws_xml_free();
@@ -913,6 +975,7 @@ static int aws_sess_init(void) {
 static conftable aws_conftab[] = {
   { "AWSCACertificateFile",	set_awscacertfile,	NULL },
   { "AWSEngine",		set_awsengine,		NULL },
+  { "AWSHealthCheck",		set_awshealthcheck,	NULL },
   { "AWSLog",			set_awslog,		NULL },
   { "AWSOptions",		set_awsoptions,		NULL },
   { "AWSTimeoutConnect",	set_awstimeoutconnect,	NULL },
