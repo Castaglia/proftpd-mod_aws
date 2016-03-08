@@ -754,6 +754,8 @@ static void aws_restart_ev(const void *event_data, void *user_data) {
 
   aws_http_free();
 
+  /* Note: We explicitly do NOT call aws_xml_free() here. */
+
   res = aws_http_init(aws_pool, NULL, &http_details);
   if (res < 0) {
     pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
