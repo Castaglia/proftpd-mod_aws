@@ -2,7 +2,6 @@
 NEXT:
   per-vhost:
 
-
   Retries
     RequestLimitExceeded (parse N seconds out of error message?)
 
@@ -46,9 +45,6 @@ NEXT:
       has a max of 10 messages; if count is more than 10, then we'd do
       multiple SendMessageBatch calls.  Max payload size is 256KB.
 
-
-  Route53
-    HTTP "/ping" health check listener.
 
 Reading material:
 
@@ -239,3 +235,26 @@ Or maybe libcaws (C-AWS)?
 
   Add "test" ftp client connect, to public IP, to see if can read own
   banner?
+
+NOTES: the HTTP healthcheck listener, IFF for Route53, will need to listen
+on the instance _public_ IP address.  Why?  Looks like the Route53 API
+ranges from which its healthchecks originate are public addresses:
+
+2016-03-07 23:54:30,197 [19749] <aws.route53:15>: received healthcheck range count = 16
+2016-03-07 23:54:30,197 [19749] <aws.route53:15>:   range: 54.183.255.128/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.228.16.0/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.232.40.64/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.241.32.64/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.243.31.192/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.244.52.192/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.245.168.0/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.248.220.0/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.250.253.192/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.251.31.128/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.252.79.128/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.252.254.192/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 54.255.254.192/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 107.23.255.0/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 176.34.159.192/26 <IP address mask, 26-bit mask>
+2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 177.71.207.128/26 <IP address mask, 26-bit mask>
+
