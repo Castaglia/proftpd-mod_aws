@@ -454,6 +454,7 @@ static struct route53_hosted_zone *parse_hostzone_xml(pool *p, void *parent) {
     }
   }
 
+  /* The values of these <Name> elements look like: "example.com." */
   elt = aws_xml_elt_get_child(p, parent, "Name", 4);
   if (elt != NULL) {
     zone->domain_name = (char *) aws_xml_elt_get_text(zone_pool, elt);
@@ -496,6 +497,7 @@ static struct route53_hosted_zone *parse_hostzone_fqdn_xml(pool *p,
     void *parent, const char *name, size_t namelen, const char *fqdn) {
   void *kid;
   unsigned long count;
+  size_t fqdnsz;
   struct route53_hosted_zone *fqdn_zone = NULL;
 
   (void) aws_xml_elt_get_child_count(p, parent, &count);
@@ -506,6 +508,16 @@ static struct route53_hosted_zone *parse_hostzone_fqdn_xml(pool *p,
     return NULL;
   }
 
+  /* The <Name> elements contain zone names which end in a period.  Make
+   * sure the given FQDN ends with a period as well, for better/easier
+   * comparison.
+   */
+  fqdnsz = strlen(fqdn);
+  if (fqdn[fqdnsz-1] != '.') {
+    fqdn = pstrcat(p, fqdn, ".", NULL);
+    fqdnsz += 1;
+  }
+
   kid = aws_xml_elt_get_child(p, parent, name, namelen);
   while (kid != NULL) {
     struct route53_hosted_zone *zone;
@@ -514,15 +526,23 @@ static struct route53_hosted_zone *parse_hostzone_fqdn_xml(pool *p,
 
     zone = parse_hostzone_xml(p, kid);
     if (zone != NULL) {
-(void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-  "checking hosted zone (domain name = %s, zone ID = %s) against requested FQDN %s", zone->domain_name, zone->zone_id, fqdn);
-/* XXX Match this zone against the requested fqdn */
+      size_t domain_namesz;
+
+      domain_namesz = strlen(zone->domain_name);
+      if (pr_strnrstr(fqdn, fqdnsz, zone->domain_name,
+          domain_namesz, 0) == TRUE) {
+        fqdn_zone = zone;
+        break;
+      }
     }
 
     kid = aws_xml_elt_get_next(p, kid);
   }
 
-  errno = ENOSYS;
+  if (fqdn_zone == NULL) {
+    errno = ENOENT;
+  }
+
   return fqdn_zone;
 }
 
