@@ -9,7 +9,7 @@ NEXT:
     Need to know the hosted zone, and resource record, on which to act.
     Difference between public and private zones?
 
-    + GET ListHostedZones
+    + GET ListHostedZonesByName
       needed to find the zone ID for a given zone name (and whether it's
        public/private)
       NOTE that given name might be e.g. "example.com", but in the
@@ -27,6 +27,12 @@ NEXT:
      + GetHealthCheck
      + CreateHealthCheck
      + DeleteHealthCheck
+
+    AWSUseDNS name [type]
+      Parse the domain out of the `name` by searching for the first period.
+
+    Example:
+      AWSUseDNS ftp.openbridge.io A
 
   SQS
     AWSLogQueue name [region]
@@ -178,25 +184,6 @@ Reading material:
 
   Importance of running `ntpd`, gotchas
 
-
-Source layout/APIs:
-
-  health.c
-    Basic HTTP server, just to handle HTTP request to "/ping"/"/healthy"
-    (configurable), for Route53/ELB healthchecks.  This lets mod_aws consult
-    load/disk before returning 200 or not.
-
-Existing libraries/SDKs:
-
-  https://aws.amazon.com/blogs/aws/introducing-the-aws-sdk-for-c/
-    C++, not C.
-
-  https://github.com/ceph/libs3
-    S3 only.
-
-  https://github.com/vladistan/aws4c
-  http://blog.v-lad.org/archives/13
-    Good starting point, needs fleshing out.
 
 Eventually extract my own C code into a libclaws library ("C Library for AWS"),
 not be confused with Claws Mail:
