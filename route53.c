@@ -775,6 +775,7 @@ static struct route53_rrset *parse_rrsets_fqdn_xml(pool *p, void *parent,
     const char *name, size_t namelen, const char *fqdn) {
   void *kid;
   unsigned long count;
+  size_t fqdnsz;
   struct route53_rrset *fqdn_rrset = NULL;
 
   (void) aws_xml_elt_get_child_count(p, parent, &count);
@@ -785,6 +786,16 @@ static struct route53_rrset *parse_rrsets_fqdn_xml(pool *p, void *parent,
     return NULL;
   }
 
+  /* The <Name> elements contain zone names which end in a period.  Make
+   * sure the given FQDN ends with a period as well, for better/easier
+   * comparison.
+   */
+  fqdnsz = strlen(fqdn);
+  if (fqdn[fqdnsz-1] != '.') {
+    fqdn = pstrcat(p, fqdn, ".", NULL);
+    fqdnsz += 1;
+  }
+
   kid = aws_xml_elt_get_child(p, parent, name, namelen);
   while (kid != NULL) {
     struct route53_rrset *rrset;
@@ -793,6 +804,7 @@ static struct route53_rrset *parse_rrsets_fqdn_xml(pool *p, void *parent,
 
     rrset = parse_rrset_xml(p, kid);
     if (rrset != NULL) {
+
       /* Only look for A, AAAA, CNAME rrsets. */
       if (rrset->type != AWS_ROUTE53_RRSET_TYPE_A &&
           rrset->type != AWS_ROUTE53_RRSET_TYPE_AAAA &&
@@ -801,7 +813,10 @@ static struct route53_rrset *parse_rrsets_fqdn_xml(pool *p, void *parent,
         continue;
       }
 
-(void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "get_rrset: checking FQDN '%s' against rrset domain name = %s, type = %u", fqdn, rrset->domain_name, rrset->type);
+      if (strncmp(rrset->domain_name, fqdn, fqdnsz) == 0) {
+        fqdn_rrset = rrset;
+        break;
+      }
     }
 
     kid = aws_xml_elt_get_next(p, kid);
