@@ -60,14 +60,22 @@
 #define AWS_HTTP_CONTENT_TYPE_HTML			"text/html"
 #define AWS_HTTP_CONTENT_TYPE_XML			"application/xml"
 
+/* HTTP Date format buffer size; contains space for 16 characters
+ * (YYYYMMDDThhmmssZ) plus the trailing NUL.
+ */
+#define AWS_HTTP_DATE_ISO8601_BUFSZ			18
+
 void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
   unsigned long max_request_secs, const char *cacerts);
 int aws_http_destroy(pool *p, void *http);
 
 /* Return a table populated with the default request headers: Accept,
  * User-Agent, etc.
+ *
+ * If a struct tm * is provided, a properly formatted X-Amz-Date header
+ * is also automatically provided.
  */
-pr_table_t *aws_http_default_headers(pool *p);
+pr_table_t *aws_http_default_headers(pool *p, struct tm *gmt_tm);
 
 const char *aws_http_urldecode(pool *p, void *http, const char *item,
   size_t item_len, size_t *decoded_len);

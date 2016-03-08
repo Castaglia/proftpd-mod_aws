@@ -38,7 +38,7 @@ static pool *http_resp_pool = NULL;
 
 static const char *trace_channel = "aws.http";
 
-pr_table_t *aws_http_default_headers(pool *p) {
+pr_table_t *aws_http_default_headers(pool *p, struct tm *gmt_tm) {
   pr_table_t *http_headers;
 
   if (p == NULL) {
@@ -51,6 +51,18 @@ pr_table_t *aws_http_default_headers(pool *p) {
     "*/*", 0);
   (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_USER_AGENT),
     MOD_AWS_VERSION, 0);
+
+  if (gmt_tm != NULL) {
+    char *iso_date;
+    size_t iso_datesz;
+
+    iso_datesz = AWS_HTTP_DATE_ISO8601_BUFSZ;
+    iso_date = pcalloc(p, iso_datesz);
+    (void) strftime(iso_date, iso_datesz, "%Y%m%dT%H%M%SZ", gmt_tm);
+
+    (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_X_AMZ_DATE),
+      iso_date, 0);
+  }
 
   return http_headers;
 }

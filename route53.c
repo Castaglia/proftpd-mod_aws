@@ -92,9 +92,8 @@ static int route53_get(pool *p, void *http, const char *path,
   int res;
   long resp_code;
   const char *content_type = NULL;
-  char *base_url, *host = NULL, *iso_date, *url = NULL;
+  char *base_url, *host = NULL, *url = NULL;
   time_t request_time;
-  size_t iso_datesz;
   struct tm *gmt_tm;
 
   if (route53->iam_info == NULL) {
@@ -127,15 +126,8 @@ static int route53_get(pool *p, void *http, const char *path,
   /* The Route53 API docs are specific about the Host header value. */
   host = pstrcat(p, aws_service, ".", route53->domain, NULL);
 
-  http_headers = aws_http_default_headers(p);
+  http_headers = aws_http_default_headers(p, gmt_tm);
   (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_HOST), host, 0);
-
-  iso_datesz = 18;
-  iso_date = pcalloc(p, iso_datesz + 1);
-  (void) strftime(iso_date, iso_datesz, "%Y%m%dT%H%M%SZ", gmt_tm);
-
-  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_X_AMZ_DATE),
-    iso_date, 0);
 
   base_url = pstrcat(p, "https://", host, NULL);
 
