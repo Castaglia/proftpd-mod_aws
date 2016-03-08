@@ -28,6 +28,7 @@
 #ifndef MOD_AWS_ROUTE53_H
 #define MOD_AWS_ROUTE53_H
 
+/* Route53 Connections */
 struct route53_conn {
   pool *pool;
 
@@ -44,6 +45,17 @@ struct route53_conn {
   size_t respsz;
 };
 
+/* Route53 Hosted Zones */
+struct route53_hosted_zone {
+  pool *pool;
+
+  const char *zone_id;
+  const char *domain_name;
+  const char *reference;
+  const char *comment;
+  int private;
+};
+
 struct route53_conn *aws_route53_conn_alloc(pool *p,
   unsigned long max_connect_secs, unsigned long max_request_secs,
   const char *cacerts, const char *domain, const char *iam_role);
@@ -56,7 +68,7 @@ int aws_route53_conn_destroy(pool *p, struct route53_conn *route53);
 array_header *aws_route53_get_healthcheck_ranges(pool *p,
   struct route53_conn *route53);
 
-int aws_route53_get_hosted_zones(pool *p, struct route53_conn *route53,
-  const char *account_id);
+struct route53_hosted_zone *aws_route53_get_hosted_zones(pool *p,
+  struct route53_conn *route53, const char *fqdn);
 
 #endif /* MOD_AWS_ROUTE53_H */

@@ -165,6 +165,10 @@ static int route53_get(pool *p, void *http, const char *path,
  * instance API), etc.
  */
 
+/* XXX NOTE: how to get the x-amz-request-id response header from the
+ * Route53 responses, given the current HTTP API?
+ */
+
   res = aws_http_get(p, http, url, http_headers, resp_body, (void *) route53,
     &resp_code, &content_type);
   if (res < 0) {
@@ -422,12 +426,185 @@ array_header *aws_route53_get_healthcheck_ranges(pool *p,
   return ranges;
 }
 
-int aws_route53_get_hosted_zones(pool *p, struct route53_conn *route53,
-    const char *account_id) {
+static struct route53_hosted_zone *parse_hostzone_xml(pool *p, void *parent) {
+  void *elt, *item;
+  pool *zone_pool;
+  struct route53_hosted_zone *zone;
+
+  zone_pool = make_sub_pool(p);
+  zone = pcalloc(zone_pool, sizeof(struct route53_hosted_zone));
+  zone->pool = zone_pool;
+
+  elt = aws_xml_elt_get_child(p, parent, "Id", 2);
+  if (elt != NULL) {
+    char *elt_text;
+
+    elt_text = (char *) aws_xml_elt_get_text(zone_pool, elt);
+    if (elt_text != NULL) {
+      char *ptr;
+
+      ptr = elt_text;
+
+      /* Skip past the "/hostedzone/" prefix. */
+      if (strncmp(ptr, "/hostedzone/", 12) == 0) {
+        ptr += 12;
+      }
+
+      zone->zone_id = ptr;
+    }
+  }
+
+  elt = aws_xml_elt_get_child(p, parent, "Name", 4);
+  if (elt != NULL) {
+    zone->domain_name = (char *) aws_xml_elt_get_text(zone_pool, elt);
+  }
+
+  elt = aws_xml_elt_get_child(p, parent, "CallerReference", 15);
+  if (elt != NULL) {
+    zone->reference = (char *) aws_xml_elt_get_text(zone_pool, elt);
+  }
+
+  item = aws_xml_elt_get_child(p, parent, "Config", 6);
+  if (item != NULL) {
+    elt = aws_xml_elt_get_child(p, item, "Comment", 8);
+    if (elt != NULL) {
+      zone->comment = (char *) aws_xml_elt_get_text(zone_pool, elt);
+    }
+
+    elt = aws_xml_elt_get_child(p, item, "PrivateZone", 11);
+    if (elt != NULL) {
+      char *elt_text;
+      int private;
+
+      elt_text = (char *) aws_xml_elt_get_text(zone_pool, elt);
+      private = pr_str_is_boolean(elt_text);
+      if (private < 0) {
+        pr_trace_msg(trace_channel, 5,
+          "error parsing <PrivateZone> value '%s' as Boolean: %s", elt_text,
+          strerror(errno));
+
+      } else {
+        zone->private = private;
+      }
+    }
+  }
+
+  return zone;
+}
+
+static struct route53_hosted_zone *parse_hostzone_fqdn_xml(pool *p,
+    void *parent, const char *name, size_t namelen, const char *fqdn) {
+  void *kid;
+  unsigned long count;
+  struct route53_hosted_zone *fqdn_zone = NULL;
+
+  (void) aws_xml_elt_get_child_count(p, parent, &count);
+  if (count == 0) {
+    pr_trace_msg(trace_channel, 5,
+      "expected multiple hosted zones, found %lu", count);
+    errno = ENOENT;
+    return NULL;
+  }
+
+  kid = aws_xml_elt_get_child(p, parent, name, namelen);
+  while (kid != NULL) {
+    struct route53_hosted_zone *zone;
+
+    pr_signals_handle();
+
+    zone = parse_hostzone_xml(p, kid);
+    if (zone != NULL) {
+(void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+  "checking hosted zone (domain name = %s, zone ID = %s) against requested FQDN %s", zone->domain_name, zone->zone_id, fqdn);
+/* XXX Match this zone against the requested fqdn */
+    }
+
+    kid = aws_xml_elt_get_next(p, kid);
+  }
+
+  errno = ENOSYS;
+  return fqdn_zone;
+}
+
+static struct route53_hosted_zone *parse_hostedzones_xml(pool *p,
+    const char *data, size_t datasz, const char *fqdn) {
+  void *doc, *root, *info, *elt;
+  struct route53_hosted_zone *zone;
+  const char *elt_name;
+  size_t elt_namelen;
+
+  doc = aws_xml_doc_parse(p, data, (int) datasz);
+  if (doc == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  root = aws_xml_doc_get_root_elt(p, doc);
+  if (root == NULL) {
+    /* Malformed XML. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  elt_name = aws_xml_elt_get_name(p, root, &elt_namelen);
+  if (elt_namelen != 23 ||
+      strncmp(elt_name, "ListHostedZonesResponse",
+        elt_namelen + 1) != 0) {
+
+    /* Not the root element we expected. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  elt = aws_xml_elt_get_child(p, root, "IsTruncated", 11);
+  if (elt != NULL) {
+    char *elt_text;
+    int truncated;
+
+    elt_text = (char *) aws_xml_elt_get_text(p, elt);
+    truncated = pr_str_is_boolean(elt_text);
+    if (truncated < 0) {
+      pr_trace_msg(trace_channel, 5,
+        "error parsing <IsTruncated> value '%s' as Boolean: %s", elt_text,
+        strerror(errno));
+
+    } else {
+      pr_trace_msg(trace_channel, 19,
+        "hosted zones response: truncated = %s", truncated ? "true" : "false");
+    }
+
+  } else {
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  info = aws_xml_elt_get_child(p, root, "HostedZones", 11);
+  if (info == NULL) {
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  zone = parse_hostzone_fqdn_xml(p, info, "HostedZone", 10, fqdn);
+  aws_xml_doc_free(p, doc);
+
+  return zone;
+}
+
+struct route53_hosted_zone *aws_route53_get_hosted_zone(pool *p,
+    struct route53_conn *route53, const char *fqdn) {
   int res;
   const char *path;
   pool *req_pool;
   array_header *query_params;
+  struct route53_hosted_zone *zone = NULL;
 
   req_pool = make_sub_pool(route53->pool);
   pr_pool_tag(req_pool, "Route53 Request Pool");
@@ -439,18 +616,56 @@ int aws_route53_get_hosted_zones(pool *p, struct route53_conn *route53,
    * AWS docs, the answer is "yes".
    */
 
-  query_params = make_array(req_pool, 1, sizeof(char *));
+  query_params = make_array(req_pool, 0, sizeof(char *));
 
   res = route53_get(p, route53->http, path, query_params, route53_resp_cb,
     route53);
   if (res == 0) {
-/* XXX Parse response data */
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+    struct route53_hosted_zone *found;
+
+    pr_trace_msg(trace_channel, 19,
       "hosted zones response: '%.*s'", (int) route53->respsz, route53->resp);
+
+    found = parse_hostedzones_xml(req_pool, route53->resp, route53->respsz,
+      fqdn);
+    if (found == NULL) {
+      if (errno != ENOENT) {
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "error parsing hosted zones XML response: %s", strerror(errno));
+      }
+
+    } else {
+      pool *zone_pool;
+
+      /* Make a duplicate of the found data. */
+      zone_pool = make_sub_pool(p);
+      pr_pool_tag(zone_pool, "AWS Route53 Hosted Zone Pool");
+
+      zone = pcalloc(zone_pool, sizeof(struct route53_hosted_zone));
+      zone->pool = zone_pool;
+      zone->zone_id = pstrdup(zone->pool, found->zone_id);
+      zone->domain_name = pstrdup(zone->pool, found->domain_name);
+
+      if (found->reference != NULL) {
+        zone->reference = pstrdup(zone->pool, found->reference);
+      }
+
+      if (found->comment != NULL) {
+        zone->comment = pstrdup(zone->pool, found->comment);
+      }
+
+      zone->private = found->private;
+    }
+  }
+
+  if (zone != NULL) {
+    pr_trace_msg(trace_channel, 15,
+      "recieved hosted zone: zone ID = %s, domain name = %s, reference = %s, "
+      "comment = %s, private = %s", zone->zone_id, zone->domain_name,
+      zone->reference ? zone->reference : "N/A",
+      zone->comment ? zone->comment : "N/A", zone->private ? "true" : "false");
   }
 
   clear_response(route53);
-
-  errno = EINVAL;
-  return -1;
+  return zone;
 }

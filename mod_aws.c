@@ -76,6 +76,9 @@ static const char *aws_health_uri = "/health";
  */
 struct health *instance_health = NULL;
 
+/* For handling Route53 registrations. */
+static const char *aws_route53_fqdn = NULL;
+
 static const char *trace_channel = "aws";
 
 static pr_netaddr_t *get_addr(pool *p, const char *data, size_t datasz) {
@@ -694,6 +697,25 @@ MODRET set_awstimeoutrequest(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
+/* usage: AWSUseDNS fqdn [type] */
+MODRET set_awsusedns(cmd_rec *cmd) {
+  char *fqdn;
+
+  CHECK_ARGS(cmd, 1);
+  CHECK_CONF(cmd, CONF_ROOT);
+
+  fqdn = cmd->argv[1];
+
+  ptr = strchr(fqdn, '.');
+  if (ptr == NULL) {
+    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool,
+      "not a fully-qualified domain name: ", fqdn, NULL));
+  }
+
+  aws_route53_fqdn = pstrdrup(aws_pool, fqdn);
+  return PR_HANDLED(cmd);
+}
+
 /* Event handlers
  */
 
@@ -991,6 +1013,7 @@ static conftable aws_conftab[] = {
   { "AWSOptions",		set_awsoptions,		NULL },
   { "AWSTimeoutConnect",	set_awstimeoutconnect,	NULL },
   { "AWSTimeoutRequest",	set_awstimeoutrequest,	NULL },
+  { "AWSUseDNS",		set_awsusedns,		NULL },
 
   { NULL }
 };
