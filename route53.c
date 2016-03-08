@@ -127,10 +127,8 @@ static int route53_get(pool *p, void *http, const char *path,
   /* The Route53 API docs are specific about the Host header value. */
   host = pstrcat(p, aws_service, ".", route53->domain, NULL);
 
-  http_headers = pr_table_nalloc(p, 0, 2);
+  http_headers = aws_http_default_headers(p);
   (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_HOST), host, 0);
-  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_ACCEPT),
-    "*/*", 0);
 
   iso_datesz = 18;
   iso_date = pcalloc(p, iso_datesz + 1);

@@ -104,11 +104,17 @@ static const char *create_canon_uri(pool *p, void *http, const char *uri) {
     return uri;
   }
 
+#if 0
+  /* This may not be needed. In fact, it's a hindrance when the given
+   * URI is longer than one character.
+   */
   canon_uri = aws_http_urlencode(p, http, uri, urisz);
   if (canon_uri == NULL) {
     return NULL;
   }
+#endif
 
+  canon_uri = pstrdup(p, uri);
   return canon_uri;
 }
 
