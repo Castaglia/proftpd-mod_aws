@@ -31,6 +31,7 @@
 #include "xml.h"
 #include "instance.h"
 #include "ec2.h"
+#include "route53.h"
 #include "health.h"
 
 /* How long (in secs) to wait to connect to real server? */
@@ -771,6 +772,7 @@ static void aws_shutdown_ev(const void *event_data, void *user_data) {
 static void aws_startup_ev(const void *event_data, void *user_data) {
   server_rec *s = NULL;
   struct ec2_conn *ec2 = NULL;
+  struct route53_conn *route53 = NULL;
   pr_table_t *security_groups = NULL;
 
   if (aws_engine == FALSE) {
@@ -832,6 +834,9 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
       aws_request_timeout_secs, aws_cacerts, instance_info->region, domain,
       instance_info->api_version, iam_role);
 
+    route53 = aws_route53_conn_alloc(aws_pool, aws_connect_timeout_secs,
+      aws_request_timeout_secs, aws_cacerts, domain, iam_role);
+
     if (instance_info->security_groups != NULL) {
       const char *vpc_id = NULL;
 
@@ -866,6 +871,10 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 
   if (ec2 != NULL) {
     aws_ec2_conn_destroy(aws_pool, ec2);
+  }
+
+  if (route53 != NULL) {
+    aws_route53_conn_destroy(aws_pool, route53);
   }
 
   /* XXX Watch out for any fds that should NOT be opened (0, 1, 2), but
