@@ -793,6 +793,14 @@ static struct route53_rrset *parse_rrsets_fqdn_xml(pool *p, void *parent,
 
     rrset = parse_rrset_xml(p, kid);
     if (rrset != NULL) {
+      /* Only look for A, AAAA, CNAME rrsets. */
+      if (rrset->type != AWS_ROUTE53_RRSET_TYPE_A &&
+          rrset->type != AWS_ROUTE53_RRSET_TYPE_AAAA &&
+          rrset->type != AWS_ROUTE53_RRSET_TYPE_CNAME) {
+        kid = aws_xml_elt_get_next(p, kid);
+        continue;
+      }
+
 (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "get_rrset: checking FQDN '%s' against rrset domain name = %s, type = %u", fqdn, rrset->domain_name, rrset->type);
     }
 
@@ -882,9 +890,8 @@ struct route53_rrset *aws_route53_get_rrset(pool *p,
 
   query_params = make_array(req_pool, 0, sizeof(char *));
 
-/* XXX Should we use name and/or type query params?  What ordering of name
- * should we use?
- */
+  *((char **) push_array(query_params)) = pstrcat(req_pool,
+    "name=", fqdn, NULL);
 
   res = route53_get(p, route53->http, path, query_params, route53_resp_cb,
     route53);
