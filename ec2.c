@@ -503,7 +503,7 @@ static struct ec2_security_group *parse_sg_xml(pool *p, const char *data,
   (void) aws_xml_elt_get_child_count(p, info, &count);
   if (count != 1) {
     pr_trace_msg(trace_channel, 5,
-      "expected 1 error element, found %lu", count);
+      "expected 1 security group element, found %lu", count);
   }
 
   item = aws_xml_elt_get_child(p, info, "item", 4);

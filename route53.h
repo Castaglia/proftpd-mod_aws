@@ -49,6 +49,13 @@ struct route53_conn *aws_route53_conn_alloc(pool *p,
   const char *cacerts, const char *domain, const char *iam_role);
 int aws_route53_conn_destroy(pool *p, struct route53_conn *route53);
 
+/* Returns a list of ACLs comprising the IP address ranges from which Route53
+ * healthcheck requests will come.  Useful for implementing a known whitelist
+ * for checking healthcheck connection requests.
+ */
+array_header *aws_route53_get_healthcheck_ranges(pool *p,
+  struct route53_conn *route53);
+
 int aws_route53_get_hosted_zones(pool *p, struct route53_conn *route53,
   const char *account_id);
 

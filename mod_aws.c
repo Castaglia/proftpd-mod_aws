@@ -100,8 +100,9 @@ static void verify_ctrl_port(pool *p, const struct aws_info *info,
   if (security_groups == NULL) {
     /* No SGs to check. */
     pr_trace_msg(trace_channel, 5,
-      "unable to verify whether Port %u for vhost '%s' allowed by security "
-      "groups: no security groups found", s->ServerPort, s->ServerName);
+      "unable to verify whether Port %u for <VirtualHost> '%s' allowed "
+      "by security groups: no security groups found", s->ServerPort,
+      s->ServerName);
     return;
   }
 
@@ -133,8 +134,8 @@ static void verify_ctrl_port(pool *p, const struct aws_info *info,
           /* This SG allows access for our control port.  Good. */
 
           (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-            "vhost '%s' control port %u allowed by security group ID %s (%s)",
-            s->ServerName, s->ServerPort, sg_id, sg->name);
+            "<VirtualHost> '%s' control port %u allowed by security group "
+            "ID %s (%s)", s->ServerName, s->ServerPort, sg_id, sg->name);
           ctrl_port_allowed = TRUE;
           break;
         }
@@ -146,7 +147,7 @@ static void verify_ctrl_port(pool *p, const struct aws_info *info,
 
   if (ctrl_port_allowed == FALSE) {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "vhost '%s' control port %u is NOT ALLOWED by any security group",
+      "<VirtualHost> '%s' control port %u is NOT ALLOWED by any security group",
       s->ServerName, s->ServerPort);
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
       "consider allowing this port using:\n  aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port %u --cidr 0.0.0.0/0",
@@ -176,18 +177,18 @@ static void verify_masq_addr(pool *p, const struct aws_info *info,
     if (pr_netaddr_cmp(masq_addr, public_addr) != 0) {
       /* XXX Automatically correct/adjust this config? */
       (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-        "existing 'MasqueradeAddress %s' for vhost '%s' is INCORRECT",
+        "existing 'MasqueradeAddress %s' for <VirtualHost> '%s' is INCORRECT",
         masq_name, s->ServerName);
       (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-        "consider using 'MasqueradeAddress %s' instead for vhost '%s' for "
-        "passive data transfers", pr_netaddr_get_ipstr(public_addr),
+        "consider using 'MasqueradeAddress %s' instead for <VirtualHost> '%s' "
+        "for passive data transfers", pr_netaddr_get_ipstr(public_addr),
         s->ServerName);
     }
 
   } else {
     /* XXX Automatically correct/add this config? */
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "consider adding 'MasqueradeAddress %s' to vhost '%s' for "
+      "consider adding 'MasqueradeAddress %s' to <VirtualHost> '%s' for "
       "passive data transfers", pr_netaddr_get_ipstr(public_addr),
       s->ServerName);
   }
@@ -205,7 +206,8 @@ static void verify_pasv_ports(pool *p, const struct aws_info *info,
   c = find_config(s->conf, CONF_PARAM, "SFTPEngine", FALSE);
   if (c != NULL) {
     pr_trace_msg(trace_channel, 5,
-      "vhost '%s' uses mod_sftp, skipping PassivePorts check", s->ServerName);
+      "<VirtualHost> '%s' uses mod_sftp, skipping PassivePorts check",
+      s->ServerName);
     return;
   }
 
@@ -215,7 +217,7 @@ static void verify_pasv_ports(pool *p, const struct aws_info *info,
     pasv_max_port = AWS_PASSIVE_PORT_MAX_DEFAULT;
 
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "consider adding 'PassivePorts %d %d' to vhost '%s' for "
+      "consider adding 'PassivePorts %d %d' to <VirtualHost> '%s' for "
       "passive data transfers", pasv_min_port, pasv_max_port, s->ServerName);
 
   } else {
@@ -226,9 +228,9 @@ static void verify_pasv_ports(pool *p, const struct aws_info *info,
   if (security_groups == NULL) {
     /* No SGs to check. */
     pr_trace_msg(trace_channel, 5,
-      "unable to verify whether PassivePorts %d-%d for vhost '%s' allowed by "
-      "security groups: no security groups found", pasv_min_port, pasv_max_port,
-      s->ServerName);
+      "unable to verify whether PassivePorts %d-%d for <VirtualHost> '%s' "
+      "allowed by security groups: no security groups found", pasv_min_port,
+      pasv_max_port, s->ServerName);
     return;
   }
 
@@ -260,8 +262,8 @@ static void verify_pasv_ports(pool *p, const struct aws_info *info,
           /* This SG allows access for our PassivePorts.  Good. */
 
           (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-            "vhost '%s' PassivePorts %d-%d allowed by security group ID %s "
-            "(%s)", s->ServerName, pasv_min_port, pasv_max_port, sg_id,
+            "<VirtualHost> '%s' PassivePorts %d-%d allowed by security group "
+            "ID %s (%s)", s->ServerName, pasv_min_port, pasv_max_port, sg_id,
             sg->name);
           pasv_ports_allowed = TRUE;
           break;
@@ -274,8 +276,8 @@ static void verify_pasv_ports(pool *p, const struct aws_info *info,
 
   if (pasv_ports_allowed == FALSE) {
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "vhost '%s' PassivePorts %d-%d are NOT ALLOWED by any security group",
-      s->ServerName, pasv_min_port, pasv_max_port);
+      "<VirtualHost> '%s' PassivePorts %d-%d are NOT ALLOWED by any security "
+      "group", s->ServerName, pasv_min_port, pasv_max_port);
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
       "consider allowing these ports using:\n  aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port %d-%d --cidr 0.0.0.0/0",
       sg_id, pasv_min_port, pasv_max_port);
