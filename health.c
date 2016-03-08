@@ -26,6 +26,18 @@
 #include "health.h"
 #include "http.h"
 
+/* Note: Per the AWS Route53 docs:
+ *
+ *  "... must be able to establish a TCP connection with the endpoint within four seconds. In addition, the endpoint must respond with an HTTP status code of 200 or greater and less than 400 within two seconds after connecting."
+ *
+ * This means that the `freq' argument ideally should NOT be exposed, and
+ * perhaps should be hardcoded to 1 second.
+ *
+ * See:
+ *   http://docs.aws.amazon.com/Route53/latest/DeveloperGuide/dns-failover-determining-health-of-endpoints.html
+ */
+#define AWS_HEALTH_DEFAULT_INTERVAL		1
+
 /* The maximum length, per line, of an HTTP request that we support. */
 #define AWS_HEALTH_HTTP_REQ_BUFZ		1024
 
@@ -481,6 +493,10 @@ struct health *aws_health_listener_create(pool *p,
     destroy_pool(health->pool);
     errno = xerrno;
     return NULL;
+  }
+
+  if (freq < 0) {
+    freq = AWS_HEALTH_DEFAULT_INTERVAL;
   }
 
   health->timerno = pr_timer_add(freq, -1, &aws_module, health_ping_cb,
