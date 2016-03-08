@@ -699,7 +699,7 @@ MODRET set_awstimeoutrequest(cmd_rec *cmd) {
 
 /* usage: AWSUseDNS fqdn [type] */
 MODRET set_awsusedns(cmd_rec *cmd) {
-  char *fqdn;
+  char *fqdn, *ptr;
 
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
@@ -712,7 +712,7 @@ MODRET set_awsusedns(cmd_rec *cmd) {
       "not a fully-qualified domain name: ", fqdn, NULL));
   }
 
-  aws_route53_fqdn = pstrdrup(aws_pool, fqdn);
+  aws_route53_fqdn = pstrdup(aws_pool, fqdn);
   return PR_HANDLED(cmd);
 }
 
@@ -722,8 +722,18 @@ MODRET set_awsusedns(cmd_rec *cmd) {
 #if defined(PR_SHARED_MODULE)
 static void aws_mod_unload_ev(const void *event_data, void *user_data) {
   if (strncmp((const char *) event_data, "mod_aws.c", 12) == 0) {
-    /* Unregister ourselves from all events. */
+    /* Unregister ourselves from all events and timers. */
     pr_event_unregister(&aws_module, NULL, NULL);
+    pr_timer_remove(-1, &aws_module);
+
+    if (instance_health != NULL) {
+      if (aws_health_listener_destroy(aws_pool, instance_health) < 0) {
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "error destroying healthcheck listener: %s", strerror(errno));
+      }
+
+      instance_health = NULL;
+    }
 
     aws_http_free();
     aws_xml_free();
@@ -947,6 +957,21 @@ static int aws_sess_init(void) {
 
   if (instance_info == NULL) {
     return 0;
+  }
+
+  /* Remove all timers registered during e.g. startup; we only want those
+   * timers firing in the daemon process, not in session processes.
+   */
+  pr_timer_remove(-1, &aws_module);
+
+  /* Likewise, close any inherited health listeners. */
+  if (instance_health != NULL) {
+    if (aws_health_listener_destroy(aws_pool, instance_health) < 0) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "error destroying healthcheck listener: %s", strerror(errno));
+    }
+
+    instance_health = NULL;
   }
 
   /* Make all of the instance metadata available for logging by stashing the
