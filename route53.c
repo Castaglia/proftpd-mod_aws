@@ -613,8 +613,8 @@ static struct route53_hosted_zone *parse_hostedzones_xml(pool *p,
   }
 
   zone = parse_hostzone_fqdn_xml(p, info, "HostedZone", 10, fqdn);
-  aws_xml_doc_free(p, doc);
 
+  aws_xml_doc_free(p, doc);
   return zone;
 }
 
@@ -625,6 +625,13 @@ struct route53_hosted_zone *aws_route53_get_hosted_zone(pool *p,
   pool *req_pool;
   array_header *query_params;
   struct route53_hosted_zone *zone = NULL;
+
+  if (p == NULL ||
+      route53 == NULL ||
+      fqdn == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
 
   req_pool = make_sub_pool(route53->pool);
   pr_pool_tag(req_pool, "Route53 Request Pool");
@@ -680,7 +687,7 @@ struct route53_hosted_zone *aws_route53_get_hosted_zone(pool *p,
 
   if (zone != NULL) {
     pr_trace_msg(trace_channel, 15,
-      "recieved hosted zone: zone ID = %s, domain name = %s, reference = %s, "
+      "received hosted zone: zone ID = %s, domain name = %s, reference = %s, "
       "comment = %s, private = %s", zone->zone_id, zone->domain_name,
       zone->reference ? zone->reference : "N/A",
       zone->comment ? zone->comment : "N/A", zone->private ? "true" : "false");
@@ -688,4 +695,264 @@ struct route53_hosted_zone *aws_route53_get_hosted_zone(pool *p,
 
   clear_response(route53);
   return zone;
+}
+
+static struct route53_rrset *parse_rrset_xml(pool *p, void *parent) {
+  void *elt;
+  pool *rrset_pool;
+  struct route53_rrset *rrset;
+
+  rrset_pool = make_sub_pool(p);
+  rrset = pcalloc(rrset_pool, sizeof(struct route53_rrset));
+  rrset->pool = rrset_pool;
+
+  elt = aws_xml_elt_get_child(p, parent, "Name", 4);
+  if (elt != NULL) {
+    char *elt_text;
+
+    elt_text = (char *) aws_xml_elt_get_text(rrset_pool, elt);
+    rrset->domain_name = elt_text;
+  }
+
+  elt = aws_xml_elt_get_child(p, parent, "Type", 4);
+  if (elt != NULL) {
+    char *elt_text;
+
+    elt_text = (char *) aws_xml_elt_get_text(rrset_pool, elt);
+    if (elt_text != NULL) {
+      size_t elt_textlen;
+
+      elt_textlen = strlen(elt_text);
+      if (elt_textlen == 1 &&
+          strncmp(elt_text, "A", 2) == 0) {
+        rrset->type = AWS_ROUTE53_RRSET_TYPE_A;
+
+      } else if (elt_textlen == 4 &&
+                 strncmp(elt_text, "AAAA", 5) == 0) {
+        rrset->type = AWS_ROUTE53_RRSET_TYPE_AAAA;
+
+      } else if (elt_textlen == 5 &&
+                 strncmp(elt_text, "CNAME", 6) == 0) {
+        rrset->type = AWS_ROUTE53_RRSET_TYPE_CNAME;
+
+      } else {
+        pr_trace_msg(trace_channel, 4,
+          "unknown/unsupported rrset type for '%s': %s", rrset->domain_name,
+          elt_text);
+      }
+    }
+  }
+
+  elt = aws_xml_elt_get_child(p, parent, "TTL", 3);
+  if (elt != NULL) {
+    char *elt_text;
+    int ttl_secs;
+
+    elt_text = (char *) aws_xml_elt_get_text(rrset_pool, elt);
+    ttl_secs = atoi(elt_text);
+    if (ttl_secs < 0) {
+      pr_trace_msg(trace_channel, 4,
+        "unexpected/illegal TTL value for '%s': %s", rrset->domain_name,
+        elt_text);
+
+    } else {
+      rrset->ttl_secs = ttl_secs;
+    }
+  }
+
+  elt = aws_xml_elt_get_child(p, parent, "HealthCheckId", 13);
+  if (elt != NULL) {
+    char *elt_text;
+
+    elt_text = (char *) aws_xml_elt_get_text(rrset_pool, elt);
+    rrset->healthcheck_id = elt_text;
+  }
+
+  return rrset;
+}
+
+static struct route53_rrset *parse_rrsets_fqdn_xml(pool *p, void *parent,
+    const char *name, size_t namelen, const char *fqdn) {
+  void *kid;
+  unsigned long count;
+  struct route53_rrset *fqdn_rrset = NULL;
+
+  (void) aws_xml_elt_get_child_count(p, parent, &count);
+  if (count == 0) {
+    pr_trace_msg(trace_channel, 5,
+      "expected multiple rrsets, found %lu", count);
+    errno = ENOENT;
+    return NULL;
+  }
+
+  kid = aws_xml_elt_get_child(p, parent, name, namelen);
+  while (kid != NULL) {
+    struct route53_rrset *rrset;
+
+    pr_signals_handle();
+
+    rrset = parse_rrset_xml(p, kid);
+    if (rrset != NULL) {
+(void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION, "get_rrset: checking FQDN '%s' against rrset domain name = %s, type = %u", fqdn, rrset->domain_name, rrset->type);
+    }
+
+    kid = aws_xml_elt_get_next(p, kid);
+  }
+
+  if (fqdn_rrset == NULL) {
+    errno = ENOENT;
+  }
+
+  return fqdn_rrset;
+}
+
+static struct route53_rrset *parse_rrsets_xml(pool *p, const char *data,
+    size_t datasz, const char *fqdn) {
+  void *doc, *root, *info;
+  struct route53_rrset *rrset;
+  const char *elt_name;
+  size_t elt_namelen;
+
+  doc = aws_xml_doc_parse(p, data, (int) datasz);
+  if (doc == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  root = aws_xml_doc_get_root_elt(p, doc);
+  if (root == NULL) {
+    /* Malformed XML. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  elt_name = aws_xml_elt_get_name(p, root, &elt_namelen);
+  if (elt_namelen != 30 ||
+      strncmp(elt_name, "ListResourceRecordSetsResponse",
+        elt_namelen + 1) != 0) {
+
+    /* Not the root element we expected. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  info = aws_xml_elt_get_child(p, root, "ResourceRecordSets", 18);
+  if (info == NULL) {
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return NULL;
+  }
+
+  rrset = parse_rrsets_fqdn_xml(p, info, "ResourceRecordSet", 17, fqdn);
+
+  aws_xml_doc_free(p, doc);
+  return rrset;
+}
+
+struct route53_rrset *aws_route53_get_rrset(pool *p,
+    struct route53_conn *route53, const char *zone_id, const char *fqdn) {
+  int res;
+  const char *path;
+  pool *req_pool;
+  array_header *query_params;
+  struct route53_rrset *rrset = NULL;
+
+  if (p == NULL ||
+      route53 == NULL ||
+      zone_id == NULL ||
+      fqdn == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  req_pool = make_sub_pool(route53->pool);
+  pr_pool_tag(req_pool, "Route53 Request Pool");
+  route53->req_pool = req_pool;
+
+  path = pstrcat(req_pool, "/2013-04-01/hostedzone/", zone_id, "/rrset", NULL);
+
+  /* Note: do any of these query parameters need to be URL-encoded?  Per the
+   * AWS docs, the answer is "yes".
+   */
+
+  query_params = make_array(req_pool, 0, sizeof(char *));
+
+/* XXX Should we use name and/or type query params?  What ordering of name
+ * should we use?
+ */
+
+  res = route53_get(p, route53->http, path, query_params, route53_resp_cb,
+    route53);
+  if (res == 0) {
+    struct route53_rrset *found;
+
+    pr_trace_msg(trace_channel, 19,
+      "resource record sets response: '%.*s'", (int) route53->respsz,
+      route53->resp);
+
+    found = parse_rrsets_xml(req_pool, route53->resp, route53->respsz, fqdn);
+    if (found == NULL) {
+      if (errno != ENOENT) {
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "error parsing resource record sets XML response: %s",
+          strerror(errno));
+      }
+
+    } else {
+      pool *rrset_pool;
+
+      /* Make a duplicate of the found data. */
+      rrset_pool = make_sub_pool(p);
+      pr_pool_tag(rrset_pool, "AWS Route53 ResourceRecordSets Pool");
+
+      rrset = pcalloc(rrset_pool, sizeof(struct route53_rrset));
+      rrset->pool = rrset_pool;
+      rrset->domain_name = pstrdup(rrset->pool, found->domain_name);
+      rrset->type = found->type;
+      rrset->ttl_secs = found->ttl_secs;
+
+      if (found->healthcheck_id != NULL) {
+        rrset->healthcheck_id = pstrdup(rrset->pool, found->healthcheck_id);
+      }
+    }
+  }
+
+  if (rrset != NULL) {
+    const char *rrset_type;
+
+    switch (rrset->type) {
+      case AWS_ROUTE53_RRSET_TYPE_UNKNOWN:
+        rrset_type = "Unknown";
+        break;
+
+      case AWS_ROUTE53_RRSET_TYPE_A:
+        rrset_type = "A";
+        break;
+
+      case AWS_ROUTE53_RRSET_TYPE_AAAA:
+        rrset_type = "AAAA";
+        break;
+
+      case AWS_ROUTE53_RRSET_TYPE_CNAME:
+        rrset_type = "CNAME";
+        break;
+
+      default:
+        rrset_type = "Unknown/unsupported";
+        break;
+    }
+
+    pr_trace_msg(trace_channel, 15,
+      "received rrset: domain name = %s, type = %s, ttl = %u, "
+      "health check ID = %s", rrset->domain_name, rrset_type, rrset->ttl_secs,
+      rrset->healthcheck_id ? rrset->healthcheck_id : "N/A");
+  }
+
+  clear_response(route53);
+  return rrset;
 }
