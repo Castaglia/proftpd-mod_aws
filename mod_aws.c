@@ -697,8 +697,8 @@ MODRET set_awstimeoutrequest(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
-/* usage: AWSUseDNS fqdn [type] */
-MODRET set_awsusedns(cmd_rec *cmd) {
+/* usage: AWSUseRoute53 fqdn [type] */
+MODRET set_awsuseroute53(cmd_rec *cmd) {
   char *fqdn, *ptr;
 
   CHECK_ARGS(cmd, 1);
@@ -1040,7 +1040,7 @@ static conftable aws_conftab[] = {
   { "AWSOptions",		set_awsoptions,		NULL },
   { "AWSTimeoutConnect",	set_awstimeoutconnect,	NULL },
   { "AWSTimeoutRequest",	set_awstimeoutrequest,	NULL },
-  { "AWSUseDNS",		set_awsusedns,		NULL },
+  { "AWSUseRoute53",		set_awsuseroute53,	NULL },
 
   { NULL }
 };
