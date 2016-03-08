@@ -68,7 +68,7 @@ int aws_route53_conn_destroy(pool *p, struct route53_conn *route53);
 array_header *aws_route53_get_healthcheck_ranges(pool *p,
   struct route53_conn *route53);
 
-struct route53_hosted_zone *aws_route53_get_hosted_zones(pool *p,
+struct route53_hosted_zone *aws_route53_get_hosted_zone(pool *p,
   struct route53_conn *route53, const char *fqdn);
 
 #endif /* MOD_AWS_ROUTE53_H */
