@@ -344,6 +344,10 @@ int aws_http_post(pool *p, void *http, const char *url, pr_table_t *headers,
       curl_easy_strerror(curl_code));
   }
 
+  /* Disable curl's sending of the Expect request header for POSTs. */
+  (void) pr_table_add(headers, pstrdup(p, AWS_HTTP_HEADER_EXPECT),
+    pstrdup(p, ""), 0);
+
   res = http_perform(p, curl, url, headers, resp_body, user_data, resp_code,
     content_type);
   return res;
