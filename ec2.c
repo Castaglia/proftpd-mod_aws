@@ -779,7 +779,7 @@ pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
 }
 
 int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
-    const char *sg_id, struct ec2_ip_rule *rule) {
+    const char *vpc_id, const char *sg_id, struct ec2_ip_rule *rule) {
   register unsigned int i;
   int res, xerrno = 0;
   const char *path;
@@ -806,10 +806,6 @@ int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
 
   *((char **) push_array(query_params)) = pstrdup(req_pool,
     "Action=AuthorizeSecurityGroupIngress");
-
-  *((char **) push_array(query_params)) = pstrcat(req_pool,
-    "GroupId=", aws_http_urlencode(req_pool, ec2->http, sg_id, 0),
-    NULL);
 
   *((char **) push_array(query_params)) = pstrcat(req_pool,
     "Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
@@ -846,6 +842,14 @@ int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
       aws_http_urlencode(req_pool, ec2->http, cidr, 0), NULL);
   }
 
+  *((char **) push_array(query_params)) = pstrcat(req_pool,
+    "IpPermissions.1.UserIdGroupPairs.1.GroupId=",
+    aws_http_urlencode(req_pool, ec2->http, sg_id, 0), NULL);
+
+  *((char **) push_array(query_params)) = pstrcat(req_pool,
+    "IpPermissions.1.UserIdGroupPairs.2.VpcId=",
+    aws_http_urlencode(req_pool, ec2->http, vpc_id, 0), NULL);
+
   res = ec2_post(p, ec2->http, path, query_params, request_body, ec2_resp_cb,
     ec2);
   xerrno = errno;
@@ -862,7 +866,7 @@ int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
 }
 
 int aws_ec2_security_group_revoke_rule(pool *p, struct ec2_conn *ec2,
-    const char *sg_id, struct ec2_ip_rule *rule) {
+    const char *vpc_id, const char *sg_id, struct ec2_ip_rule *rule) {
 
   if (p == NULL ||
       ec2 == NULL ||
