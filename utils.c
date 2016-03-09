@@ -53,6 +53,22 @@ array_header *aws_utils_table2array(pool *p, pr_table_t *tab) {
   return list;
 }
 
+char *aws_utils_str_n2s(pool *p, int n) {
+  char buf[256], *num;
+  int len;
+
+  if (p == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  memset(buf, '\0', sizeof(buf));
+  len = snprintf(buf, sizeof(buf)-1, "%d", n);
+  num = pstrndup(p, buf, len);
+
+  return num;
+}
+
 char *aws_utils_str_trim(pool *p, const char *str) {
   const char *start, *end;
   char *trimmed = NULL;
