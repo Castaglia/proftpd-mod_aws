@@ -89,6 +89,9 @@ static struct err_info errs[] = {
 
   /* EC2 error codes */
 
+  { "DryRunOperation", 15,
+    AWS_ERROR_CODE_DRY_RUN_OPERATION },
+
   { "InvalidGroup.NotFound", 22,
     AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND },
 

@@ -35,7 +35,6 @@ struct ec2_conn {
   void *http;
   const char *region;
   const char *domain;
-  const char *api_version;
 
   /* To be refreshed whenever the credentials are deemed too old. */
   const char *iam_role;
@@ -82,7 +81,7 @@ struct ec2_security_group {
 
 struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
   unsigned long max_request_secs, const char *cacerts, const char *region,
-  const char *domain, const char *api_version, const char *iam_role);
+  const char *domain, const char *iam_role);
 int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2);
 
 /* Returns a table whose keys are the security group names, and the values
@@ -92,8 +91,8 @@ pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
   const char *vpc_id, array_header *security_groups);
 
 int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
-  const char *vpc_id, const char *sg_id, struct ec2_ip_rule *inbound_rule);
+  const char *sg_id, struct ec2_ip_rule *inbound_rule);
 int aws_ec2_security_group_revoke_rule(pool *p, struct ec2_conn *ec2,
-  const char *vpc_id, const char *sg_id, struct ec2_ip_rule *inbound_rule);
+  const char *sg_id, struct ec2_ip_rule *inbound_rule);
 
 #endif /* MOD_AWS_EC2_H */

@@ -34,6 +34,9 @@
 /* The AWS service name */
 static const char *aws_service = "ec2";
 
+/* The version of the EC2 API which we want to use. */
+static const char *ec2_api_version = "2015-10-01";
+
 static const char *trace_channel = "aws.ec2";
 
 static void clear_response(struct ec2_conn *ec2) {
@@ -48,7 +51,7 @@ static void clear_response(struct ec2_conn *ec2) {
 
 struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
     unsigned long max_request_secs, const char *cacerts, const char *region,
-    const char *domain, const char *api_version, const char *iam_role) {
+    const char *domain, const char *iam_role) {
   pool *ec2_pool;
   struct ec2_conn *ec2;
   void *http;
@@ -66,7 +69,6 @@ struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
   ec2->http = http;
   ec2->region = pstrdup(ec2->pool, region);
   ec2->domain = pstrdup(ec2->pool, domain);
-  ec2->api_version = pstrdup(ec2->pool, api_version);
   ec2->iam_role = pstrdup(ec2->pool, iam_role);
 
   return ec2;
@@ -233,6 +235,7 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
       return -1;
 
     case AWS_HTTP_RESPONSE_CODE_FORBIDDEN:
+    case AWS_HTTP_RESPONSE_CODE_PRECONDITION_FAILED:
       errno = EPERM;
       return -1;
 
@@ -658,8 +661,7 @@ static struct ec2_security_group *get_security_group(pool *p,
     NULL);
 
   *((char **) push_array(query_params)) = pstrcat(req_pool,
-    "Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
-    NULL);
+    "Version=", ec2_api_version, NULL);
 
   if (vpc_id != NULL) {
     *((char **) push_array(query_params)) = pstrdup(req_pool,
@@ -808,8 +810,7 @@ int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
     "Action=AuthorizeSecurityGroupIngress");
 
   *((char **) push_array(query_params)) = pstrcat(req_pool,
-    "Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
-    NULL);
+    "Version=", ec2_api_version, NULL);
 
   *((char **) push_array(query_params)) = pstrdup(req_pool, "DryRun=true");
 
@@ -846,12 +847,6 @@ int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
     "IpPermissions.1.Groups.1.GroupId=",
     aws_http_urlencode(req_pool, ec2->http, sg_id, 0), NULL);
 
-  if (vpc_id != NULL) {
-    *((char **) push_array(query_params)) = pstrcat(req_pool,
-      "IpPermissions.1.Groups.2.VpcId=",
-      aws_http_urlencode(req_pool, ec2->http, vpc_id, 0), NULL);
-  }
-
   res = ec2_post(p, ec2->http, path, query_params, request_body, ec2_resp_cb,
     ec2);
   xerrno = errno;
@@ -868,7 +863,7 @@ int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
 }
 
 int aws_ec2_security_group_revoke_rule(pool *p, struct ec2_conn *ec2,
-    const char *vpc_id, const char *sg_id, struct ec2_ip_rule *rule) {
+    const char *sg_id, struct ec2_ip_rule *rule) {
 
   if (p == NULL ||
       ec2 == NULL ||
