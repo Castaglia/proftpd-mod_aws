@@ -83,20 +83,28 @@ int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2) {
   return res;
 }
 
-/* NOTE: for an ec2_post() function, we will need to set a Content-Type
- * request header of "application/x-www-form-urlencoded; charset=utf-8".
- */
-
-static int ec2_get(pool *p, void *http, const char *path,
-    array_header *query_params,
-    size_t (*resp_body)(char *, size_t, size_t, void *), struct ec2_conn *ec2) {
-  pr_table_t *http_headers;
+static int ec2_perform(pool *p, void *http, int http_method, const char *path,
+    array_header *query_params, pr_table_t *http_headers, char *request_body,
+    time_t request_time, size_t (*resp_body)(char *, size_t, size_t, void *),
+    struct ec2_conn *ec2) {
   int res;
   long resp_code;
-  const char *content_type = NULL;
+  const char *content_type = NULL, *method_name;
   char *base_url, *host = NULL, *url = NULL;
-  time_t request_time;
-  struct tm *gmt_tm;
+
+  switch (http_method) {
+    case AWS_HTTP_METHOD_GET:
+      method_name = "GET";
+      break;
+
+    case AWS_HTTP_METHOD_POST:
+      method_name = "POST";
+      break;
+
+    default:
+      errno = EINVAL;
+      return -1;
+  }
 
   if (ec2->iam_info == NULL) {
     /* Need to get the temporary IAM credentials for signing. */
@@ -111,22 +119,7 @@ static int ec2_get(pool *p, void *http, const char *path,
     }
   }
 
-  time(&request_time);
-
-  gmt_tm = pr_gmtime(p, &request_time);
-  if (gmt_tm == NULL) {
-    int xerrno = errno;
-
-    pr_trace_msg(trace_channel, 1,
-      "error obtaining gmtime: %s", strerror(xerrno));
-
-    errno = xerrno;
-    return -1;
-  }
-
   host = pstrcat(p, aws_service, ".", ec2->region, ".", ec2->domain, NULL);
-
-  http_headers = aws_http_default_headers(p, gmt_tm);
   (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_HOST), host, 0);
 
   base_url = pstrcat(p, "https://", host, NULL);
@@ -148,8 +141,8 @@ static int ec2_get(pool *p, void *http, const char *path,
 
   res = aws_sign_v4_generate(p,
     ec2->iam_info->access_key_id, ec2->iam_info->secret_access_key,
-    ec2->iam_info->token, ec2->region, aws_service, http, "GET", path,
-    query_params, http_headers, "", request_time);
+    ec2->iam_info->token, ec2->region, aws_service, http, method_name, path,
+    query_params, http_headers, request_body, request_time);
   if (res < 0) {
     int xerrno = errno;
 
@@ -165,8 +158,18 @@ static int ec2_get(pool *p, void *http, const char *path,
  * instance API), etc.
  */
 
-  res = aws_http_get(p, http, url, http_headers, resp_body, (void *) ec2,
-    &resp_code, &content_type);
+  switch (http_method) {
+    case AWS_HTTP_METHOD_GET:
+      res = aws_http_get(p, http, url, http_headers, resp_body, (void *) ec2,
+        &resp_code, &content_type);
+      break;
+
+    case AWS_HTTP_METHOD_POST:
+      res = aws_http_post(p, http, url, http_headers, resp_body, (void *) ec2,
+        request_body, &resp_code, &content_type);
+      break;
+  }
+
   if (res < 0) {
     return -1;
   }
@@ -256,6 +259,65 @@ static int ec2_get(pool *p, void *http, const char *path,
 
   return 0;
 }
+
+static int ec2_get(pool *p, void *http, const char *path,
+    array_header *query_params,
+    size_t (*resp_body)(char *, size_t, size_t, void *), struct ec2_conn *ec2) {
+  int res;
+  pr_table_t *http_headers;
+  time_t request_time;
+  struct tm *gmt_tm;
+
+  time(&request_time);
+
+  gmt_tm = pr_gmtime(p, &request_time);
+  if (gmt_tm == NULL) {
+    int xerrno = errno;
+
+    pr_trace_msg(trace_channel, 1,
+      "error obtaining gmtime: %s", strerror(xerrno));
+
+    errno = xerrno;
+    return -1;
+  }
+
+  http_headers = aws_http_default_headers(p, gmt_tm);
+
+  res = ec2_perform(p, http, AWS_HTTP_METHOD_GET, path, query_params,
+    http_headers, NULL, request_time, resp_body, ec2);
+  return res;
+}
+
+static int ec2_post(pool *p, void *http, const char *path,
+    array_header *query_params, char *request_body,
+    size_t (*resp_body)(char *, size_t, size_t, void *), struct ec2_conn *ec2) {
+  int res;
+  pr_table_t *http_headers;
+  time_t request_time;
+  struct tm *gmt_tm;
+
+  time(&request_time);
+
+  gmt_tm = pr_gmtime(p, &request_time);
+  if (gmt_tm == NULL) {
+    int xerrno = errno;
+
+    pr_trace_msg(trace_channel, 1,
+      "error obtaining gmtime: %s", strerror(xerrno));
+
+    errno = xerrno;
+    return -1;
+  }
+
+  http_headers = aws_http_default_headers(p, gmt_tm);
+  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_TYPE),
+    pstrdup(p, "application/x-www-form-urlencoded; charset=utf-8"), 0);
+
+  res = ec2_perform(p, http, AWS_HTTP_METHOD_POST, path, query_params,
+    http_headers, request_body, request_time, resp_body, ec2);
+  return res;
+}
+
 
 static size_t ec2_resp_cb(char *data, size_t item_sz, size_t item_count,
     void *user_data) {

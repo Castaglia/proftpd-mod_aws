@@ -491,10 +491,13 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
       http_method == NULL ||
       http_path == NULL ||
       query_params == NULL ||
-      http_headers == NULL ||
-      http_body == NULL) {
+      http_headers == NULL) {
     errno = EINVAL;
     return -1;
+  }
+
+  if (http_body == NULL) {
+    http_body = "";
   }
 
   canon_request = create_canon_request(p, http, http_method, http_path,

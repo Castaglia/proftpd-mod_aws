@@ -27,6 +27,10 @@
 #ifndef MOD_AWS_HTTP_H
 #define MOD_AWS_HTTP_H
 
+/* HTTP methods */
+#define AWS_HTTP_METHOD_GET				1
+#define AWS_HTTP_METHOD_POST				2
+
 /* HTTP headers */
 #define AWS_HTTP_HEADER_ACCEPT				"Accept"
 #define AWS_HTTP_HEADER_AUTHZ				"Authorization"
