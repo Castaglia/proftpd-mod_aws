@@ -9,15 +9,6 @@ NEXT:
     Need to know the hosted zone, and resource record, on which to act.
     Difference between public and private zones?
 
-    + GET ListHostedZonesByName
-      needed to find the zone ID for a given zone name (and whether it's
-       public/private)
-      NOTE that given name might be e.g. "example.com", but in the
-      <HostedZone>'s <Name> element, the text would be "example.com."; note
-      the trailing period.  Watch out for this!
-
-    + GET GetHostedZone (zone)
-
     + GET ListResourceRecordSets
       name=DNS name
       type=A
@@ -28,14 +19,13 @@ NEXT:
      + CreateHealthCheck
      + DeleteHealthCheck
 
-    AWSUseDNS name [type]
-      Parse the domain out of the `name` by searching for the first period.
+    AWSUseDNS name
 
     Example:
-      AWSUseDNS ftp.openbridge.io A
+      AWSUseRoute53 ftp.openbridge.io
 
   SQS
-    AWSLogQueue name [region]
+    AWSLogSQS queue [region]
       + use GetQueueUrl to get queue URL from SQS using the given name
       + use GetQueueAttributes to describe the queue.  In particular:
         CreatedTimestamp (log)
@@ -46,7 +36,7 @@ NEXT:
         ApproximateNumberOfMessages (log)
         ApproximateNumberOfMessagesNotVisible (log)
 
-    AWSLogFlush count time
+    AWSLogSQSFlush count time
       How often to call SendMessageBatch.  Note that SendMessageBatch
       has a max of 10 messages; if count is more than 10, then we'd do
       multiple SendMessageBatch calls.  Max payload size is 256KB.
