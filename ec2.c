@@ -296,6 +296,7 @@ static int ec2_post(pool *p, void *http, const char *path,
   pr_table_t *http_headers;
   time_t request_time;
   struct tm *gmt_tm;
+  char *content_len;
 
   time(&request_time);
 
@@ -313,6 +314,19 @@ static int ec2_post(pool *p, void *http, const char *path,
   http_headers = aws_http_default_headers(p, gmt_tm);
   (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_TYPE),
     pstrdup(p, "application/x-www-form-urlencoded; charset=utf-8"), 0);
+
+  if (request_body == NULL) {
+    content_len = pstrdup(p, "0");
+
+  } else {
+    size_t request_bodysz;
+
+    request_bodysz = strlen(request_body);
+    content_len = aws_utils_str_ul2s(p, (unsigned long) request_bodysz);
+  }
+
+  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_LEN),
+    content_len, 0);
 
   res = ec2_perform(p, http, AWS_HTTP_METHOD_POST, path, query_params,
     http_headers, request_body, request_time, resp_body, ec2);
