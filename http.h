@@ -88,6 +88,10 @@ int aws_http_get(pool *p, void *http, const char *url, pr_table_t *headers,
   size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
   long *resp_code, const char **content_type);
 
+int aws_http_post(pool *p, void *http, const char *url, pr_table_t *headers,
+  size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
+  char *req_body, long *resp_code, const char **content_type);
+
 /* API lifetime functions, for mod_aws use only. */
 int aws_http_init(pool *p, unsigned long *feature_flags,
   const char **http_details);

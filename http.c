@@ -119,22 +119,12 @@ static void clear_http_response(void) {
   http_resp_msg = NULL;
 }
 
-int aws_http_get(pool *p, void *http, const char *url, pr_table_t *headers,
-    size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
-    long *resp_code, const char **content_type) {
-  CURL *curl;
+static int http_perform(pool *p, CURL *curl, const char *url,
+    pr_table_t *headers, size_t (*resp_body)(char *, size_t, size_t, void *),
+    void *user_data, long *resp_code, const char **content_type) {
   CURLcode curl_code;
   struct curl_slist *slist = NULL;
   double content_len, rcvd_bytes, total_secs;
-
-  curl = http;
-
-  curl_code = curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_HTTPGET: %s",
-      curl_easy_strerror(curl_code));
-  }
 
   curl_code = curl_easy_setopt(curl, CURLOPT_URL, url);
   if (curl_code != CURLE_OK) {
@@ -308,6 +298,55 @@ int aws_http_get(pool *p, void *http, const char *url, pr_table_t *headers,
   }
 
   return 0;
+}
+
+int aws_http_get(pool *p, void *http, const char *url, pr_table_t *headers,
+    size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
+    long *resp_code, const char **content_type) {
+  int res;
+  CURL *curl;
+  CURLcode curl_code;
+
+  curl = http;
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_HTTPGET: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  res = http_perform(p, curl, url, headers, resp_body, user_data, resp_code,
+    content_type);
+  return res;
+}
+
+int aws_http_post(pool *p, void *http, const char *url, pr_table_t *headers,
+    size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
+    char *req_body, long *resp_code, const char **content_type) {
+  int res;
+  CURL *curl;
+  CURLcode curl_code;
+
+  curl = http;
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_POST, 1L);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_POST: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, req_body);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_POSTFIELDS: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  res = http_perform(p, curl, url, headers, resp_body, user_data, resp_code,
+    content_type);
+  return res;
 }
 
 static size_t http_header_cb(char *data, size_t itemsz, size_t item_count,
