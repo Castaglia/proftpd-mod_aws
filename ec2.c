@@ -765,7 +765,7 @@ pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
 }
 
 int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
-    const char *sg_id, struct ec2_ip_rule *inbound_rule) {
+    const char *sg_id, struct ec2_ip_rule *rule) {
   register unsigned int i;
   int res, xerrno = 0;
   const char *path;
@@ -777,7 +777,7 @@ int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
   if (p == NULL ||
       ec2 == NULL ||
       sg_id == NULL ||
-      inbound_rule == NULL) {
+      rule == NULL) {
     errno = EINVAL;
     return -1;
   }
@@ -820,7 +820,7 @@ int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
   acls = rule->ranges->elts;
   for (i = 0; i < rule->ranges->nelts; i++) {
     pr_netacl_t *acl;
-    char *cidr, *rangeno;
+    const char *cidr, *rangeno;
 
     acl = acls[i];
     cidr = pr_netacl_get_str2(req_pool, acl, PR_NETACL_FL_STR_NO_DESC);
@@ -848,12 +848,12 @@ int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
 }
 
 int aws_ec2_security_group_revoke_rule(pool *p, struct ec2_conn *ec2,
-    const char *sg_id, struct ec2_ip_rule *inbound_rule) {
+    const char *sg_id, struct ec2_ip_rule *rule) {
 
   if (p == NULL ||
       ec2 == NULL ||
       sg_id == NULL ||
-      inbound_rule == NULL) {
+      rule == NULL) {
     errno = EINVAL;
     return -1;
   }
