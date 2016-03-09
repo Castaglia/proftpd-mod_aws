@@ -91,4 +91,9 @@ int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2);
 pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
   const char *vpc_id, array_header *security_groups);
 
+int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
+  const char *sg_id, struct ec2_ip_rule *inbound_rule);
+int aws_ec2_security_group_revoke_rule(pool *p, struct ec2_conn *ec2,
+  const char *sg_id, struct ec2_ip_rule *inbound_rule);
+
 #endif /* MOD_AWS_EC2_H */

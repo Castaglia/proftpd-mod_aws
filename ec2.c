@@ -23,6 +23,7 @@
  */
 
 #include "mod_aws.h"
+#include "utils.h"
 #include "http.h"
 #include "instance.h"
 #include "error.h"
@@ -761,4 +762,102 @@ pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
   }
 
   return info;
+}
+
+int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
+    const char *sg_id, struct ec2_ip_rule *inbound_rule) {
+  register unsigned int i;
+  int res, xerrno = 0;
+  const char *path;
+  char *from_port, *to_port, *request_body = NULL;
+  pool *req_pool;
+  array_header *query_params;
+  pr_netacl_t **acls;
+
+  if (p == NULL ||
+      ec2 == NULL ||
+      sg_id == NULL ||
+      inbound_rule == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  req_pool = make_sub_pool(ec2->pool);
+  pr_pool_tag(req_pool, "EC2 Request Pool");
+  ec2->req_pool = req_pool;
+
+  path = "/";
+
+  query_params = make_array(req_pool, 1, sizeof(char *));
+
+  *((char **) push_array(query_params)) = pstrdup(req_pool,
+    "Action=AuthorizeSecurityGroupIngress");
+
+  *((char **) push_array(query_params)) = pstrcat(req_pool,
+    "GroupId=", aws_http_urlencode(req_pool, ec2->http, sg_id, 0),
+    NULL);
+
+  *((char **) push_array(query_params)) = pstrcat(req_pool,
+    "Version=", aws_http_urlencode(req_pool, ec2->http, ec2->api_version, 0),
+    NULL);
+
+  *((char **) push_array(query_params)) = pstrdup(req_pool, "DryRun=true");
+
+  *((char **) push_array(query_params)) = pstrcat(req_pool,
+    "IpPermissions.1.IpProtocol=", aws_http_urlencode(req_pool, ec2->http,
+    rule->proto, 0), NULL);
+
+  from_port = aws_utils_str_n2s(req_pool, rule->from_port);
+  *((char **) push_array(query_params)) = pstrcat(req_pool,
+    "IpPermissions.1.FromPort=", aws_http_urlencode(req_pool, ec2->http,
+    from_port, 0), NULL);
+
+  to_port = aws_utils_str_n2s(req_pool, rule->to_port);
+  *((char **) push_array(query_params)) = pstrcat(req_pool,
+    "IpPermissions.1.ToPort=", aws_http_urlencode(req_pool, ec2->http,
+    to_port, 0), NULL);
+
+  acls = rule->ranges->elts;
+  for (i = 0; i < rule->ranges->nelts; i++) {
+    pr_netacl_t *acl;
+    char *cidr, *rangeno;
+
+    acl = acls[i];
+    cidr = pr_netacl_get_str2(req_pool, acl, PR_NETACL_FL_STR_NO_DESC);
+
+    rangeno = aws_utils_str_n2s(req_pool, i+1);
+
+    *((char **) push_array(query_params)) = pstrcat(req_pool,
+      "IpPermissions.1.IpRanges.", rangeno, ".CidrIp=",
+      aws_http_urlencode(req_pool, ec2->http, cidr, 0), NULL);
+  }
+
+  res = ec2_post(p, ec2->http, path, query_params, request_body, ec2_resp_cb,
+    ec2);
+  xerrno = errno;
+
+  if (res == 0) {
+    pr_trace_msg(trace_channel, 19,
+      "update security group response: '%.*s'", (int) ec2->respsz, ec2->resp);
+  }
+
+  clear_response(ec2);
+
+  errno = xerrno;
+  return res;
+}
+
+int aws_ec2_security_group_revoke_rule(pool *p, struct ec2_conn *ec2,
+    const char *sg_id, struct ec2_ip_rule *inbound_rule) {
+
+  if (p == NULL ||
+      ec2 == NULL ||
+      sg_id == NULL ||
+      inbound_rule == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  errno = ENOSYS;
+  return -1;
 }
