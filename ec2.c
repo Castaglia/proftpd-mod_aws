@@ -199,7 +199,7 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
           }
 
           (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-            "received error: code = %s (%u), msg = %s, req_id = %s",
+            "received error: code = %s (%u), msg = %s, request_id = %s",
             aws_error_get_name(err->err_code), err->err_code, err->err_msg,
             err->req_id);
         }
@@ -682,7 +682,7 @@ static struct ec2_security_group *get_security_group(pool *p,
 
     pr_trace_msg(trace_channel, 15,
       "received security group: id = %s, name = %s, desc = %s, owner_id = %s, "
-      "vpc_id = %s, req_id = %s, inbound rule count = %d, "
+      "vpc_id = %s, request_id = %s, inbound rule count = %d, "
       "outbound rule count = %d", sg->id, sg->name, sg->desc, sg->owner_id,
       sg->vpc_id, sg->req_id, sg->inbound_rules->nelts,
       sg->outbound_rules->nelts);
