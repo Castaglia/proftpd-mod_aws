@@ -32,8 +32,9 @@
  */
 array_header *aws_utils_table2array(pool *p, pr_table_t *tab);
 
-/* Converts the given int to a string, allocated out of the given pool. */
+/* Converts the given numbers to strings, allocated out of the given pool. */
 char *aws_utils_str_n2s(pool *p, int n);
+char *aws_utils_str_ul2s(pool *p, unsigned long n);
 
 /* Trim any leading/trailing whitespace from the given string.
  *
