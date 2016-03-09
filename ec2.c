@@ -843,12 +843,14 @@ int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
   }
 
   *((char **) push_array(query_params)) = pstrcat(req_pool,
-    "IpPermissions.1.UserIdGroupPairs.1.GroupId=",
+    "IpPermissions.1.Groups.1.GroupId=",
     aws_http_urlencode(req_pool, ec2->http, sg_id, 0), NULL);
 
-  *((char **) push_array(query_params)) = pstrcat(req_pool,
-    "IpPermissions.1.UserIdGroupPairs.2.VpcId=",
-    aws_http_urlencode(req_pool, ec2->http, vpc_id, 0), NULL);
+  if (vpc_id != NULL) {
+    *((char **) push_array(query_params)) = pstrcat(req_pool,
+      "IpPermissions.1.Groups.2.VpcId=",
+      aws_http_urlencode(req_pool, ec2->http, vpc_id, 0), NULL);
+  }
 
   res = ec2_post(p, ec2->http, path, query_params, request_body, ec2_resp_cb,
     ec2);
