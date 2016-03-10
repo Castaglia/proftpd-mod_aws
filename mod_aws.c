@@ -866,7 +866,7 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 
     ec2 = aws_ec2_conn_alloc(aws_pool, aws_connect_timeout_secs,
       aws_request_timeout_secs, aws_cacerts, instance_info->region, domain,
-      instance_info->api_version, iam_role);
+      iam_role);
 
     route53 = aws_route53_conn_alloc(aws_pool, aws_connect_timeout_secs,
       aws_request_timeout_secs, aws_cacerts, domain, iam_role);

@@ -781,7 +781,7 @@ pr_table_t *aws_ec2_get_security_groups(pool *p, struct ec2_conn *ec2,
 }
 
 int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
-    const char *vpc_id, const char *sg_id, struct ec2_ip_rule *rule) {
+    const char *sg_id, struct ec2_ip_rule *rule) {
   register unsigned int i;
   int res, xerrno = 0;
   const char *path;
