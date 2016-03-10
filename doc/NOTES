@@ -24,6 +24,27 @@ NEXT:
     Example:
       AWSUseRoute53 ftp.openbridge.io
 
+For A rrsets:
+
+    <ResourceRecords>
+      <ResourceRecord>
+        <Value>1.2.3.4</Value>
+      </ResourceRecord>
+    </ResourceRecords>
+
+Presumably there could be multiple IP addresses in that list.  Same for AAAA
+(only IPv6 addresses).
+
+For CNAME rrsets:
+
+    <ResourceRecords>
+      <ResourceRecord>
+        <Value>elb.amazonaws.com</Value>
+      </ResourceRecord>
+    </ResourceRecords>
+
+What about for Round Robin (weighted alias) or Geo (geo alias) rrsets?
+
   SQS
     AWSLogSQS queue [region]
       + use GetQueueUrl to get queue URL from SQS using the given name
