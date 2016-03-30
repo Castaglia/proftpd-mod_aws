@@ -64,6 +64,14 @@ static unsigned long aws_request_timeout_secs = AWS_REQUEST_DEFAULT_TIMEOUT;
 #define AWS_PASSIVE_PORT_MIN_DEFAULT		49152
 #define AWS_PASSIVE_PORT_MAX_DEFAULT		65534
 
+/* For AWSAdjustments */
+static unsigned long aws_adjustments = 0UL;
+#define AWS_ADJUST_FL_MASQ_ADDR			0x001
+#define AWS_ADJUST_FL_PASV_PORTS		0x002
+#define AWS_ADJUST_FL_SECURITY_GROUP		0x004
+
+static const char *aws_adjust_sgid = NULL;
+
 /* For holding onto the EC2 instance metadata for e.g. session processes' use */
 static const struct aws_info *instance_info = NULL;
 
@@ -90,8 +98,64 @@ static pr_netaddr_t *get_addr(pool *p, const char *data, size_t datasz) {
   return addr;
 }
 
+/* Get the security group ID for adjusting for access. */
+static const char *get_adjust_sg_id(pool *p, pr_table_t *security_groups) {
+  void *key;
+  const char *sg_id = NULL;
+
+  pr_table_rewind(security_groups);
+  key = pr_table_next(security_groups);
+  while (key != NULL) {
+    struct ec2_security_group *sg;
+
+    pr_signals_handle();
+
+    sg = pr_table_get(security_groups, key, NULL);
+    if (sg != NULL) {
+      /* Make sure that the AWSSecurityGroup configured actually appears
+       * in this instance's list of security groups.  Otherwise, we
+       * use the last security group in the list.
+       */
+      if (aws_adjust_sg_id != NULL) {
+        if (strcmp((const char *) key, aws_adjust_sg_id) == 0) {
+          sg_id = aws_adjust_sg_id;
+          break;
+        }
+
+      } else {
+        sg_id = key;
+      }
+    }
+  }
+
+  if (sg_id == NULL) {
+    errno = ENOENT;
+  }
+
+  return sg_id;
+}
+
+static int allow_sg_ports(pool *p, struct ec2_conn *ec2, const char *sg_id,
+    int from_port, int to_port) {
+  struct ec2_ip_rule *rule;
+  pr_netacl_t *range;
+
+  range = pr_netacl_create(p, pstrdup(p, "0.0.0.0/0"));
+  if (range == NULL) {
+    return -1;
+  }
+
+  rule = pcalloc(p, sizeof(struct ec2_ip_rule));
+  rule->proto = pstrdup(p, "tcp");
+  rule->from_port = rule->to_port = s->ServerPort;
+  rule->ranges = make_array(p, 1, sizeof(pr_netacl_t *));
+  *((pr_netacl_t **) push_array(rule->ranges)) = range;
+
+  return aws_ec2_security_group_allow_rule(p, ec2, sg_id, rule);
+}
+
 static void verify_ctrl_port(pool *p, const struct aws_info *info,
-    server_rec *s, pr_table_t *security_groups) {
+    struct ec2_conn *ec2, server_rec *s, pr_table_t *security_groups) {
   void *key;
   const char *sg_id;
   int ctrl_port_allowed = FALSE;
@@ -153,14 +217,40 @@ static void verify_ctrl_port(pool *p, const struct aws_info *info,
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
       "<VirtualHost> '%s' control port %u is NOT ALLOWED by any security group",
       s->ServerName, s->ServerPort);
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "consider allowing this port using:\n  aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port %u --cidr 0.0.0.0/0",
-      sg_id, s->ServerPort);
+
+    if (!(aws_adjustments & AWS_ADJUST_FL_SECURITY_GROUP)) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "consider allowing this port using:\n  aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port %u --cidr 0.0.0.0/0",
+        sg_id, s->ServerPort);
+
+    } else {
+      int res, xerrno;
+      pool *rule_pool;
+
+      sg_id = get_adjust_sg_id(p, security_groups);
+      rule_pool = make_sub_pool(p);
+
+      res = allow_sg_ports(rule_pool, ec2, s->ServerPort, s->ServerPort);
+      xerrno = errno;
+      destroy_pool(rule_pool);
+
+      if (res < 0) {
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "error adjusting AWS security group ID %s to allow port %u: %s",
+          sg_id, s->ServerPort, strerror(xerrno));
+
+      } else {
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "adjusted AWS security group ID %s to allow port %u",
+          sg_id, s->ServerPort);
+      }
+    }
   }
 }
 
 static void verify_masq_addr(pool *p, const struct aws_info *info,
-    server_rec *s) { config_rec *c;
+    server_rec *s) {
+  config_rec *c;
   pr_netaddr_t *public_addr;
 
   /* Should we use public_hostname here instead? */
@@ -179,27 +269,49 @@ static void verify_masq_addr(pool *p, const struct aws_info *info,
     masq_name = c->argv[1];
 
     if (pr_netaddr_cmp(masq_addr, public_addr) != 0) {
-      /* XXX Automatically correct/adjust this config? */
-      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-        "existing 'MasqueradeAddress %s' for <VirtualHost> '%s' is INCORRECT",
-        masq_name, s->ServerName);
-      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-        "consider using 'MasqueradeAddress %s' instead for <VirtualHost> '%s' "
-        "for passive data transfers", pr_netaddr_get_ipstr(public_addr),
-        s->ServerName);
+      if (!(aws_adjustments & AWS_ADJUST_FL_MASQ_ADDR)) {
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "existing 'MasqueradeAddress %s' for <VirtualHost> '%s' is INCORRECT",
+          masq_name, s->ServerName);
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "consider using 'MasqueradeAddress %s' instead for "
+          "<VirtualHost> '%s' for passive data transfers",
+          pr_netaddr_get_ipstr(public_addr), s->ServerName);
+
+      } else {
+        c->argv[0] = public_addr;
+        c->argv[1] = pstrndup(c->pool, info->public_ipv4, info->public_ipv4sz);
+
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "automatically set 'MasqueradeAddress %s' for <VirtualHost> '%s'",
+          pr_netaddr_get_ipstr(public_addr), s->ServerName);
+      }
     }
 
   } else {
-    /* XXX Automatically correct/add this config? */
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "consider adding 'MasqueradeAddress %s' to <VirtualHost> '%s' for "
-      "passive data transfers", pr_netaddr_get_ipstr(public_addr),
-      s->ServerName);
+    if (!(aws_adjustments & AWS_ADJUST_FL_MASQ_ADDR)) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "consider adding 'MasqueradeAddress %s' to <VirtualHost> '%s' for "
+        "passive data transfers", pr_netaddr_get_ipstr(public_addr),
+        s->ServerName);
+
+    } else {
+      c = pr_config_add(s, "MasqueradeAddress", 0);
+      c->config_type = CONF_PARAM;
+      c->argc = 2;
+      c->argv = pcalloc(c->pool, sizeof(void *) * (c->argc + 1));
+      c->argv[0] = public_addr;
+      c->argv[1] = pstrndup(c->pool, info->public_ipv4, info->public_ipv4sz);
+
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "automatically added 'MasqueradeAddress %s' to <VirtualHost> '%s'",
+        pr_netaddr_get_ipstr(public_addr), s->ServerName);
+    }
   }
 }
 
-static void verify_pasv_ports(pool *p, const struct aws_info *info,
-    server_rec *s, pr_table_t *security_groups) {
+static void verify_pasv_ports(pool *p, struct e2_conn *ec2,
+    const struct aws_info *info, server_rec *s, pr_table_t *security_groups) {
   config_rec *c;
   int pasv_min_port, pasv_max_port;
   void *key;
@@ -220,13 +332,31 @@ static void verify_pasv_ports(pool *p, const struct aws_info *info,
     pasv_min_port = AWS_PASSIVE_PORT_MIN_DEFAULT;
     pasv_max_port = AWS_PASSIVE_PORT_MAX_DEFAULT;
 
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "consider adding 'PassivePorts %d %d' to <VirtualHost> '%s' for "
-      "passive data transfers", pasv_min_port, pasv_max_port, s->ServerName);
+    if (!(aws_adjustments & AWS_ADJUST_FL_PASV_PORTS)) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "consider adding 'PassivePorts %d %d' to <VirtualHost> '%s' for "
+        "passive data transfers", pasv_min_port, pasv_max_port, s->ServerName);
+
+    } else {
+      c = pr_config_add(s, "PassivePorts", 0);
+      c->config_type = CONF_PARAM;
+      c->argc = 2;
+      c->argv = pcalloc(c->pool, sizeof(void *) * (c->argc + 1));
+
+      c->argv[0] = palloc(c->pool, sizeof(int));
+      *((int *) c->argv[0]) = AWS_PASSIVE_PORT_MIN_DEFAULT;
+      c->argv[1] = palloc(c->pool, sizeof(int));
+      *((int *) c->argv[1]) = AWS_PASSIVE_PORT_MAX_DEFAULT;
+
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "automatically added 'PassivePorts %d %d' to <VirtualHost> '%s'",
+        AWS_PASSIVE_PORT_MIN_DEFAULT, AWS_PASSIVE_PORT_MAX_DEFAULT,
+        s->ServerName);
+    }
 
   } else {
     pasv_min_port = *((int *) c->argv[0]);
-    pasv_max_port = *((int *) c->argv[0]);
+    pasv_max_port = *((int *) c->argv[1]);
   }
 
   if (security_groups == NULL) {
@@ -282,9 +412,34 @@ static void verify_pasv_ports(pool *p, const struct aws_info *info,
     (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
       "<VirtualHost> '%s' PassivePorts %d-%d are NOT ALLOWED by any security "
       "group", s->ServerName, pasv_min_port, pasv_max_port);
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "consider allowing these ports using:\n  aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port %d-%d --cidr 0.0.0.0/0",
-      sg_id, pasv_min_port, pasv_max_port);
+
+    if (!(aws_adjustments AWS_ADJUST_FL_PASV_PORTS)) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "consider allowing these ports using:\n  aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port %d-%d --cidr 0.0.0.0/0",
+        sg_id, pasv_min_port, pasv_max_port);
+
+    } else {
+      int res, xerrno;
+      pool *rule_pool;
+
+      sg_id = get_adjust_sg_id(p, security_groups);
+      rule_pool = make_sub_pool(p);
+
+      res = allow_sg_ports(rule_pool, ec2, pasv_min_port, pasv_max_port);
+      xerrno = errno;
+      destroy_pool(rule_pool);
+
+      if (res < 0) {
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "error adjusting AWS security group ID %s to allow ports %d-%d: %s",
+          sg_id, pasv_min_port, pasv_max_port, strerror(xerrno));
+
+      } else {
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "adjusted AWS security group ID %s to allow ports %d-%d",
+          sg_id, pasv_min_port, pasv_max_port);
+      }
+    }
   }
 }
 
@@ -529,6 +684,49 @@ static void set_sess_note(pool *p, const char *key, const char *val,
 /* Configuration handlers
  */
 
+/* usage: AWSAdjustments on|[MasqueradeAddress] [PassivePorts]
+ *          [SecurityGroup]
+ */
+MODRET set_awsadjustments(cmd_rec *cmd) {
+  int adjust_all = -1;
+  unsigned long adjustments = 0UL;
+
+  if (cmd->argc < 2 ||
+      cmd->argc > 4) {
+    CONF_ERROR(cmd, "wrong number of parameters");
+  }
+
+  CHECK_CONF(cmd, CONF_ROOT);
+
+  adjust_all = get_boolean(cmd, 1);
+  if (adjust_all == TRUE) {
+    adjustments = AWS_ADJUST_FL_MASQ_ADDR|AWS_ADJUST_FL_PASV_PORTS|
+      AWS_ADJUST_FL_SECURITY_GROUP;
+
+  } else {
+    register unsigned int i;
+
+    for (i = 1; i < cmd->argc; i++) {
+      if (strcasecmp(cmd->argv[i], "MasqueradeAddress") == 0) {
+        adjustments |= AWS_ADJUST_FL_MASQ_ADDR;
+
+      } else if (strcasecmp(cmd->argv[i], "PassivePorts") == 0) {
+        adjustments |= AWS_ADJUST_FL_PASV_PORTS;
+
+      } else if (strcasecmp(cmd->argv[i], "SecurityGroup") == 0) {
+        adjustments |= AWS_ADJUST_FL_SECURITY_GROUP;
+
+      } else {
+        CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, ": unknown AWSAdjustment: ",
+          cmd->argv[i], NULL));
+      }
+    }
+  }
+
+  aws_adjustments = adjustments;
+  return PR_HANDLED(cmd);
+}
+
 /* usage: AWSCACertificateFile path */
 MODRET set_awscacertfile(cmd_rec *cmd) {
   int res;
@@ -676,6 +874,23 @@ MODRET set_awstimeoutconnect(cmd_rec *cmd) {
   }
 
   aws_connect_timeout_secs = timeout;
+  return PR_HANDLED(cmd);
+}
+
+/* usage: AWSSecurityGroup sg-id */
+MODRET set_awssecuritygroup(cmd_rec *cmd) {
+  const char *sg_id;
+
+  CHECK_ARGS(cmd, 1);
+  CHECK_CONF(cmd, CONF_ROOT);
+
+  sg_id = cmd->argv[1];
+  if (strncmp(sg_id, "sg-", 3) != 0) {
+    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, ": Invalid security group ID '",
+      sg_id, "': does not start with 'sg-'", NULL));
+  }
+
+  aws_adjust_sg_id = sg_id;
   return PR_HANDLED(cmd);
 }
 
@@ -892,13 +1107,13 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 
   for (s = (server_rec *) server_list->xas_list; s; s = s->next) {
     /* Verify control port access */
-    verify_ctrl_port(aws_pool, instance_info, s, security_groups);
+    verify_ctrl_port(aws_pool, ec2, instance_info, s, security_groups);
 
     /* Verify MasqueradeAddress */
     verify_masq_addr(aws_pool, instance_info, s);
 
     /* Verify PassivePorts access */
-    verify_pasv_ports(aws_pool, instance_info, s, security_groups);
+    verify_pasv_ports(aws_pool, ec2, instance_info, s, security_groups);
   }
 
   /* XXX Register with Route53 */
@@ -1033,11 +1248,13 @@ static int aws_sess_init(void) {
  */
 
 static conftable aws_conftab[] = {
+  { "AWSAdjustments",		set_awsadjustments,	NULL },
   { "AWSCACertificateFile",	set_awscacertfile,	NULL },
   { "AWSEngine",		set_awsengine,		NULL },
   { "AWSHealthCheck",		set_awshealthcheck,	NULL },
   { "AWSLog",			set_awslog,		NULL },
   { "AWSOptions",		set_awsoptions,		NULL },
+  { "AWSSecurityGroup",		set_awssecuritygroup,	NULL },
   { "AWSTimeoutConnect",	set_awstimeoutconnect,	NULL },
   { "AWSTimeoutRequest",	set_awstimeoutrequest,	NULL },
   { "AWSUseRoute53",		set_awsuseroute53,	NULL },
