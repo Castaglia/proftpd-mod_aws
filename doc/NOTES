@@ -256,3 +256,8 @@ ranges from which its healthchecks originate are public addresses:
 2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 176.34.159.192/26 <IP address mask, 26-bit mask>
 2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 177.71.207.128/26 <IP address mask, 26-bit mask>
 
+DNS/Route53:
+
+  Support for A/AAAA record with multiple addresses?  What about weights?
+  Support for latency-based record (LBR)?
+  Support for geo-based record (Geo)?
