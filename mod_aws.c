@@ -70,7 +70,7 @@ static unsigned long aws_adjustments = 0UL;
 #define AWS_ADJUST_FL_PASV_PORTS		0x002
 #define AWS_ADJUST_FL_SECURITY_GROUP		0x004
 
-static const char *aws_adjust_sgid = NULL;
+static const char *aws_adjust_sg_id = NULL;
 
 /* For holding onto the EC2 instance metadata for e.g. session processes' use */
 static const struct aws_info *instance_info = NULL;
@@ -147,7 +147,8 @@ static int allow_sg_ports(pool *p, struct ec2_conn *ec2, const char *sg_id,
 
   rule = pcalloc(p, sizeof(struct ec2_ip_rule));
   rule->proto = pstrdup(p, "tcp");
-  rule->from_port = rule->to_port = s->ServerPort;
+  rule->from_port = from_port;
+  rule->to_port = to_port;
   rule->ranges = make_array(p, 1, sizeof(pr_netacl_t *));
   *((pr_netacl_t **) push_array(rule->ranges)) = range;
 
@@ -230,7 +231,7 @@ static void verify_ctrl_port(pool *p, const struct aws_info *info,
       sg_id = get_adjust_sg_id(p, security_groups);
       rule_pool = make_sub_pool(p);
 
-      res = allow_sg_ports(rule_pool, ec2, s->ServerPort, s->ServerPort);
+      res = allow_sg_ports(rule_pool, ec2, sg_id, s->ServerPort, s->ServerPort);
       xerrno = errno;
       destroy_pool(rule_pool);
 
@@ -310,8 +311,8 @@ static void verify_masq_addr(pool *p, const struct aws_info *info,
   }
 }
 
-static void verify_pasv_ports(pool *p, struct e2_conn *ec2,
-    const struct aws_info *info, server_rec *s, pr_table_t *security_groups) {
+static void verify_pasv_ports(pool *p, const struct aws_info *info,
+    struct ec2_conn *ec2, server_rec *s, pr_table_t *security_groups) {
   config_rec *c;
   int pasv_min_port, pasv_max_port;
   void *key;
@@ -413,7 +414,7 @@ static void verify_pasv_ports(pool *p, struct e2_conn *ec2,
       "<VirtualHost> '%s' PassivePorts %d-%d are NOT ALLOWED by any security "
       "group", s->ServerName, pasv_min_port, pasv_max_port);
 
-    if (!(aws_adjustments AWS_ADJUST_FL_PASV_PORTS)) {
+    if (!(aws_adjustments & AWS_ADJUST_FL_PASV_PORTS)) {
       (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
         "consider allowing these ports using:\n  aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port %d-%d --cidr 0.0.0.0/0",
         sg_id, pasv_min_port, pasv_max_port);
@@ -425,7 +426,7 @@ static void verify_pasv_ports(pool *p, struct e2_conn *ec2,
       sg_id = get_adjust_sg_id(p, security_groups);
       rule_pool = make_sub_pool(p);
 
-      res = allow_sg_ports(rule_pool, ec2, pasv_min_port, pasv_max_port);
+      res = allow_sg_ports(rule_pool, ec2, sg_id, pasv_min_port, pasv_max_port);
       xerrno = errno;
       destroy_pool(rule_pool);
 
@@ -1107,13 +1108,13 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 
   for (s = (server_rec *) server_list->xas_list; s; s = s->next) {
     /* Verify control port access */
-    verify_ctrl_port(aws_pool, ec2, instance_info, s, security_groups);
+    verify_ctrl_port(aws_pool, instance_info, ec2, s, security_groups);
 
     /* Verify MasqueradeAddress */
     verify_masq_addr(aws_pool, instance_info, s);
 
     /* Verify PassivePorts access */
-    verify_pasv_ports(aws_pool, ec2, instance_info, s, security_groups);
+    verify_pasv_ports(aws_pool, instance_info, ec2, s, security_groups);
   }
 
   /* XXX Register with Route53 */
