@@ -24,6 +24,27 @@ NEXT:
     Example:
       AWSUseRoute53 ftp.openbridge.io
 
+For A rrsets:
+
+    <ResourceRecords>
+      <ResourceRecord>
+        <Value>1.2.3.4</Value>
+      </ResourceRecord>
+    </ResourceRecords>
+
+Presumably there could be multiple IP addresses in that list.  Same for AAAA
+(only IPv6 addresses).
+
+For CNAME rrsets:
+
+    <ResourceRecords>
+      <ResourceRecord>
+        <Value>elb.amazonaws.com</Value>
+      </ResourceRecord>
+    </ResourceRecords>
+
+What about for Round Robin (weighted alias) or Geo (geo alias) rrsets?
+
   SQS
     AWSLogSQS queue [region]
       + use GetQueueUrl to get queue URL from SQS using the given name
@@ -235,3 +256,8 @@ ranges from which its healthchecks originate are public addresses:
 2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 176.34.159.192/26 <IP address mask, 26-bit mask>
 2016-03-07 23:54:30,198 [19749] <aws.route53:15>:   range: 177.71.207.128/26 <IP address mask, 26-bit mask>
 
+DNS/Route53:
+
+  Support for A/AAAA record with multiple addresses?  What about weights?
+  Support for latency-based record (LBR)?
+  Support for geo-based record (Geo)?
