@@ -846,7 +846,8 @@ MODRET set_awsoptions(cmd_rec *cmd) {
   c = add_config_param(cmd->argv[0], 1, NULL);
 
   for (i = 1; i < cmd->argc; i++) {
-    if (strcmp(cmd->argv[i], "FooBar") == 0) {
+    if (strcmp(cmd->argv[i], "DryRun") == 0) {
+      opts |= AWS_OPT_DRY_RUN;
 
     } else {
       CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, ": unknown AWSOption '",

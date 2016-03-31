@@ -815,9 +815,11 @@ int aws_ec2_security_group_allow_rule(pool *p, struct ec2_conn *ec2,
   *((char **) push_array(query_params)) = pstrcat(req_pool,
     "Version=", ec2_api_version, NULL);
 
-#if 0
-  *((char **) push_array(query_params)) = pstrdup(req_pool, "DryRun=true");
-#endif
+  if (aws_opts & AWS_OPT_DRY_RUN) {
+    pr_trace_msg(trace_channel, 12,
+      "performing dry-run check for adding inbound security group rule");
+    *((char **) push_array(query_params)) = pstrdup(req_pool, "DryRun=true");
+  }
 
   *((char **) push_array(query_params)) = pstrcat(req_pool,
     "IpPermissions.1.IpProtocol=", aws_http_urlencode(req_pool, ec2->http,
@@ -898,9 +900,11 @@ int aws_ec2_security_group_revoke_rule(pool *p, struct ec2_conn *ec2,
   *((char **) push_array(query_params)) = pstrcat(req_pool,
     "Version=", ec2_api_version, NULL);
 
-#if 0
-  *((char **) push_array(query_params)) = pstrdup(req_pool, "DryRun=true");
-#endif
+  if (aws_opts & AWS_OPT_DRY_RUN) {
+    pr_trace_msg(trace_channel, 12,
+      "performing dry-run check for removing inbound security group rule");
+    *((char **) push_array(query_params)) = pstrdup(req_pool, "DryRun=true");
+  }
 
   *((char **) push_array(query_params)) = pstrcat(req_pool,
     "IpPermissions.1.IpProtocol=", aws_http_urlencode(req_pool, ec2->http,

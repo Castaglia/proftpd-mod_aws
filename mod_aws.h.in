@@ -70,4 +70,7 @@ extern module aws_module;
 extern pool *aws_pool;
 extern unsigned long aws_opts;
 
+/* AWSOptions */
+#define AWS_OPT_DRY_RUN		0x0001
+
 #endif /* MOD_AWS_H */
