@@ -12,7 +12,9 @@
 <hr><br>
 
 <p>
-The purpose of the <code>mod_aws</code> module is
+The purpose of the <code>mod_aws</code> module is to automate the configuration
+of ProFTPD for running on an AWS EC2 instance, including any configuration
+of the AWS resources to allow FTP to work properly.
 
 <p>
 The <code>mod_aws</code> module relies on the following libraries:
@@ -309,10 +311,6 @@ your <code>proftpd.conf</code>:
 </pre>
 This trace logging can generate large files; it is intended for debugging
 use only, and should be removed from any production configuration.
-
-  <li>Support "emergency recovery" codes
-  <li>Support resynchronization with clients
-</ul>
 
 <p><a name="FAQ">
 <b>Frequently Asked Questions</b><br>
