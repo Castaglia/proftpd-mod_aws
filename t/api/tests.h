@@ -29,7 +29,7 @@
 
 #include "mod_aws.h"
 
-#include "erro.h"
+#include "error.h"
 
 #ifdef HAVE_CHECK_H
 # include <check.h>
