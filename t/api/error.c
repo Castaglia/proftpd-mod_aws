@@ -42,10 +42,42 @@ static void tear_down(void) {
 }
 
 START_TEST (error_get_code_test) {
+  unsigned int res, expected;
+
+  expected = AWS_ERROR_CODE_UNKNOWN;
+  res = aws_error_get_code(p, NULL);
+  fail_unless(res == expected, "Expected %u, got %u", expected, res);
+
+  expected = AWS_ERROR_CODE_AUTH_FAILURE;
+  res = aws_error_get_code(p, "AuthFailure");
+  fail_unless(res == expected, "Expected %u, got %u", expected, res);
+
+  expected = AWS_ERROR_CODE_UNKNOWN;
+  res = aws_error_get_code(p, "fooBarBaz");
+  fail_unless(res == expected, "Expected %u, got %u", expected, res);
 }
 END_TEST
 
 START_TEST (error_get_name_test) {
+  const char *res, *expected;
+
+  expected = "<unknown>";
+  res = aws_error_get_code(0);
+  fail_unless(res != NULL, "Failed to handle zero");
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'"",
+    expected, res);
+
+  expected = "AuthFailure";
+  res = aws_error_get_code(AWS_ERROR_CODE_AUTH_FAILURE);
+  fail_unless(res != NULL, "Failed to handle zero");
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'"",
+    expected, res);
+
+  expected = "<unknown>";
+  res = aws_error_get_code(UINT_MAX);
+  fail_unless(res != NULL, "Failed to handle UINT_MAX");
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'"",
+    expected, res);
 }
 END_TEST
 
