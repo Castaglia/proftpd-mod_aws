@@ -20,7 +20,7 @@ install:
   - sudo apt-get install -y lcov
   - gem install coveralls-lcov
   # for reference
-  - curl-config --cflags --libs
+  - curl --version
   - xml2-config --cflags --libs
 
 before_script:

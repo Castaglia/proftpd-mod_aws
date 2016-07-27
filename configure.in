@@ -81,6 +81,23 @@ AC_ARG_WITH(libraries,
 AC_HEADER_STDC
 AC_CHECK_HEADERS(stdlib.h unistd.h curl/curl.h libxml/parser.h uuid/uuid.h)
 
+AC_MSG_CHECKING([for libcurl CURLOPT_TCP_KEEPALIVE support])
+AC_TRY_COMPILE(
+  [
+    #include <sys/types.h>
+    #ifdef HAVE_CURL_CURL_H
+    # include <curl/curl.h>
+    #endif
+  ], [
+    (void) curl_easy_setopt(NULL, CURLOPT_TCP_KEEPALIVE, 1L);
+  ], [
+    AC_DEFINE(HAVE_CURL_CURLOPT_TCP_KEEPALIVE, 1, [Define if you have CURLOPT_TCP_KEEPALIVE])
+    AC_MSG_RESULT(yes)
+  ], [
+    AC_MSG_RESULT(no)
+  ]
+)
+
 AC_MSG_CHECKING([whether linking with OpenSSL functions requires -ldl])
 saved_libs="$LIBS"
 
@@ -111,17 +128,14 @@ LIBS="-lcrypto $LIBS"
 AC_TRY_LINK(
   [
     #include <openssl/evp.h>
-  ],
-  [
+  ], [
     EVP_MD *md;
     md = EVP_sha256();
-  ],
-  [
+  ], [
     AC_MSG_RESULT(yes)
     AC_DEFINE(HAVE_OPENSSL_SHA256, 1, [OpenSSL supports SHA256])
     LIBS="$saved_libs"
-  ],
-  [
+  ], [
     AC_MSG_RESULT(no)
     LIBS="$saved_libs"
   ]

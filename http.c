@@ -479,12 +479,14 @@ void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
       curl_easy_strerror(curl_code));
   }
 
+#ifdef HAVE_CURL_CURLOPT_TCP_KEEPALIVE
   curl_code = curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
   if (curl_code != CURLE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURLOPT_TCP_KEEPALIVE: %s",
       curl_easy_strerror(curl_code));
   }
+#endif /* HAVE_CURL_CURLOPT_TCP_KEEPALIVE */
 
   curl_code = curl_easy_setopt(curl, CURLOPT_SHARE, curl_share);
   if (curl_code != CURLE_OK) {
