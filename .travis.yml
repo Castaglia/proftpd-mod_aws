@@ -20,6 +20,7 @@ install:
   - sudo apt-get install -y lcov
   - gem install coveralls-lcov
   # for reference
+  - curl-config --cflags --libs
   - xml2-config --cflags --libs
 
 before_script:
@@ -38,11 +39,11 @@ script:
   - cp install-sh proftpd/contrib/mod_aws/
   - cp -R t/ proftpd/contrib/mod_aws/t/
   - cd proftpd
-  - ./configure --enable-devel=coverage --enable-dso --enable-openssl --enable-tests --with-shared=mod_aws
+  - ./configure --enable-devel=coverage --enable-dso --enable-openssl --enable-tests --with-shared=mod_aws --with-includes=/usr/include/libxml2
   - make
   # Last, a build with a static module, and run the tests
   - make clean
-  - ./configure --enable-devel=coverage --enable-openssl --enable-tests --with-modules=mod_aws
+  - ./configure --enable-devel=coverage --enable-openssl --enable-tests --with-modules=mod_aws --with-includes=/usr/include/libxml2
   - make
   - cd contrib/mod_aws && make TEST_VERBOSE=1 check && cd ../../
 
