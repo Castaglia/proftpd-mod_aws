@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_aws Health API
- * Copyright (c) 2016 TJ Saunders
+ * ProFTPD - mod_aws testsuite
+ * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,27 +22,50 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
+/* Error API tests. */
 
-#ifndef MOD_AWS_HEALTH_H
-#define MOD_AWS_HEALTH_H
+#include "tests.h"
 
-struct health {
-  pool *pool;
+static pool *p = NULL;
 
-  const pr_netaddr_t *addr;
-  int port;
-  const char *uri;
-  size_t urisz;
-  array_header *acls;
+static void set_up(void) {
+  if (p == NULL) {
+    p = make_sub_pool(NULL);
+  }
+}
 
-  /* For internal use. */
-  conn_t *conn;
-  int timerno;
-};
+static void tear_down(void) {
+  if (p) {
+    destroy_pool(p);
+    p = NULL;
+  } 
+}
 
-struct health *aws_health_listener_create(pool *p,
-  const char *addr, int port, const char *uri, int freq, array_header *acls);
-int aws_health_listener_destroy(pool *p, struct health *health);
+START_TEST (error_get_code_test) {
+}
+END_TEST
 
-#endif /* MOD_AWS_HEALTH_H */
+START_TEST (error_get_name_test) {
+}
+END_TEST
+
+START_TEST (error_parse_xml_test) {
+}
+END_TEST
+
+Suite *tests_get_error_suite(void) {
+  Suite *suite;
+  TCase *testcase;
+
+  suite = suite_create("error");
+  testcase = tcase_create("base");
+
+  tcase_add_checked_fixture(testcase, set_up, tear_down);
+
+  tcase_add_test(testcase, error_get_code_test);
+  tcase_add_test(testcase, error_get_name_test);
+  tcase_add_test(testcase, error_parse_xml_test);
+
+  suite_add_tcase(suite, testcase);
+  return suite;
+}

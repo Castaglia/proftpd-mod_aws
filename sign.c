@@ -148,7 +148,7 @@ static const char *create_canon_headers(pool *p, pr_table_t *headers) {
   int header_count;
   array_header *http_headers;
   char *canon_headers = NULL, **elts;
-  void *key;
+  const void *key;
 
   header_count = pr_table_count(headers);
   if (header_count == 0) {
@@ -160,7 +160,7 @@ static const char *create_canon_headers(pool *p, pr_table_t *headers) {
   pr_table_rewind(headers);
   key = pr_table_next(headers);
   while (key != NULL) {
-    void *value;
+    const void *value;
     char *name, *header_name, *header_value;
 
     pr_signals_handle();
@@ -206,7 +206,7 @@ static const char *create_signed_headers(pool *p, pr_table_t *headers) {
   int header_count;
   array_header *header_names;
   char *signed_headers = NULL, **elts;
-  void *key;
+  const void *key;
 
   header_count = pr_table_count(headers);
   if (header_count == 0) {

@@ -89,9 +89,9 @@ static const char *aws_route53_fqdn = NULL;
 
 static const char *trace_channel = "aws";
 
-static pr_netaddr_t *get_addr(pool *p, const char *data, size_t datasz) {
+static const pr_netaddr_t *get_addr(pool *p, const char *data, size_t datasz) {
   char *name;
-  pr_netaddr_t *addr;
+  const pr_netaddr_t *addr;
 
   name = pstrndup(p, data, datasz);
   addr = pr_netaddr_get_addr(p, name, NULL);
@@ -100,13 +100,13 @@ static pr_netaddr_t *get_addr(pool *p, const char *data, size_t datasz) {
 
 /* Get the security group ID for adjusting for access. */
 static const char *get_adjust_sg_id(pool *p, pr_table_t *security_groups) {
-  void *key;
+  const void *key;
   const char *sg_id = NULL;
 
   pr_table_rewind(security_groups);
   key = pr_table_next(security_groups);
   while (key != NULL) {
-    struct ec2_security_group *sg;
+    const struct ec2_security_group *sg;
 
     pr_signals_handle();
 
@@ -157,7 +157,7 @@ static int allow_sg_ports(pool *p, struct ec2_conn *ec2, const char *sg_id,
 
 static void verify_ctrl_port(pool *p, const struct aws_info *info,
     struct ec2_conn *ec2, server_rec *s, pr_table_t *security_groups) {
-  void *key;
+  const void *key;
   const char *sg_id;
   int ctrl_port_allowed = FALSE;
 
@@ -178,7 +178,7 @@ static void verify_ctrl_port(pool *p, const struct aws_info *info,
   pr_table_rewind(security_groups);
   key = pr_table_next(security_groups);
   while (key != NULL) {
-    struct ec2_security_group *sg;
+    const struct ec2_security_group *sg;
 
     pr_signals_handle();
 
@@ -315,7 +315,7 @@ static void verify_pasv_ports(pool *p, const struct aws_info *info,
     struct ec2_conn *ec2, server_rec *s, pr_table_t *security_groups) {
   config_rec *c;
   int pasv_min_port, pasv_max_port;
-  void *key;
+  const void *key;
   const char *sg_id;
   int pasv_ports_allowed = FALSE;
 
@@ -372,7 +372,7 @@ static void verify_pasv_ports(pool *p, const struct aws_info *info,
   pr_table_rewind(security_groups);
   key = pr_table_next(security_groups);
   while (key != NULL) {
-    struct ec2_security_group *sg;
+    const struct ec2_security_group *sg;
 
     pr_signals_handle();
 
@@ -792,7 +792,7 @@ MODRET set_awshealthcheck(cmd_rec *cmd) {
 
   if (cmd->argc == 3) {
     const char *name;
-    pr_netaddr_t *addr;
+    const pr_netaddr_t *addr;
 
     name = cmd->argv[2];
     addr = pr_netaddr_get_addr(cmd->tmp_pool, name, NULL);

@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_aws Health API
- * Copyright (c) 2016 TJ Saunders
+ * ProFTPD - mod_aws API testsuite
+ * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,27 +22,25 @@
  * source distribution.
  */
 
+/* Testsuite management */
+
+#ifndef MOD_AWS_TESTS_H
+#define MOD_AWS_TESTS_H
+
 #include "mod_aws.h"
 
-#ifndef MOD_AWS_HEALTH_H
-#define MOD_AWS_HEALTH_H
+#include "error.h"
 
-struct health {
-  pool *pool;
+#ifdef HAVE_CHECK_H
+# include <check.h>
+#else
+# error "Missing Check installation; necessary for ProFTPD testsuite"
+#endif
 
-  const pr_netaddr_t *addr;
-  int port;
-  const char *uri;
-  size_t urisz;
-  array_header *acls;
+Suite *tests_get_error_suite(void);
 
-  /* For internal use. */
-  conn_t *conn;
-  int timerno;
-};
+unsigned int recvd_signal_flags;
+extern pid_t mpid;
+extern server_rec *main_server;
 
-struct health *aws_health_listener_create(pool *p,
-  const char *addr, int port, const char *uri, int freq, array_header *acls);
-int aws_health_listener_destroy(pool *p, struct health *health);
-
-#endif /* MOD_AWS_HEALTH_H */
+#endif /* MOD_AWS_TESTS_H */

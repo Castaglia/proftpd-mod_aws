@@ -28,7 +28,7 @@
 array_header *aws_utils_table2array(pool *p, pr_table_t *tab) {
   array_header *list;
   int listsz;
-  void *key;
+  const void *key;
 
   listsz = pr_table_count(tab);
   list = make_array(p, listsz, sizeof(char *));
@@ -37,7 +37,7 @@ array_header *aws_utils_table2array(pool *p, pr_table_t *tab) {
 
   key = pr_table_next(tab);
   while (key != NULL) {
-    void *value;
+    const void *value;
 
     pr_signals_handle();
 

@@ -46,6 +46,9 @@
 # error "libxml2 library/headers required"
 #endif
 
+/* Define if you have the CURLOPT_TCP_KEEPALIVE option in libcurl. */
+#undef HAVE_CURL_CURLOPT_TCP_KEEPALIVE
+
 /* Define if you have OpenSSL with SHA256 support. */
 #undef HAVE_OPENSSL_SHA256
 
