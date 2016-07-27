@@ -19,6 +19,8 @@ install:
   # for test code coverage
   - sudo apt-get install -y lcov
   - gem install coveralls-lcov
+  # for reference
+  - xml2-config --cflags --libs
 
 before_script:
   - cd ${TRAVIS_BUILD_DIR}
