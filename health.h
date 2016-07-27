@@ -30,7 +30,7 @@
 struct health {
   pool *pool;
 
-  pr_netaddr_t *addr;
+  const pr_netaddr_t *addr;
   int port;
   const char *uri;
   size_t urisz;
