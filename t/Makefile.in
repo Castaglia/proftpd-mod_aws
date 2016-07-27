@@ -39,12 +39,12 @@ TEST_API_DEPS=\
   $(top_srcdir)/src/env.o \
   $(top_srcdir)/src/trace.o \
   $(top_srcdir)/src/support.o \
+  $(module_srcdir)/xml.o \
   $(module_srcdir)/error.o
 
 TEST_API_LIBS=-lcheck
 
 TEST_API_OBJS=\
-  api/xml.o \
   api/error.o \
   api/stubs.o \
   api/tests.o
