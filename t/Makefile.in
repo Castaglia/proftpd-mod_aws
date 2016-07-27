@@ -44,6 +44,7 @@ TEST_API_DEPS=\
 TEST_API_LIBS=-lcheck
 
 TEST_API_OBJS=\
+  api/xml.o \
   api/error.o \
   api/stubs.o \
   api/tests.o
