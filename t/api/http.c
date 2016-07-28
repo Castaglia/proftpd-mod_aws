@@ -314,6 +314,13 @@ START_TEST (http_get_test) {
   fail_unless(errno == ETIMEDOUT, "Expected ETIMEDOUT (%d), got %s (%d)",
     ETIMEDOUT, strerror(errno), errno);
 
+  /* Unsupported URL syntax */
+  url = "foo://bar:baz/42";
+  res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL);
+  fail_unless(res < 0, "Handled unsupported URL syntax unexpectedly");
+  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+    strerror(errno), errno);
+
   aws_http_destroy(p, http);
 }
 END_TEST
