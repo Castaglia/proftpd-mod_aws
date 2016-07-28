@@ -150,12 +150,17 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
   const char *elt_name;
   size_t elt_namelen;
 
+  if (data == NULL ||
+      datasz == 0) {
+    errno = EINVAL;
+    return NULL;
+  }
+
   pr_trace_msg(trace_channel, 15,
     "parsing XML error document: '%.*s'", (int) datasz, data);
 
   doc = aws_xml_doc_parse(p, data, (int) datasz);
   if (doc == NULL) {
-    errno = EINVAL;
     return NULL;
   }
 

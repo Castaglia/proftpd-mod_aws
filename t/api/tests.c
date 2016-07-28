@@ -30,8 +30,8 @@ struct testsuite_info {
 };
 
 static struct testsuite_info suites[] = {
-  { "error",		tests_get_error_suite },
   { "xml",		tests_get_xml_suite },
+  { "error",		tests_get_error_suite },
 
   { NULL, NULL }
 };

@@ -188,6 +188,12 @@ const char *aws_xml_elt_get_text(pool *p, void *ptr) {
 void *aws_xml_doc_parse(pool *p, const char *data, size_t datasz) {
   xmlDocPtr doc;
 
+  if (data == NULL ||
+      datasz == 0) {
+    errno EINVAL;
+    return NULL;
+  }
+
   doc = xmlReadMemory(data, (int) datasz, "error.xml", NULL, xml_parse_opts);
   return doc;
 }
