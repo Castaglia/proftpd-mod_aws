@@ -210,7 +210,8 @@ static int http_perform(pool *p, CURL *curl, const char *url,
         "'%s' request error: %s", url, curl_errorbuf);
 
       /* Note: What other error strings should we search for here? */
-      if (strstr(curl_errorbuf, "Could not resolve host") != NULL) {
+      if (strstr(curl_errorbuf, "Couldn't resolve host") != NULL ||
+          strstr(curl_errorbuf, "Could not resolve host") != NULL) {
         xerrno = ESRCH;
 
       } else if (strstr(curl_errorbuf, "Connection timed out") != NULL) {
