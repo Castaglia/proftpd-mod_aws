@@ -241,7 +241,7 @@ static size_t resp_cb(char *item, size_t item_len, size_t item_count,
 START_TEST (http_get_test) {
   int res;
   void *http;
-  const char *url;
+  const char *url, *content_type = NULL;
   long resp_code = 0;
 
   res = aws_http_get(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
@@ -278,6 +278,39 @@ START_TEST (http_get_test) {
     strerror(errno));
   fail_unless(resp_code == AWS_HTTP_RESPONSE_CODE_OK,
     "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  /* Once more, with the Content-Type. */
+  res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code,
+    &content_type);
+  fail_unless(res == 0, "Failed to handle GET request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code == AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+  fail_unless(content_type != NULL, "Failed to get Content-Type of response");
+  fail_unless(strstr(content_type, "text/html") != NULL,
+    "Expected 'text/html' in Content-Type, got '%s'", content_type);
+
+  /* Unknown/bad URL */
+  url = "http://www.google.com/foo/bar/baz";
+  res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL);
+  fail_unless(res == 0, "Failed to handle GET request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code == AWS_HTTP_RESPONSE_CODE_NOT_FOUND,
+    "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_NOT_FOUND, resp_code);
+
+  /* Unresolvable DNS names. */
+  url = "http://my.hostname.at.domain.example.com";
+  res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL);
+  fail_unless(res < 0, "Handled unresolvable DNS name unexpectedly");
+  fail_unless(errno == ESRCH, "Expected ESRCH (%d), got %s (%d)", ESRCH,
+    strerror(errno), errno);
+
+  /* Unconnectable IP addresses */
+  url = "http://1.2.3.4";
+  res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL);
+  fail_unless(res < 0, "Handled unreachable IP address unexpectedly");
+  fail_unless(errno == ETIMEDOUT, "Expected ETIMEDOUT (%d), got %s (%d)",
+    ETIMEDOUT, strerror(errno), errno);
 
   aws_http_destroy(p, http);
 }
