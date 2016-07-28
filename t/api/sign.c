@@ -150,7 +150,7 @@ END_TEST
 START_TEST (sign_v4_generate_valid_params_test) {
   int res;
   const char *access_key_id, *secret_access_key, *token, *region, *service;
-  const char *http_method, *http_path, *http_body, *signature;
+  const char *http_method, *http_path, *http_body, *signature, *added_token;
   void *http;
   pr_table_t *http_headers;
   array_header *query_params;
@@ -191,6 +191,87 @@ START_TEST (sign_v4_generate_valid_params_test) {
   signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
   fail_unless(signature != NULL, "Failed to get '%s' signature header: %s",
     AWS_HTTP_HEADER_AUTHZ, strerror(errno));
+
+  /* Provide a token */
+
+  http_body = NULL;
+  http_headers = aws_http_default_headers(p, NULL);
+  token = "TOKEN";
+
+  mark_point();
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
+    service, http, http_method, http_path, query_params, http_headers,
+    http_body, 0);
+  fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
+
+  signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
+  fail_unless(signature != NULL, "Failed to get '%s' signature header: %s",
+    AWS_HTTP_HEADER_AUTHZ, strerror(errno));
+
+  added_token = pr_table_get(http_headers, AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN,
+    NULL);
+  fail_unless(signature != NULL, "Failed to get '%s' token header: %s",
+    AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN, strerror(errno));
+
+  /* Provide a longer path, and some query params */
+
+  http_headers = aws_http_default_headers(p, NULL);
+  http_path = "/foo/bar";
+  query_params = make_array(p, 1, sizeof(char *));
+  *((char **) push_array(query_params) = pstrdup(p, "DryRun=true);
+  token = NULL;
+
+  mark_point();
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
+    service, http, http_method, http_path, query_params, http_headers,
+    http_body, 0);
+  fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
+
+  signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
+  fail_unless(signature != NULL, "Failed to get '%s' signature header: %s",
+    AWS_HTTP_HEADER_AUTHZ, strerror(errno));
+
+  /* Provide empty headers */
+
+  http_headers = pr_table_alloc(p, 0);
+  http_path = "/";
+  query_paras = make_array(p, 0, sizeof(char *));
+  token = NULL;
+
+  mark_point();
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
+    service, http, http_method, http_path, query_params, http_headers,
+    http_body, 0);
+  fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
+
+  signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
+  fail_unless(signature != NULL, "Failed to get '%s' signature header: %s",
+    AWS_HTTP_HEADER_AUTHZ, strerror(errno));
+
+  /* Provide a table with header names, but not values */
+
+  http_headers = pr_table_alloc(p, 0);
+  pr_table_add(http_headers, pstrdup(p, "Foo"), NULL, 0);
+  pr_table_add(http_headers, pstrdup(p, "Bar"), NULL, 0);
+  http_path = "/";
+  query_paras = make_array(p, 0, sizeof(char *));
+  token = NULL;
+
+  mark_point();
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
+    service, http, http_method, http_path, query_params, http_headers,
+    http_body, 0);
+  fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
+
+  signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
+  fail_unless(signature != NULL, "Failed to get '%s' signature header: %s",
+    AWS_HTTP_HEADER_AUTHZ, strerror(errno));
+
+  /* XXX Provide a body larger than OpenSSL's SHA256() max buffer? */
+
+  /* XXX Provide a body large enough, such that the canonical request is larger
+   * than OpenSSL's SHA256() max buffer?
+   */
 
   aws_http_destroy(p, http);
 }
