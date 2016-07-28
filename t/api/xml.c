@@ -58,7 +58,7 @@ START_TEST (xml_doc_parse_test) {
   const char *data;
   size_t datasz;
 
-  xml = aws_xml_doc_parse(p, NULL, NULL);
+  xml = aws_xml_doc_parse(p, NULL, 0);
   fail_unless(xml == NULL, "Failed to handle null data");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);

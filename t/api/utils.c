@@ -63,7 +63,7 @@ START_TEST (utils_table2array_test) {
 
   res = aws_utils_table2array(p, tab);
   fail_unless(res != NULL, "Failed to convert table to array: %s",
-    strerror(errno);
+    strerror(errno));
   fail_unless(res->nelts == 2, "Expected 2 elements, got %u", res->nelts);
 
   elts = res->elts;
