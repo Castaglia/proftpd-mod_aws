@@ -44,7 +44,7 @@ static void tear_down(void) {
 START_TEST (utils_table2array_test) {
   array_header *res;
   pr_table_t *tab;
-  const char **elts, *expected;
+  const char **elts, *expected, *expected2;
 
   res = aws_utils_table2array(NULL, NULL);
   fail_unless(res == NULL, "Failed to handle null pool");
@@ -69,12 +69,12 @@ START_TEST (utils_table2array_test) {
   elts = res->elts;
 
   expected = "Foo: Bar";
-  fail_unless(strcmp(elts[0], expected) == 0,
-    "Expected '%s', got '%s'", expected, elts[0]);
+  expected2 = "Baz: Quxx";
+  fail_unless(strcmp(elts[0], expected) == 0 || strcmp(elts[0], expected2) == 0,
+    "Expected '%s' or '%s', got '%s'", expected, expected2, elts[0]);
 
-  expected = "Baz: Quxx";
-  fail_unless(strcmp(elts[1], expected) == 0,
-    "Expected '%s', got '%s'", expected, elts[1]);
+  fail_unless(strcmp(elts[1], expected) == 0 || strcmp(elts[1], expected2) == 0,
+    "Expected '%s' or '%s', got '%s'", expected, expected2, elts[1]);
 
   pr_table_free(tab);
 }
