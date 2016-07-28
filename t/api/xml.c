@@ -76,7 +76,74 @@ START_TEST (xml_doc_parse_test) {
 }
 END_TEST
 
+START_TEST (xml_doc_get_root_elt_test) {
+  void *elt;
+
+  elt = aws_xml_doc_get_root_elt(NULL, NULL);
+  fail_unless(elt == NULL, "Failed to handle null doc");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+}
+END_TEST
+
+START_TEST (xml_elt_get_child_test) {
+  void *kid;
+
+  kid = aws_xml_elt_get_child(NULL, NULL, NULL, 0);
+  fail_unless(kid == NULL, "Failed to handle null arguments");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+}
+END_TEST
+
 START_TEST (xml_elt_get_child_count_test) {
+  int res;
+
+  res = aws_xml_elt_get_child_count(NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null arguments");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+}
+END_TEST
+
+START_TEST (xml_elt_get_next_test) {
+  void *elt;
+
+  elt = aws_xml_elt_get_next(NULL, NULL);
+  fail_unless(elt == NULL, "Failed to handle null arguments");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+}
+END_TEST
+
+START_TEST (xml_elt_get_name_test) {
+  const char *name;
+  size_t name_len = 0;
+
+  name = aws_xml_elt_get_name(NULL, NULL, NULL);
+  fail_unless(name == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  name = aws_xml_elt_get_name(p, NULL, NULL);
+  fail_unless(name == NULL, "Failed to handle null element");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+}
+END_TEST
+
+START_TEST (xml_elt_get_text_test) {
+  const char *text;
+
+  text = aws_xml_elt_get_text(NULL, NULL);
+  fail_unless(text == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  text = aws_xml_elt_get_text(p, NULL);
+  fail_unless(text == NULL, "Failed to handle null element");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
 }
 END_TEST
 
@@ -90,7 +157,12 @@ Suite *tests_get_xml_suite(void) {
   tcase_add_checked_fixture(testcase, set_up, tear_down);
 
   tcase_add_test(testcase, xml_doc_parse_test);
+  tcase_add_test(testcase, xml_doc_get_root_elt_test);
+  tcase_add_test(testcase, xml_elt_get_child_test);
   tcase_add_test(testcase, xml_elt_get_child_count_test);
+  tcase_add_test(testcase, xml_elt_get_next_test);
+  tcase_add_test(testcase, xml_elt_get_name_test);
+  tcase_add_test(testcase, xml_elt_get_text_test);
 
   suite_add_tcase(suite, testcase);
   return suite;
