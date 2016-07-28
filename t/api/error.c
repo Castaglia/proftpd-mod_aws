@@ -105,6 +105,130 @@ START_TEST (error_parse_xml_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  data = "foo";
+  err = aws_error_parse_xml(p, data, 0);
+  fail_unless(err == NULL, "Failed to handle empty data");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  /* Malformed XML: no root element */
+
+  data = pstrdup(p, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+  datasz = strlen(data);
+  err = aws_error_parse_xml(p, data, datasz);
+  fail_unless(err == NULL, "Failed to handle XML with no root element");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  /* Malformed XML: no <Response> element */
+
+  data = pstrdup(p,
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<FooBar/>\n");
+  datasz = strlen(data);
+  err = aws_error_parse_xml(p, data, datasz);
+  fail_unless(err == NULL, "Failed to handle XML with no <Response> element");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  /* Malformed XML: <Response> element with wrong child count (1) */
+
+  data = pstrdup(p,
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<Response>\n"
+    "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
+    "</Response>\n");
+  datasz = strlen(data);
+  err = aws_error_parse_xml(p, data, datasz);
+  fail_unless(err == NULL, "Failed to handle XML with bad <Response> element");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  /* Malformed XML: no <Errors> element */
+
+  data = pstrdup(p,
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<Response>\n"
+    "  <Foo>bar</Foo>\n"
+    "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
+    "</Response>\n");
+  datasz = strlen(data);
+  err = aws_error_parse_xml(p, data, datasz);
+  fail_unless(err == NULL, "Failed to handle XML with no <Errors> element");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  /* Malformed XML: no <Error> element */
+
+  data = pstrdup(p,
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<Response>\n"
+    "  <Errors>\n"
+    "    <Foo>bar</Foo>\n"
+    "  </Errors>\n"
+    "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
+    "</Response>\n");
+  datasz = strlen(data);
+  err = aws_error_parse_xml(p, data, datasz);
+  fail_unless(err == NULL, "Failed to handle XML with no <Error> element");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  /* Malformed XML: no <Code> element */
+
+  data = pstrdup(p,
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<Response>\n"
+    "  <Errors>\n"
+    "    <Error>\n"
+    "      <Number>7</Number>\n"
+    "    </Error>\n"
+    "  </Errors>\n"
+    "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
+    "</Response>\n");
+  datasz = strlen(data);
+  err = aws_error_parse_xml(p, data, datasz);
+  fail_unless(err == NULL, "Failed to handle XML with no <Code> element");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  /* Malformed XML: no <Message> element */
+
+  data = pstrdup(p,
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<Response>\n"
+    "  <Errors>\n"
+    "    <Error>\n"
+    "      <Code>InvalidGroup.NotFound</Code>\n"
+    "    </Error>\n"
+    "  </Errors>\n"
+    "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
+    "</Response>\n");
+  datasz = strlen(data);
+  err = aws_error_parse_xml(p, data, datasz);
+  fail_unless(err == NULL, "Failed to handle XML with no <Message> element");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  /* Malformed XML: no <RequestID> element */
+
+  data = pstrdup(p,
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<Response>\n"
+    "  <Errors>\n"
+    "    <Error>\n"
+    "      <Code>InvalidGroup.NotFound</Code>\n"
+    "      <Message>The security group ID 'sg-1a2b3c4d' does not exist</Message>\n"
+    "    </Error>\n"
+    "  </Errors>\n"
+    "  <Random>ea966190-f9aa-478e-9ede-example</Random>\n"
+    "</Response>\n");
+  datasz = strlen(data);
+  err = aws_error_parse_xml(p, data, datasz);
+  fail_unless(err == NULL, "Failed to handle XML with no <RequestID> element");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
   /* Currently, mod_aws expects XML error responses as returned by EC2;
    * other services like S3 MAY return slightly different formats.
    * Caveat emptor.
@@ -121,11 +245,6 @@ START_TEST (error_parse_xml_test) {
     "  </Errors>\n"
     "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
     "</Response>\n");
-
-  err = aws_error_parse_xml(p, data, 0);
-  fail_unless(err == NULL, "Failed to handle empty data");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
 
   datasz = strlen(data);
   err = aws_error_parse_xml(p, data, datasz);

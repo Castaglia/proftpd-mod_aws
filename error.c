@@ -169,6 +169,7 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
     /* Malformed XML. */
     aws_xml_doc_free(p, doc);
 
+    pr_trace_msg(trace_channel, 9, "malformed XML: missing root element");
     errno = EINVAL;
     return NULL;
   }
@@ -178,6 +179,8 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
       strncmp(elt_name, "Response", elt_namelen + 1) != 0) {
     aws_xml_doc_free(p, doc);
 
+    pr_trace_msg(trace_channel, 9,
+      "malformed XML: root element lacks <Response> element");
     errno = EINVAL;
     return NULL;
   }
@@ -186,7 +189,7 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
   (void) aws_xml_elt_get_child_count(p, response, &count);
   if (count != 2) {
     pr_trace_msg(trace_channel, 2,
-      "unexpected count of child elements (%lu != 2)", count);
+      "unexpected count of <Response> child elements (%lu != 2)", count);
 
     aws_xml_doc_free(p, doc);
 
@@ -198,6 +201,8 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
   if (errors == NULL) {
     aws_xml_doc_free(p, doc);
 
+    pr_trace_msg(trace_channel, 9,
+      "malformed XML: <Response> element lacks <Errors> element");
     errno = EINVAL;
     return NULL;
   }
@@ -212,6 +217,8 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
   if (error == NULL) {
     aws_xml_doc_free(p, doc);
 
+    pr_trace_msg(trace_channel, 9,
+      "malformed XML: <Errors> element lacks <Error> element");
     errno = EINVAL;
     return NULL;
   }
@@ -220,6 +227,8 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
   if (elt == NULL) {
     aws_xml_doc_free(p, doc);
 
+    pr_trace_msg(trace_channel, 9,
+      "malformed XML: <Error> element lacks <Code> element");
     errno = EINVAL;
     return NULL;
   }
@@ -237,6 +246,8 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
     destroy_pool(err->pool);
     aws_xml_doc_free(p, doc);
 
+    pr_trace_msg(trace_channel, 9,
+      "malformed XML: <Error> element lacks <Message> element");
     errno = EINVAL;
     return NULL;
   }
@@ -248,6 +259,8 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
     destroy_pool(err->pool);
     aws_xml_doc_free(p, doc);
 
+    pr_trace_msg(trace_channel, 9,
+      "malformed XML: <Response> element lacks <RequestID> element");
     errno = EINVAL;
     return NULL;
   }
