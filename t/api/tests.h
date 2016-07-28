@@ -29,8 +29,9 @@
 
 #include "mod_aws.h"
 
-#include "error.h"
 #include "xml.h"
+#include "error.h"
+#include "http.h"
 #include "utils.h"
 
 #ifdef HAVE_CHECK_H
@@ -39,8 +40,9 @@
 # error "Missing Check installation; necessary for ProFTPD testsuite"
 #endif
 
-Suite *tests_get_error_suite(void);
 Suite *tests_get_xml_suite(void);
+Suite *tests_get_error_suite(void);
+Suite *tests_get_http_suite(void);
 Suite *tests_get_utils_suite(void);
 
 unsigned int recvd_signal_flags;

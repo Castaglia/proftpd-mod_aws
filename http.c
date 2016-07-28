@@ -444,6 +444,8 @@ void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
   CURL *curl;
   CURLcode curl_code;
 
+  (void) p;
+
   curl = curl_easy_init();
   if (curl == NULL) {
     pr_trace_msg(trace_channel, 3, "error initializing curl easy handle");
@@ -626,9 +628,11 @@ int aws_http_destroy(pool *p, void *http) {
     }
 
     curl_easy_cleanup(curl);
+    return 0;
   }
 
-  return 0;
+  errno = EINVAL;
+  return -1;
 }
 
 int aws_http_init(pool *p, unsigned long *feature_flags,
