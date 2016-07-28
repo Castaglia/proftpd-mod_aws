@@ -76,6 +76,7 @@ START_TEST (utils_table2array_test) {
   fail_unless(strcmp(elts[1], expected) == 0 || strcmp(elts[1], expected2) == 0,
     "Expected '%s' or '%s', got '%s'", expected, expected2, elts[1]);
 
+  pr_table_empty(tab);
   pr_table_free(tab);
 }
 END_TEST

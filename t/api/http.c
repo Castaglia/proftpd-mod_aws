@@ -82,6 +82,63 @@ START_TEST (http_destroy_test) {
 END_TEST
 
 START_TEST (http_default_headers_test) {
+  pr_table_t *tab;
+  time_t now;
+  struct tm *gmt_tm;
+  const char *header_name, *header_value;
+
+  tab = aws_http_default_headers(NULL, NULL);
+  fail_unless(tab == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  tab = aws_http_default_headers(p, NULL);
+  fail_unless(tab != NULL, "Failed to allocate default headers: %s",
+    strerror(errno));
+
+  header_name = AWS_HTTP_HEADER_ACCEPT;
+  header_value = pr_table_get(tab, header_name, NULL);
+  fail_unless(header_value != NULL, "Failed to get '%s' header value: %s",
+    header_name, strerror(errno));
+
+  header_name = AWS_HTTP_HEADER_USER_AGENT;
+  header_value = pr_table_get(tab, header_name, NULL);
+  fail_unless(header_value != NULL, "Failed to get '%s' header value: %s",
+    header_name, strerror(errno));
+
+  header_name = AWS_HTTP_HEADER_X_AMZ_DATE;
+  header_value = pr_table_get(tab, header_name, NULL);
+  fail_unless(header_value == NULL, "Got '%s' header value unexpectedly",
+    header_name);
+
+  pr_table_empty(tab);
+  pr_table_free(tab);
+
+  /* Now, provide a date. */
+  time(&now);
+  gmt_tm = pr_gmtime(p, &now);
+
+  tab = aws_http_default_headers(p, gmt_tm);
+  fail_unless(tab != NULL, "Failed to allocate default headers: %s",
+    strerror(errno));
+
+  header_name = AWS_HTTP_HEADER_ACCEPT;
+  header_value = pr_table_get(tab, header_name, NULL);
+  fail_unless(header_value != NULL, "Failed to get '%s' header value: %s",
+    header_name, strerror(errno));
+
+  header_name = AWS_HTTP_HEADER_USER_AGENT;
+  header_value = pr_table_get(tab, header_name, NULL);
+  fail_unless(header_value != NULL, "Failed to get '%s' header value: %s",
+    header_name, strerror(errno));
+
+  header_name = AWS_HTTP_HEADER_X_AMZ_DATE;
+  header_value = pr_table_get(tab, header_name, NULL);
+  fail_unless(header_value != NULL, "Failed to get '%s' header value: %s",
+    header_name, strerror(errno));
+
+  pr_table_empty(tab);
+  pr_table_free(tab);
 }
 END_TEST
 
@@ -111,7 +168,7 @@ Suite *tests_get_http_suite(void) {
   tcase_add_checked_fixture(testcase, set_up, tear_down);
 
   tcase_add_test(testcase, http_alloc_test);
-  tcase_add_test(testcase, http_free_test);
+  tcase_add_test(testcase, http_destroy_test);
   tcase_add_test(testcase, http_default_headers_test);
   tcase_add_test(testcase, http_urldecode_test);
   tcase_add_test(testcase, http_urlencode_test);
