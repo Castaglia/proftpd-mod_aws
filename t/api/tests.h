@@ -43,6 +43,7 @@
 Suite *tests_get_xml_suite(void);
 Suite *tests_get_error_suite(void);
 Suite *tests_get_http_suite(void);
+Suite *tests_get_sign_suite(void);
 Suite *tests_get_utils_suite(void);
 
 unsigned int recvd_signal_flags;
