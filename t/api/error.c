@@ -117,8 +117,6 @@ START_TEST (error_parse_xml_test) {
   datasz = strlen(data);
   err = aws_error_parse_xml(p, data, datasz);
   fail_unless(err == NULL, "Failed to handle XML with no root element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
 
   /* Malformed XML: no <Response> element */
 
