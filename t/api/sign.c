@@ -58,7 +58,7 @@ static void tear_down(void) {
 START_TEST (sign_v4_generate_invalid_params_test) {
   int res;
   const char *access_key_id, *secret_access_key, *token, *region, *service;
-  const char *http_method, *http_path, *http_body;
+  const char *http_method, *http_path, *http_body, *signature;
   void *http;
   pr_table_t *http_headers;
   array_header *query_params;
@@ -137,9 +137,11 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   http_headers = aws_http_default_headers(p, NULL);
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
     service, http, http_method, http_path, query_params, http_headers, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null headers");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
+  fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
+
+  signature = pr_table_get(tab, AWS_HTTP_HEADER_AUTHZ, NULL);
+  fail_unless(signature == NULL, "Failed to get '%s' signature header: %s",
+    AWS_HTTP_HEADER_AUTHZ, strerror(errno));
 
   aws_http_destroy(p, http);
 }
