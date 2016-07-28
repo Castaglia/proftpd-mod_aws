@@ -60,7 +60,6 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   const char *access_key_id, *secret_access_key, *token, *region, *service;
   const char *http_method, *http_path, *http_body, *signature;
   void *http;
-  pr_table_t *http_headers;
   array_header *query_params;
 
   res = aws_sign_v4_generate(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -134,23 +133,49 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  aws_http_destroy(p, http);
+}
+END_TEST
+
+START_TEST (sign_v4_generate_valid_params_test) {
+  int res;
+  const char *access_key_id, *secret_access_key, *token, *region, *service;
+  const char *http_method, *http_path, *http_body, *signature;
+  void *http;
+  pr_table_t *http_headers;
+  array_header *query_params;
+
+  access_key_id = "ACCESS_KEY_ID";
+  secret_access_key = "SECRET_ACCESS_KEY";
+  token = NULL;
+  region = "us-west-2";
+  service = "ec2";
+  http_method = "GET";
+  http_path = "/";
   http_headers = aws_http_default_headers(p, NULL);
+
+  http = aws_http_alloc(p, 3, 5, NULL);
+  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
     service, http, http_method, http_path, query_params, http_headers, NULL, 0);
   fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
 
-  signature = pr_table_get(tab, AWS_HTTP_HEADER_AUTHZ, NULL);
+  signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
   fail_unless(signature != NULL, "Failed to get '%s' signature header: %s",
     AWS_HTTP_HEADER_AUTHZ, strerror(errno));
 
   http_body = "{ \"test\": true }\n";
   http_headers = aws_http_default_headers(p, NULL);
+  pr_table_add_dup(http_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_TYPE),
+    "application/json", 0);
+
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
     service, http, http_method, http_path, query_params, http_headers,
     http_body, 0);
   fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
 
-  signature = pr_table_get(tab, AWS_HTTP_HEADER_AUTHZ, NULL);
+  signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
   fail_unless(signature != NULL, "Failed to get '%s' signature header: %s",
     AWS_HTTP_HEADER_AUTHZ, strerror(errno));
 
@@ -168,6 +193,7 @@ Suite *tests_get_sign_suite(void) {
   tcase_add_checked_fixture(testcase, set_up, tear_down);
 
   tcase_add_test(testcase, sign_v4_generate_invalid_params_test);
+  tcase_add_test(testcase, sign_v4_generate_valid_params_test);
 
   suite_add_tcase(suite, testcase);
   return suite;
