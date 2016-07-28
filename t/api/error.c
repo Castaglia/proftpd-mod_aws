@@ -64,19 +64,19 @@ START_TEST (error_get_name_test) {
   expected = "<unknown>";
   res = aws_error_get_name(0);
   fail_unless(res != NULL, "Failed to handle zero");
-  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'"",
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
     expected, res);
 
   expected = "AuthFailure";
   res = aws_error_get_name(AWS_ERROR_CODE_AUTH_FAILURE);
   fail_unless(res != NULL, "Failed to handle zero");
-  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'"",
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
     expected, res);
 
   expected = "<unknown>";
   res = aws_error_get_name(UINT_MAX);
   fail_unless(res != NULL, "Failed to handle UINT_MAX");
-  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'"",
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
     expected, res);
 }
 END_TEST
