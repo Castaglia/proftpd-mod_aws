@@ -190,7 +190,7 @@ void *aws_xml_doc_parse(pool *p, const char *data, size_t datasz) {
 
   if (data == NULL ||
       datasz == 0) {
-    errno EINVAL;
+    errno = EINVAL;
     return NULL;
   }
 
