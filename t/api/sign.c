@@ -126,7 +126,7 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  query_params = make_array_header(p, 0, sizeof(char *));
+  query_params = make_array(p, 0, sizeof(char *));
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, region,
     service, http, http_method, http_path, query_params, NULL, 0);
   fail_unless(res < 0, "Failed to handle null headers");
