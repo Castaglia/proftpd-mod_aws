@@ -214,7 +214,8 @@ static int http_perform(pool *p, CURL *curl, const char *url,
           strstr(curl_errorbuf, "Could not resolve host") != NULL) {
         xerrno = ESRCH;
 
-      } else if (strstr(curl_errorbuf, "Connection timed out") != NULL) {
+      } else if (strstr(curl_errorbuf, "connect() timed out") != NULL ||
+                 strstr(curl_errorbuf, "Connection timed out") != NULL) {
         /* Hit our AWSTimeoutConnect? */
         xerrno = ETIMEDOUT;
 
