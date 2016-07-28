@@ -140,7 +140,18 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
 
   signature = pr_table_get(tab, AWS_HTTP_HEADER_AUTHZ, NULL);
-  fail_unless(signature == NULL, "Failed to get '%s' signature header: %s",
+  fail_unless(signature != NULL, "Failed to get '%s' signature header: %s",
+    AWS_HTTP_HEADER_AUTHZ, strerror(errno));
+
+  http_body = "{ \"test\": true }\n";
+  http_headers = aws_http_default_headers(p, NULL);
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
+    service, http, http_method, http_path, query_params, http_headers,
+    http_body, 0);
+  fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
+
+  signature = pr_table_get(tab, AWS_HTTP_HEADER_AUTHZ, NULL);
+  fail_unless(signature != NULL, "Failed to get '%s' signature header: %s",
     AWS_HTTP_HEADER_AUTHZ, strerror(errno));
 
   aws_http_destroy(p, http);

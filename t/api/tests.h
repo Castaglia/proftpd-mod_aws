@@ -32,6 +32,7 @@
 #include "xml.h"
 #include "error.h"
 #include "http.h"
+#include "sign.h"
 #include "utils.h"
 
 #ifdef HAVE_CHECK_H
