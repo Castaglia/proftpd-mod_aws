@@ -147,7 +147,7 @@ static const char *create_canon_headers(pool *p, pr_table_t *headers) {
   register unsigned int i;
   int header_count;
   array_header *http_headers;
-  char *canon_headers = NULL, **elts;
+  char *canon_headers = "", **elts;
   const void *key;
 
   header_count = pr_table_count(headers);
