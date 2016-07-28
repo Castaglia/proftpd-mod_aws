@@ -84,21 +84,22 @@ START_TEST (sign_v4_generate_invalid_params_test) {
 
   secret_access_key = "SECRET_ACCESS_KEY";
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, NULL, NULL,
-    NULL, NULL, NULL, NULL, NULL, NULL, 0);
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0);
   fail_unless(res < 0, "Failed to handle null region");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  token = NULL;
   region = "us-west-2";
-  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, region, NULL,
-    NULL, NULL, NULL, NULL, NULL, NULL, 0);
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0);
   fail_unless(res < 0, "Failed to handle null service");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   service = "ec2";
-  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, region,
-    service, NULL, NULL, NULL, NULL, NULL, 0);
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
+    service, NULL, NULL, NULL, NULL, NULL, NULL, 0);
   fail_unless(res < 0, "Failed to handle null HTTP handle");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -106,39 +107,40 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   http = aws_http_alloc(p, 3, 5, NULL);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
-  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, region,
-    service, http, NULL, NULL, NULL, NULL, 0);
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
+    service, http, NULL, NULL, NULL, NULL, NULL, 0);
   fail_unless(res < 0, "Failed to handle null HTTP method");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   http_method = "GET";
-  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, region,
-    service, http, http_method, NULL, NULL, NULL, 0);
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
+    service, http, http_method, NULL, NULL, NULL, NULL, 0);
   fail_unless(res < 0, "Failed to handle null HTTP path");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  http_path = "/some/example/path";
-  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, region,
-    service, http, http_method, http_path, NULL, NULL, 0);
+  http_path = "/";
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
+    service, http, http_method, http_path, NULL, NULL, NULL, 0);
   fail_unless(res < 0, "Failed to handle null query params");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   query_params = make_array(p, 0, sizeof(char *));
-  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, region,
-    service, http, http_method, http_path, query_params, NULL, 0);
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
+    service, http, http_method, http_path, query_params, NULL, NULL, 0);
   fail_unless(res < 0, "Failed to handle null headers");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   http_headers = aws_http_default_headers(p, NULL);
-  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, region,
+  res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
     service, http, http_method, http_path, query_params, http_headers, NULL, 0);
   fail_unless(res < 0, "Failed to handle null headers");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
+
   aws_http_destroy(p, http);
 }
 END_TEST
