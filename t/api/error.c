@@ -32,9 +32,23 @@ static void set_up(void) {
   if (p == NULL) {
     p = make_sub_pool(NULL);
   }
+
+  aws_xml_init(p);
+
+  if (getenv("TEST_VERBOSE") != NULL) {
+    pr_trace_set_levels("aws.error", 1, 20);
+    pr_trace_set_levels("aws.xml", 1, 20);
+  }
 }
 
 static void tear_down(void) {
+  if (getenv("TEST_VERBOSE") != NULL) {
+    pr_trace_set_levels("aws.error", 0, 0);
+    pr_trace_set_levels("aws.xml", 0, 0);
+  }
+
+  aws_xml_free();
+
   if (p) {
     destroy_pool(p);
     p = NULL;
@@ -82,6 +96,12 @@ START_TEST (error_get_name_test) {
 END_TEST
 
 START_TEST (error_parse_xml_test) {
+  struct aws_error *err;
+
+  err = aws_error_parse_xml(p, NULL, 0);
+  fail_unless(err == NULL, "Failed to handle null data");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
 }
 END_TEST
 

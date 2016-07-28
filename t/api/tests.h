@@ -30,6 +30,7 @@
 #include "mod_aws.h"
 
 #include "error.h"
+#include "xml.h"
 
 #ifdef HAVE_CHECK_H
 # include <check.h>
@@ -38,6 +39,7 @@
 #endif
 
 Suite *tests_get_error_suite(void);
+Suite *tests_get_xml_suite(void);
 
 unsigned int recvd_signal_flags;
 extern pid_t mpid;
