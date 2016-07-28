@@ -322,6 +322,7 @@ START_TEST (http_post_test) {
   char *req;
   const char *url;
   long resp_code = 0;
+  pr_table_t *headers;
 
   res = aws_http_post(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
@@ -359,6 +360,17 @@ START_TEST (http_post_test) {
     strerror(errno), errno);
 
   res = aws_http_post(p, http, url, NULL, resp_cb, NULL, req, &resp_code, NULL);
+  fail_unless(res == 0, "Failed to handle POST request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  headers = aws_http_default_headers(p, NULL);
+  pr_table_add_dup(headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_TYPE),
+    "application/json", 0);
+
+  res = aws_http_post(p, http, url, headers, resp_cb, NULL, req, &resp_code,
+    NULL);
   fail_unless(res == 0, "Failed to handle POST request to '%s': %s", url,
     strerror(errno));
   fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
