@@ -72,10 +72,18 @@ const char *aws_http_urldecode(pool *p, void *http, const char *item,
   CURL *curl;
   char *decoded_item, *ptr;
 
+  if (p == NULL ||
+      http == NULL ||
+      item == NULL ||
+      item_len == 0) {
+    errno = EINVAL;
+    return NULL;
+  }
+
   curl = http;
   ptr = curl_easy_unescape(curl, item, (int) item_len, (int *) decoded_len);
   if (ptr == NULL) {
-    errno = EINVAL;
+    errno = EPERM;
     return NULL;
   }
 
@@ -93,10 +101,18 @@ const char *aws_http_urlencode(pool *p, void *http, const char *item,
   char *encoded_item, *ptr;
   size_t encoded_len;
 
+  if (p == NULL ||
+      http == NULL ||
+      item == NULL ||
+      item_len == 0) {
+    errno = EINVAL;
+    return NULL;
+  }
+
   curl = http;
   ptr = curl_easy_escape(curl, item, (int) item_len);
   if (ptr == NULL) {
-    errno = EINVAL;
+    errno = EPERM;
     return NULL;
   }
 

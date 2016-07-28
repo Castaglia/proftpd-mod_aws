@@ -143,10 +143,86 @@ START_TEST (http_default_headers_test) {
 END_TEST
 
 START_TEST (http_urldecode_test) {
+  const char *res, *item;
+  size_t item_len, decoded_len;
+  void *http;
+
+  res = aws_http_urldecode(NULL, NULL, NULL, 0, NULL);
+  fail_unless(res == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_http_urldecode(p, NULL, NULL, 0, NULL);
+  fail_unless(res == NULL, "Failed to handle null handle");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  http = aws_http_alloc(p, 3, 5, NULL);
+  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+
+  res = aws_http_urldecode(p, http, NULL, 0, NULL);
+  fail_unless(res == NULL, "Failed to handle null item");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  item = "foo%20bar";
+  res = aws_http_urldecode(p, http, item, 0, NULL);
+  fail_unless(res == NULL, "Failed to handle empty item");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  item = "foo%20bar";
+  item_len = strlen(item);
+  decoded_len = 0;
+  res = aws_http_urldecode(p, http, item, item_len, &decoded_len);
+  fail_unless(res != NULL, "Failed to decode item '%s': %s", item,
+    strerror(errno));
+  fail_unless(decoded_len == 7,
+    "Expected %lu, got %lu", 7, (unsigned long) decoded_len);
+  fail_unless(strcmp(res, "foo bar") == 0, "Expected 'foo bar', got '%s'", res);
+
+  aws_http_destroy(p, http);
 }
 END_TEST
 
 START_TEST (http_urlencode_test) {
+  const char *res, *item;
+  size_t item_len;
+  void *http;
+
+  res = aws_http_urlencode(NULL, NULL, NULL, 0);
+  fail_unless(res == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_http_urlencode(p, NULL, NULL, 0);
+  fail_unless(res == NULL, "Failed to handle null handle");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  http = aws_http_alloc(p, 3, 5, NULL);
+  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+
+  res = aws_http_urlencode(p, http, NULL, 0);
+  fail_unless(res == NULL, "Failed to handle null item");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  item = "foo bar";
+  res = aws_http_urlencode(p, http, item, 0);
+  fail_unless(res == NULL, "Failed to handle empty item");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  item = "foo bar";
+  item_len = strlen(item);
+  res = aws_http_urlencode(p, http, item, item_len);
+  fail_unless(res != NULL, "Failed to encode item '%s': %s", item,
+    strerror(errno));
+  fail_unless(strcmp(res, "foo%20bar") == 0,
+    "Expected 'foo%%20bar', got '%s'", res);
+
+  aws_http_destroy(p, http);
 }
 END_TEST
 
