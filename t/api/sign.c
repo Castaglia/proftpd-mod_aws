@@ -58,7 +58,7 @@ static void tear_down(void) {
 START_TEST (sign_v4_generate_invalid_params_test) {
   int res;
   const char *access_key_id, *secret_access_key, *token, *region, *service;
-  const char *http_method, *http_path, *http_body, *signature;
+  const char *http_method, *http_path;
   void *http;
   array_header *query_params;
 
@@ -210,7 +210,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
 
   added_token = pr_table_get(http_headers, AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN,
     NULL);
-  fail_unless(signature != NULL, "Failed to get '%s' token header: %s",
+  fail_unless(added_token != NULL, "Failed to get '%s' token header: %s",
     AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN, strerror(errno));
 
   /* Provide a longer path, and some query params */
@@ -218,7 +218,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
   http_headers = aws_http_default_headers(p, NULL);
   http_path = "/foo/bar";
   query_params = make_array(p, 1, sizeof(char *));
-  *((char **) push_array(query_params) = pstrdup(p, "DryRun=true);
+  *((char **) push_array(query_params) = pstrdup(p, "DryRun=true");
   token = NULL;
 
   mark_point();
