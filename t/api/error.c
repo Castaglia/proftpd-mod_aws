@@ -97,11 +97,49 @@ END_TEST
 
 START_TEST (error_parse_xml_test) {
   struct aws_error *err;
+  const char *data;
+  size_t datasz;
 
   err = aws_error_parse_xml(p, NULL, 0);
   fail_unless(err == NULL, "Failed to handle null data");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
+
+  /* Currently, mod_aws expects XML error responses as returned by EC2;
+   * other services like S3 MAY return slightly different formats.
+   * Caveat emptor.
+   */
+
+  data = pstrdup(p,
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<Response>\n"
+    "  <Errors>\n"
+    "    <Error>\n"
+    "      <Code>InvalidGroup.NotFound</Code>\n"
+    "      <Message>The security group ID 'sg-1a2b3c4d' does not exist</Message>\n"
+    "    </Error>\n"
+    "  </Errors>\n"
+    "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
+    "</Response>\n");
+
+  err = aws_error_parse_xml(p, data, 0);
+  fail_unless(err == NULL, "Failed to handle empty data");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  datasz = strlen(data);
+  err = aws_error_parse_xml(p, data, datasz);
+  fail_unless(err != NULL, "Failed to parse error XML: %s", strerror(errno));
+  fail_unless(err->err_code == AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND,
+    "Expected error code %u, got %u",
+    AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND, err->err_code);
+  fail_unless(err->err_msg != NULL, "Expected error message, got null");
+  fail_unless(strcmp(err->err_msg,
+    "The security group ID 'sg-1a2b3c4d' does not exist") == 0,
+    "Failed to get expected error message");
+  fail_unless(err->req_id != NULL, "Expected request ID, got null");
+  fail_unless(strcmp(err->req_id, "ea966190-f9aa-478e-9ede-example") == 0,
+    "Failed to get expected request ID");
 }
 END_TEST
 
