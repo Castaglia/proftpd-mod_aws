@@ -31,6 +31,7 @@
 
 #include "error.h"
 #include "xml.h"
+#include "utils.h"
 
 #ifdef HAVE_CHECK_H
 # include <check.h>
@@ -40,6 +41,7 @@
 
 Suite *tests_get_error_suite(void);
 Suite *tests_get_xml_suite(void);
+Suite *tests_get_utils_suite(void);
 
 unsigned int recvd_signal_flags;
 extern pid_t mpid;

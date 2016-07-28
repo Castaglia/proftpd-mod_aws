@@ -30,6 +30,12 @@ array_header *aws_utils_table2array(pool *p, pr_table_t *tab) {
   int listsz;
   const void *key;
 
+  if (p == NULL ||
+      tab == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
   listsz = pr_table_count(tab);
   list = make_array(p, listsz, sizeof(char *));
 
