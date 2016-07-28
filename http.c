@@ -358,6 +358,7 @@ int aws_http_post(pool *p, void *http, const char *url, pr_table_t *headers,
       http == NULL ||
       url == NULL ||
       resp_body == NULL ||
+      req_body == NULL ||
       resp_code == NULL) {
     errno = EINVAL;
     return -1;

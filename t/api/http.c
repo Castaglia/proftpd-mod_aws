@@ -284,6 +284,54 @@ START_TEST (http_get_test) {
 END_TEST
 
 START_TEST (http_post_test) {
+  int res;
+  void *http;
+  char *req;
+  const char *url;
+  long resp_code = 0;
+
+  res = aws_http_post(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_http_post(p, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null handle");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  http = aws_http_alloc(p, 3, 5, NULL);
+  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+
+  res = aws_http_post(p, http, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null URL");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  url = "http://www.google.com";
+  res = aws_http_post(p, http, url, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null response callback");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_http_post(p, http, url, NULL, resp_cb, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null request body");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  req = "{ \"test\": true }\n";
+  res = aws_http_post(p, http, url, NULL, resp_cb, NULL, req, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null response code");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_http_post(p, http, url, NULL, resp_cb, NULL, req, &resp_code, NULL);
+  fail_unless(res == 0, "Failed to handle POST request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  aws_http_destroy(p, http);
 }
 END_TEST
 
