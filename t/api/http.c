@@ -29,11 +29,13 @@
 static pool *p = NULL;
 
 static void set_up(void) {
+  unsigned long feature_flags = 0UL;
+
   if (p == NULL) {
     p = make_sub_pool(NULL);
   }
 
-  aws_http_init(p, NULL, NULL);
+  aws_http_init(p, &feature_flags, NULL);
 
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("aws.http", 1, 20);
