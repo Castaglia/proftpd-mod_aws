@@ -171,8 +171,12 @@ START_TEST (http_urldecode_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  item = "foo%20bar";
   item_len = strlen(item);
+  res = aws_http_urldecode(p, http, item, item_len, NULL);
+  fail_unless(res == NULL, "Failed to handle null decoded len");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
   decoded_len = 0;
   res = aws_http_urldecode(p, http, item, item_len, &decoded_len);
   fail_unless(res != NULL, "Failed to decode item '%s': %s", item,
@@ -226,7 +230,56 @@ START_TEST (http_urlencode_test) {
 }
 END_TEST
 
+static size_t resp_cb(char *item, size_t item_len, size_t item_count,
+    void *user_data) {
+  size_t data_len;
+
+  data_len = item_len * item_count;
+  return data_len;
+}
+
 START_TEST (http_get_test) {
+  int res;
+  void *http;
+  const char *url;
+  long resp_code = 0;
+
+  res = aws_http_get(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_http_get(p, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null handle");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  http = aws_http_alloc(p, 3, 5, NULL);
+  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+
+  res = aws_http_get(p, http, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null URL");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  url = "http://www.google.com";
+  res = aws_http_get(p, http, url, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null response callback");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_http_get(p, http, url, NULL, resp_cb, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null response code");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL);
+  fail_unless(res == 0, "Failed to handle GET request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code == AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  aws_http_destroy(p, http);
 }
 END_TEST
 

@@ -75,7 +75,8 @@ const char *aws_http_urldecode(pool *p, void *http, const char *item,
   if (p == NULL ||
       http == NULL ||
       item == NULL ||
-      item_len == 0) {
+      item_len == 0 ||
+      decoded_len == NULL) {
     errno = EINVAL;
     return NULL;
   }
@@ -323,6 +324,15 @@ int aws_http_get(pool *p, void *http, const char *url, pr_table_t *headers,
   CURL *curl;
   CURLcode curl_code;
 
+  if (p == NULL ||
+      http == NULL ||
+      url == NULL ||
+      resp_body == NULL ||
+      resp_code == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
   curl = http;
 
   curl_code = curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
@@ -343,6 +353,15 @@ int aws_http_post(pool *p, void *http, const char *url, pr_table_t *headers,
   int res;
   CURL *curl;
   CURLcode curl_code;
+
+  if (p == NULL ||
+      http == NULL ||
+      url == NULL ||
+      resp_body == NULL ||
+      resp_code == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
 
   curl = http;
 
