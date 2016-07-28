@@ -218,7 +218,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
   http_headers = aws_http_default_headers(p, NULL);
   http_path = "/foo/bar";
   query_params = make_array(p, 1, sizeof(char *));
-  *((char **) push_array(query_params) = pstrdup(p, "DryRun=true");
+  *((char **) push_array(query_params)) = pstrdup(p, "DryRun=true");
   token = NULL;
 
   mark_point();
@@ -235,7 +235,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
 
   http_headers = pr_table_alloc(p, 0);
   http_path = "/";
-  query_paras = make_array(p, 0, sizeof(char *));
+  query_params = make_array(p, 0, sizeof(char *));
   token = NULL;
 
   mark_point();
@@ -254,7 +254,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
   pr_table_add(http_headers, pstrdup(p, "Foo"), NULL, 0);
   pr_table_add(http_headers, pstrdup(p, "Bar"), NULL, 0);
   http_path = "/";
-  query_paras = make_array(p, 0, sizeof(char *));
+  query_params = make_array(p, 0, sizeof(char *));
   token = NULL;
 
   mark_point();

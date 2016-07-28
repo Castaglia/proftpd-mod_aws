@@ -118,7 +118,6 @@ END_TEST
 
 START_TEST (xml_elt_get_name_test) {
   const char *name;
-  size_t name_len = 0;
 
   name = aws_xml_elt_get_name(NULL, NULL, NULL);
   fail_unless(name == NULL, "Failed to handle null pool");
