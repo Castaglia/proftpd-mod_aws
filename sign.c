@@ -259,27 +259,15 @@ static const char *create_canon_request(pool *p, void *http,
   const char *canon_uri, *canon_query, *canon_headers, *payload_hash;
 
   canon_uri = create_canon_uri(p, http, http_path);
-  if (canon_uri == NULL) {
-    return NULL;
-  }
   pr_trace_msg(trace_channel, 19, "canonical URI: '%s'", canon_uri);
 
   canon_query = create_canon_query(p, query_params);
-  if (canon_query == NULL) {
-    return NULL;
-  }
   pr_trace_msg(trace_channel, 19, "canonical query: '%s'", canon_query);
 
   canon_headers = create_canon_headers(p, http_headers);
-  if (canon_headers == NULL) {
-    return NULL;
-  }
   pr_trace_msg(trace_channel, 19, "canonical headers: '%s'", canon_headers);
 
   *signed_headers = create_signed_headers(p, http_headers);
-  if (*signed_headers == NULL) {
-    return NULL;
-  }
   pr_trace_msg(trace_channel, 19, "signed headers: '%s'", *signed_headers);
 
   /* Note: If/when the body length exceeds a certain size, we'll need to

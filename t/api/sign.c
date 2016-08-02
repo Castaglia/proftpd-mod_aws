@@ -267,12 +267,6 @@ START_TEST (sign_v4_generate_valid_params_test) {
   fail_unless(signature != NULL, "Failed to get '%s' signature header: %s",
     AWS_HTTP_HEADER_AUTHZ, strerror(errno));
 
-  /* XXX Provide a body larger than OpenSSL's SHA256() max buffer? */
-
-  /* XXX Provide a body large enough, such that the canonical request is larger
-   * than OpenSSL's SHA256() max buffer?
-   */
-
   aws_http_destroy(p, http);
 }
 END_TEST
