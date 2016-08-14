@@ -3,7 +3,7 @@ proftpd-mod_aws
 
 Status
 ------
-[![Build Status](https://travis-ci.org/proftpd/proftpd.svg?branch=master)](https://travis-ci.org/Castaglia/proftpd-mod_aws)
+[![Build Status](https://travis-ci.org/Castaglia/proftpd-mod_aws.svg?branch=master)](https://travis-ci.org/Castaglia/proftpd-mod_aws)
 [![Coverage Status](https://coveralls.io/repos/github/Castaglia/proftpd-mod_aws/badge.svg?branch=master)](https://coveralls.io/github/Castaglia/proftpd-mod_aws?branch=master)
 
 Synopsis
