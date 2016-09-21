@@ -24,12 +24,13 @@
 
 #include "mod_aws.h"
 #include "creds.h"
+#include "instance.h"
 #include "utils.h"
 
 static const char *trace_channel = "aws.creds";
 
 int aws_creds_from_env(pool *p, char **access_key_id,
-    char **secret_access_key) {
+    char **secret_access_key, char **session_token) {
   const char *k, *id, *secret;
 
   if (p == NULL ||
@@ -57,6 +58,10 @@ int aws_creds_from_env(pool *p, char **access_key_id,
 
   *access_key_id = pstrdup(p, id);
   *secret_access_key = pstrdup(p, secret);
+
+  if (session_token != NULL) {
+    *session_token = NULL;
+  }
 
   return 0;
 }
@@ -192,7 +197,7 @@ static int creds_parse_section(pool *p, char *line, size_t linesz,
 }
 
 static int creds_from_profile_props(pool *p, pr_fh_t *fh, const char *profile,
-    char **access_key_id, char **secret_access_key) {
+    char **access_key_id, char **secret_access_key, char **session_token) {
   size_t bufsz, linelen, profilelen;
   char *buf, *line;
   unsigned int lineno = 0;
@@ -234,31 +239,36 @@ static int creds_from_profile_props(pool *p, pr_fh_t *fh, const char *profile,
 
     pr_memscrub(line, linelen);
 
-    if (namesz == 17 &&
-        strncmp(name, "aws_access_key_id", 18) == 0) {
-      *access_key_id = val;
+    if (namesz == 17) {
+      if (strncmp(name, "aws_access_key_id", 18) == 0) {
+        *access_key_id = val;
+
+      } else if (session_token != NULL &&
+                 strncmp(name, "aws_session_token", 18) == 0) {
+        *session_token = val;
+      }
 
     } else if (namesz == 21 &&
                strncmp(name, "aws_secret_access_key", 22) == 0) {
       *secret_access_key = val;
     }
 
-    if (*access_key_id != NULL &&
-        *secret_access_key != NULL) {
-      return 0;
-    }
-
     line = creds_next_line(fh, buf, bufsz, &lineno, &linelen);
   }
 
-  errno = ENOENT;
-  return -1;
+  if (*access_key_id == NULL &&
+      *secret_access_key == NULL) {
+    errno = ENOENT;
+    return -1;
+  }
+
+  return 0;
 }
 
 int aws_creds_from_file(pool *p, const char *path, const char *profile,
-    char **access_key_id, char **secret_access_key) {
+    char **access_key_id, char **secret_access_key, char **session_token) {
   int res, xerrno;
-  char *id, *key;
+  char *id, *key, *token;
   pr_fh_t *fh;
   struct stat st;
   pool *sub_pool;
@@ -305,10 +315,10 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
    */
   pr_fs_fadvise(PR_FH_FD(fh), 0, 0, PR_FS_FADVISE_SEQUENTIAL);
 
-  id = key = NULL;
+  id = key = token = NULL;
 
   if (profile != NULL) {
-    res = creds_from_profile_props(sub_pool, fh, profile, &id, &key);
+    res = creds_from_profile_props(sub_pool, fh, profile, &id, &key, &token);
 
   } else {
     res = creds_from_props(sub_pool, fh, &id, &key);
@@ -319,6 +329,10 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
   if (res == 0) {
     *access_key_id = pstrdup(p, id);
     *secret_access_key = pstrdup(p, key);
+
+    if (session_token != NULL) {
+      *session_token = pstrdup(p, token);
+    }
   }
 
   (void) pr_fsio_close(fh);
@@ -328,8 +342,9 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
   return res;
 }
 
-int aws_creds_from_chain(pool *p, const char *path, const char *profile,
-    char **access_key_id, char **secret_access_key) {
+int aws_creds_from_chain(pool *p, array_header *providers,
+    char **access_key_id, char **secret_access_key, char **session_token,
+    const char *iam_role, const char *profile, const char *path) {
   int res, xerrno;
 
   if (p == NULL ||
@@ -339,17 +354,19 @@ int aws_creds_from_chain(pool *p, const char *path, const char *profile,
     return -1;
   }
 
-  /* XXX This should be configurable via e.g. AWSCredentials, to get the
-   * credentials provider in preferred order.  Implementing that will
-   * change the signature.
-   */
+  if (providers == NULL) {
+    /* Default to just the "IAM" provider */
+    struct iam_info *iam;
+
+    iam = aws_instance_get_iam_credentials(p, iam_role);
+  }
 
   errno = ENOSYS;
   return -1;
 }
 
 int aws_creds_from_sql(pool *p, const char *query, char **access_key_id,
-    char **secret_access_key) {
+    char **secret_access_key, char **session_token) {
 
   if (p == NULL ||
       query == NULL ||

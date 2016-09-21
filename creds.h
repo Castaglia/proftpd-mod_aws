@@ -34,15 +34,17 @@
  *  AWS_ACCESS_KEY_ID
  *  AWS_SECRET_ACCESS_KEY
  */
-int aws_creds_from_env(pool *p, char **access_key_id, char **secret_access_key);
+int aws_creds_from_env(pool *p, char **access_key_id, char **secret_access_key,
+  char **session_token);
 
 /* Obtain AWS credentials from the given path, for the named profile
  * (if any).
  */
 int aws_creds_from_file(pool *p, const char *path, const char *profile,
-  char **access_key_id, char **secret_access_key);
+  char **access_key_id, char **secret_access_key, char **session_token);
 
-/* Obtain AWS credentials from a "chain" of different locations, in this order:
+/* Obtain AWS credentials from a "chain" of providers.  The order in which
+ * providers are checked is determined by the given providers list.
  *
  *  1.  Check for per-profile credentials.
  *  2.  Check for "default" profile credentials.
@@ -53,11 +55,16 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
  * is used; this default location can be overridden via the
  * AWS_CREDENTIAL_PROFILES_FILE environment variable.
  */
-int aws_creds_from_chain(pool *p, const char *path, const char *profile,
-  char **access_key_id, char **secret_access_key);
+int aws_creds_from_chain(pool *p, array_header *providers,
+  char **access_key_id, char **secret_access_key, char **session_token,
+  const char *iam_role, const char *profile, const char *path);
+#define AWS_CREDS_PROVIDER_NAME_IAM			"iam"
+#define AWS_CREDS_PROVIDER_NAME_PROFILE			"profile"
+#define AWS_CREDS_PROVIDER_NAME_PROPERTIES		"props"
+#define AWS_CREDS_PROVIDER_NAME_ENVIRONMENT		"env"
 
 /* Obtain AWS credentials via SQL query. */
 int aws_creds_from_sql(pool *p, const char *query, char **access_key_id,
-  char **secret_access_key);
+  char **secret_access_key, char **session_token);
 
 #endif /* MOD_AWS_CREDS_H */
