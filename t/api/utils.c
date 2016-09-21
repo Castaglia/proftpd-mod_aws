@@ -233,7 +233,7 @@ START_TEST (utils_strn_trim_test) {
     "Expected '%s', got '%s'", expected, res);
 
   str = "  foo  bar  ";
-  expected = "foo"
+  expected = "foo";
   res = aws_utils_strn_trim(p, str, 7);
   fail_unless(res != NULL, "Failed to trim string '%s': %s", str,
     strerror(errno));
