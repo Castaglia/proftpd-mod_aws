@@ -330,16 +330,32 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
 
 int aws_creds_from_chain(pool *p, const char *path, const char *profile,
     char **access_key_id, char **secret_access_key) {
+  int res, xerrno;
+
+  if (p == NULL ||
+      access_key_id == NULL ||
+      secret_access_key == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  /* XXX This should be configurable via e.g. AWSCredentials, to get the
+   * credentials provider in preferred order.  Implementing that will
+   * change the signature.
+   */
+
   errno = ENOSYS;
   return -1;
 }
 
 int aws_creds_from_sql(pool *p, const char *query, char **access_key_id,
     char **secret_access_key) {
+
   if (p == NULL ||
       query == NULL ||
       access_key_id == NULL ||
       secret_access_key == NULL) {
+    errno = EINVAL;
     return -1;
   }
 
