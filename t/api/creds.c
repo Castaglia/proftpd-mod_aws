@@ -285,14 +285,178 @@ START_TEST (creds_from_file_using_profile_test) {
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
     strerror(errno), errno);
 
-/* Malformed section line. */
-/* One section, not matching name. */
-/* Multiple sections, not matching name. */
-/* One matching section, only ID not key. */
-/* One matching section, only key not ID. */
-/* One matching section, ID and key. */
-/* Multiple sections, 1st matched, ID and key. */
-/* Multiple sections, last matched, ID and key. *
+  /* Malformed section lines. */
+  (void) unlink(path);
+  res = write_lines(path, 2,
+    "[foo\n",
+    "bar]\n"
+  );
+  fail_unless(res == 0, "Failed to write profile %s file '%s': %s",
+    profile, path, strerror(errno));
+
+  mark_point();
+  res = aws_creds_from_file(p, path, profile, &access_key_id,
+    &secret_access_key);
+  fail_unless(res < 0, "Failed to handle malformed profiles file");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  /* One section, not matching name. */
+  (void) unlink(path);
+  res = write_lines(path, 2,
+    "[foo]\n",
+    "bar=baz\n"
+  );
+  fail_unless(res == 0, "Failed to write profile %s file '%s': %s",
+    profile, path, strerror(errno));
+
+  mark_point();
+  res = aws_creds_from_file(p, path, profile, &access_key_id,
+    &secret_access_key);
+  fail_unless(res < 0, "Failed to handle malformed profiles file");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  /* Multiple sections, not matching name. */
+  (void) unlink(path);
+  res = write_lines(path, 4,
+    "[foo]\n",
+    "bar=baz\n",
+    "[bar]\n",
+    "quxx=true\n"
+  );
+  fail_unless(res == 0, "Failed to write profile %s file '%s': %s",
+    profile, path, strerror(errno));
+
+  mark_point();
+  res = aws_creds_from_file(p, path, profile, &access_key_id,
+    &secret_access_key);
+  fail_unless(res < 0, "Failed to handle malformed profiles file");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  /* One matching section, only ID not key. */
+  (void) unlink(path);
+  res = write_lines(path, 2,
+    "[mod_aws]\n",
+    "aws_access_key_id=FOO\n"
+  );
+  fail_unless(res == 0, "Failed to write profile %s file '%s': %s",
+    profile, path, strerror(errno));
+
+  mark_point();
+  res = aws_creds_from_file(p, path, profile, &access_key_id,
+    &secret_access_key);
+  fail_unless(res < 0, "Failed to handle malformed profiles file");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  /* One matching section, only key not ID. */
+  (void) unlink(path);
+  res = write_lines(path, 2,
+    "[mod_aws]\n",
+    "aws_secret_access_key=BAR\n"
+  );
+  fail_unless(res == 0, "Failed to write profile %s file '%s': %s",
+    profile, path, strerror(errno));
+
+  mark_point();
+  res = aws_creds_from_file(p, path, profile, &access_key_id,
+    &secret_access_key);
+  fail_unless(res < 0, "Failed to handle malformed profiles file");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  /* One matching section, ID and key. */
+  (void) unlink(path);
+  res = write_lines(path, 3,
+    "[mod_aws]\n",
+    "aws_access_key_id = FOO\n",
+    "aws_secret_access_key = BAR\n"
+  );
+  fail_unless(res == 0, "Failed to write profile %s file '%s': %s",
+    profile, path, strerror(errno));
+
+  mark_point();
+  res = aws_creds_from_file(p, path, profile, &access_key_id,
+    &secret_access_key);
+  fail_unless(res == 0, "Failed to handle profiles file '%s': %s", path,
+    strerror(errno));
+
+  expected = "FOO";
+  fail_unless(access_key_id != NULL, "Expected access_key_id, got null");
+  fail_unless(strcmp(access_key_id, expected) == 0, "Expected '%s', got '%s'",
+    expected, access_key_id);
+
+  expected = "BAR";
+  fail_unless(secret_access_key != NULL,
+    "Expected secret_access_key, got null");
+  fail_unless(strcmp(secret_access_key, expected) == 0,
+   "Expected '%s', got '%s'", expected, secret_access_key);
+
+  /* Multiple sections, 1st matched, ID and key. */
+  (void) unlink(path);
+  res = write_lines(path, 7,
+    "[mod_aws]\n",
+    "aws_access_key_id = FOO\n",
+    "aws_secret_access_key = BAR\n",
+    "\n",
+    "[default]\r\n",
+    "aws_access_key_id = huh?\n",
+    "aws_secret_access_key = confuzzled!\n"
+  );
+  fail_unless(res == 0, "Failed to write profile %s file '%s': %s",
+    profile, path, strerror(errno));
+
+  access_key_id = secret_access_key = NULL;
+  mark_point();
+  res = aws_creds_from_file(p, path, profile, &access_key_id,
+    &secret_access_key);
+  fail_unless(res == 0, "Failed to handle profiles file '%s': %s", path,
+    strerror(errno));
+
+  expected = "FOO";
+  fail_unless(access_key_id != NULL, "Expected access_key_id, got null");
+  fail_unless(strcmp(access_key_id, expected) == 0, "Expected '%s', got '%s'",
+    expected, access_key_id);
+
+  expected = "BAR";
+  fail_unless(secret_access_key != NULL,
+    "Expected secret_access_key, got null");
+  fail_unless(strcmp(secret_access_key, expected) == 0,
+   "Expected '%s', got '%s'", expected, secret_access_key);
+
+  /* Multiple sections, last matched, ID and key. */
+  (void) unlink(path);
+  res = write_lines(path, 7,
+    "[default]\r\n",
+    "aws_access_key_id = huh?\n",
+    "aws_secret_access_key = confuzzled!\n"
+    "\n",
+    "[mod_aws]\n",
+    "aws_access_key_id = FOO\n",
+    "aws_secret_access_key = BAR\n",
+  );
+  fail_unless(res == 0, "Failed to write profile %s file '%s': %s",
+    profile, path, strerror(errno));
+
+  access_key_id = secret_access_key = NULL;
+  mark_point();
+  res = aws_creds_from_file(p, path, profile, &access_key_id,
+    &secret_access_key);
+  fail_unless(res == 0, "Failed to handle profiles file '%s': %s", path,
+    strerror(errno));
+
+  expected = "FOO";
+  fail_unless(access_key_id != NULL, "Expected access_key_id, got null");
+  fail_unless(strcmp(access_key_id, expected) == 0, "Expected '%s', got '%s'",
+    expected, access_key_id);
+
+  expected = "BAR";
+  fail_unless(secret_access_key != NULL,
+    "Expected secret_access_key, got null");
+  fail_unless(strcmp(secret_access_key, expected) == 0,
+   "Expected '%s', got '%s'", expected, secret_access_key);
 
   (void) unlink(creds_test_path);
 }
