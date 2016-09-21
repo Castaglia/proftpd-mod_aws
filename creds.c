@@ -108,7 +108,7 @@ static int creds_parse_prop(pool *p, char *line, size_t linesz,
   char *ptr;
   size_t sz;
 
-  ptr = memchr(line, '=', propsz);
+  ptr = memchr(line, '=', linesz);
   if (ptr == NULL) {
     pr_trace_msg(trace_channel, 11, "badly formatted property '%.*s'",
       (int) linesz, line);
