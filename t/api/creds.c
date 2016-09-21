@@ -34,24 +34,33 @@ static void set_up(void) {
   (void) unlink(creds_test_path);
 
   if (p == NULL) {
-    p = make_sub_pool(NULL);
+    p = permanent_pool = make_sub_pool(NULL);
   }
+
+  init_fs();
+  pr_fs_statcache_set_policy(PR_TUNABLE_FS_STATCACHE_SIZE,
+    PR_TUNABLE_FS_STATCACHE_MAX_AGE, 0);
 
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("aws.creds", 1, 20);
+    pr_trace_set_levels("fsio", 1, 20);
   }
 }
 
 static void tear_down(void) {
   (void) unlink(creds_test_path);
 
+  pr_fs_statcache_set_policy(PR_TUNABLE_FS_STATCACHE_SIZE,
+    PR_TUNABLE_FS_STATCACHE_MAX_AGE, 0);
+
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("aws.creds", 0, 0);
+    pr_trace_set_levels("fsio", 0, 0);
   }
 
   if (p) {
     destroy_pool(p);
-    p = NULL;
+    p = permanent_pool = NULL;
   } 
 }
 
@@ -182,7 +191,10 @@ START_TEST (creds_from_file_test) {
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
     strerror(errno), errno);
 
-  res = write_lines(path, 2, "foo\n", "bar\n");
+  res = write_lines(path, 2,
+    "foo\n",
+    "bar\n"
+  );
   fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
     strerror(errno));
 
@@ -193,7 +205,10 @@ START_TEST (creds_from_file_test) {
     strerror(errno), errno);
 
   (void) unlink(path);
-  res = write_lines(path, 2, "secretKey = FOO\n", "bar\r\n");
+  res = write_lines(path, 2,
+    "secretKey = FOO\n",
+    "bar\r\n"
+  );
   fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
     strerror(errno));
 
@@ -204,7 +219,10 @@ START_TEST (creds_from_file_test) {
     strerror(errno), errno);
 
   (void) unlink(path);
-  res = write_lines(path, 2, "accessKey = FOO\r\n", "bar\n");
+  res = write_lines(path, 2,
+    "accessKey = FOO\r\n",
+    "bar\n"
+  );
   fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
     strerror(errno));
 
@@ -215,8 +233,13 @@ START_TEST (creds_from_file_test) {
     strerror(errno), errno);
 
   (void) unlink(path);
-  res = write_lines(path, 4, "foo=bar\n", "accessKey = FOO\n",
-    "# Comment here\n", "secretKey=BAR\n");
+  res = write_lines(path, 5,
+    "foo=bar\n",
+    "accessKey = FOO\n",
+    "# Comment here\n",
+    "         \n",
+    "secretKey=BAR\n"
+  );
   fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
     strerror(errno));
 
