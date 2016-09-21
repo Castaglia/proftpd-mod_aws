@@ -28,8 +28,9 @@
 #ifndef MOD_AWS_CREDS_H
 #define MOD_AWS_CREDS_H
 
-/* Look for AWS credentials in the environment, via the following environment
+/* Obtain AWS credentials from the environment, via the following environment
  * variables:
+ *
  *  AWS_ACCESS_KEY_ID
  *  AWS_SECRET_ACCESS_KEY
  */
@@ -40,5 +41,8 @@ int aws_creds_from_env(pool *p, char **access_key_id, char **secret_access_key);
  */
 int aws_creds_from_file(pool *p, const char *path, const char *profile,
   char **access_key_id, char **secret_access_key);
+
+/* Obtain AWS credentials via SQL query. */
+int aws_creds_from_sql(pool *p, char **access_key_id, char **secret_access_key);
 
 #endif /* MOD_AWS_CREDS_H */

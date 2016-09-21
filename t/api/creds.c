@@ -50,10 +50,68 @@ static void tear_down(void) {
 }
 
 START_TEST (creds_from_env_test) {
+  int res;
+  char *access_key_id, *secret_access_key, *expected;
+
+  res = aws_creds_from_env(NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_creds_from_env(p, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null access_key_id");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_creds_from_env(p, &access_key_id, NULL);
+  fail_unless(res < 0, "Failed to handle null secret_access_key");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_creds_from_env(p, &access_key_id, &secret_access_key);
+  fail_unless(res < 0, "Failed to handle missing credentials");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  res = pr_env_set(p, "AWS_ACCESS_KEY_ID", "FOO");
+  fail_unless(res == 0, "Failed to set AWS_ACCESS_KEY_ID env var: %s",
+    strerror(errno));
+
+  res = aws_creds_from_env(p, &access_key_id, &secret_access_key);
+  fail_unless(res < 0, "Failed to handle missing credentials");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  res = pr_env_set(p, "AWS_SECRET_ACCESS_KEY", "BAR");
+  fail_unless(res == 0, "Failed to set AWS_SECRET_ACCESS_KEY env var: %s",
+    strerror(errno));
+
+  access_key_id = secret_access_key = NULL;
+  res = aws_creds_from_env(p, &access_key_id, &secret_access_key);
+  fail_unless(res == 0, "Failed to get credentials from env vars: %s",
+    strerror(errno));
+
+  expected = "FOO";
+  fail_unless(access_key_id != NULL, "Expected access_key_id, got null");
+  fail_unless(strcmp(access_key_id, expected) == 0, "Expected '%s', got '%s'",
+    expected, access_key_id);
+
+  expected = "BAR";
+  fail_unless(secret_access_key != NULL,
+    "Expected secret_access_key, got null");
+  fail_unless(strcmp(secret_access_key, expected) == 0,
+   "Expected '%s', got '%s'", expected, secret_access_key);
+
+  (void) pr_env_unset(p, "AWS_ACCESS_KEY_ID");
+  (void) pr_env_unset(p, "AWS_SECRET_ACCESS_KEY");
 }
 END_TEST
 
 START_TEST (creds_from_file_test) {
+}
+END_TEST
+
+START_TEST (creds_from_sql_test) {
 }
 END_TEST
 
@@ -68,6 +126,7 @@ Suite *tests_get_creds_suite(void) {
 
   tcase_add_test(testcase, creds_from_env_test);
   tcase_add_test(testcase, creds_from_file_test);
+  tcase_add_test(testcase, creds_from_sql_test);
 
   suite_add_tcase(suite, testcase);
   return suite;

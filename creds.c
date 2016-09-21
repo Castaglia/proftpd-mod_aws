@@ -27,12 +27,43 @@
 
 int aws_creds_from_env(pool *p, char **access_key_id,
     char **secret_access_key) {
-  errno = ENOSYS;
-  return -1;
+  const char *k, *id, *secret;
+
+  if (p == NULL ||
+      access_key_id == NULL ||
+      secret_access_key == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  k = "AWS_ACCESS_KEY_ID";
+  id = pr_env_get(p, k);
+  if (id == NULL) {
+    errno = ENOENT;
+    return -1;
+  }
+
+  k = "AWS_SECRET_ACCESS_KEY";
+  secret = pr_env_get(p, k);
+  if (secret == NULL) {
+    errno = ENOENT;
+    return -1;
+  }
+
+  *access_key_id = pstrdup(p, id);
+  *secret_access_key = pstrdup(p, secret);
+
+  return 0;
 }
 
 int aws_creds_from_file(pool *p, const char *path, const char *profile,
     char **access_key_id, char **secret_access_key) {
+  errno = ENOSYS;
+  return -1;
+}
+
+int aws_creds_from_sql(pool *p, char **access_key_id,
+    char **secret_access_key) {
   errno = ENOSYS;
   return -1;
 }
