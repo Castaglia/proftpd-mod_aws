@@ -38,12 +38,22 @@ int aws_creds_from_env(pool *p, char **access_key_id, char **secret_access_key);
 
 /* Obtain AWS credentials from the given path, for the named profile
  * (if any).
+ */
+int aws_creds_from_file(pool *p, const char *path, const char *profile,
+  char **access_key_id, char **secret_access_key);
+
+/* Obtain AWS credentials from a "chain" of different locations, in this order:
+ *
+ *  1.  Check for per-profile credentials.
+ *  2.  Check for "default" profile credentials.
+ *  3.  Check for properties-based credentials.
+ *  4.  Check for environment variable-based credentials.
  *
  * Note that if a profile is provided, the default path of "~/.aws/credentials"
  * is used; this default location can be overridden via the
  * AWS_CREDENTIAL_PROFILES_FILE environment variable.
  */
-int aws_creds_from_file(pool *p, const char *path, const char *profile,
+int aws_creds_from_chain(pool *p, const char *path, const char *profile,
   char **access_key_id, char **secret_access_key);
 
 /* Obtain AWS credentials via SQL query. */

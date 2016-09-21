@@ -328,6 +328,12 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
   return res;
 }
 
+int aws_creds_from_chain(pool *p, const char *path, const char *profile,
+    char **access_key_id, char **secret_access_key) {
+  errno = ENOSYS;
+  return -1;
+}
+
 int aws_creds_from_sql(pool *p, const char *query, char **access_key_id,
     char **secret_access_key) {
   if (p == NULL ||

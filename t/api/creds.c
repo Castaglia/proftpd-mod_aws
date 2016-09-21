@@ -431,11 +431,11 @@ START_TEST (creds_from_file_using_profile_test) {
   res = write_lines(path, 7,
     "[default]\r\n",
     "aws_access_key_id = huh?\n",
-    "aws_secret_access_key = confuzzled!\n"
+    "aws_secret_access_key = confuzzled!\n",
     "\n",
     "[mod_aws]\n",
     "aws_access_key_id = FOO\n",
-    "aws_secret_access_key = BAR\n",
+    "aws_secret_access_key = BAR\n"
   );
   fail_unless(res == 0, "Failed to write profile %s file '%s': %s",
     profile, path, strerror(errno));
@@ -459,6 +459,10 @@ START_TEST (creds_from_file_using_profile_test) {
    "Expected '%s', got '%s'", expected, secret_access_key);
 
   (void) unlink(creds_test_path);
+}
+END_TEST
+
+START_TEST (creds_from_chain_test) {
 }
 END_TEST
 
@@ -515,6 +519,7 @@ Suite *tests_get_creds_suite(void) {
   tcase_add_test(testcase, creds_from_env_test);
   tcase_add_test(testcase, creds_from_file_test);
   tcase_add_test(testcase, creds_from_file_using_profile_test);
+  tcase_add_test(testcase, creds_from_chain_test);
   tcase_add_test(testcase, creds_from_sql_test);
 
   suite_add_tcase(suite, testcase);
