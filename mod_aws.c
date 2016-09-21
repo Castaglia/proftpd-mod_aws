@@ -288,7 +288,7 @@ static void verify_masq_addr(pool *p, const struct aws_info *info,
           pr_netaddr_get_ipstr(public_addr), s->ServerName);
 
       } else {
-        c->argv[0] = public_addr;
+        c->argv[0] = (void *) public_addr;
         c->argv[1] = pstrndup(c->pool, info->public_ipv4, info->public_ipv4sz);
 
         (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -309,7 +309,7 @@ static void verify_masq_addr(pool *p, const struct aws_info *info,
       c->config_type = CONF_PARAM;
       c->argc = 2;
       c->argv = pcalloc(c->pool, sizeof(void *) * (c->argc + 1));
-      c->argv[0] = public_addr;
+      c->argv[0] = (void *) public_addr;
       c->argv[1] = pstrndup(c->pool, info->public_ipv4, info->public_ipv4sz);
 
       (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
