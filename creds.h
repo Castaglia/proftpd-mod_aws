@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_aws API testsuite
- * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+ * ProFTPD - mod_aws AWS credentials
+ * Copyright (c) 2016 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,35 +22,23 @@
  * source distribution.
  */
 
-/* Testsuite management */
-
-#ifndef MOD_AWS_TESTS_H
-#define MOD_AWS_TESTS_H
-
 #include "mod_aws.h"
+#include "instance.h"
 
-#include "xml.h"
-#include "error.h"
-#include "creds.h"
-#include "http.h"
-#include "sign.h"
-#include "utils.h"
+#ifndef MOD_AWS_CREDS_H
+#define MOD_AWS_CREDS_H
 
-#ifdef HAVE_CHECK_H
-# include <check.h>
-#else
-# error "Missing Check installation; necessary for ProFTPD testsuite"
-#endif
+/* Look for AWS credentials in the environment, via the following environment
+ * variables:
+ *  AWS_ACCESS_KEY_ID
+ *  AWS_SECRET_ACCESS_KEY
+ */
+int aws_creds_from_env(pool *p, char **access_key_id, char **secret_access_key);
 
-Suite *tests_get_xml_suite(void);
-Suite *tests_get_error_suite(void);
-Suite *tests_get_http_suite(void);
-Suite *tests_get_creds_suite(void);
-Suite *tests_get_sign_suite(void);
-Suite *tests_get_utils_suite(void);
+/* Obtain AWS credentials from the given path, for the named profile
+ * (if any).
+ */
+int aws_creds_from_file(pool *p, const char *path, const char *profile,
+  char **access_key_id, char **secret_access_key);
 
-unsigned int recvd_signal_flags;
-extern pid_t mpid;
-extern server_rec *main_server;
-
-#endif /* MOD_AWS_TESTS_H */
+#endif /* MOD_AWS_CREDS_H */

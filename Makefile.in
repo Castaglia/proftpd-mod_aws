@@ -14,6 +14,7 @@ MODULE_NAME=mod_aws
 MODULE_OBJS=mod_aws.o \
   utils.o \
   health.o \
+  creds.o \
   http.o \
   xml.o \
   instance.o \
@@ -25,6 +26,7 @@ MODULE_OBJS=mod_aws.o \
 SHARED_MODULE_OBJS=mod_aws.lo \
   utils.lo \
   health.lo \
+  creds.lo \
   http.lo \
   xml.lo \
   instance.lo \

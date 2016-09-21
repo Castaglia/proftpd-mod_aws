@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_aws API testsuite
- * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+ * ProFTPD - mod_aws AWS credentials
+ * Copyright (c) 2016 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,35 +22,17 @@
  * source distribution.
  */
 
-/* Testsuite management */
-
-#ifndef MOD_AWS_TESTS_H
-#define MOD_AWS_TESTS_H
-
 #include "mod_aws.h"
-
-#include "xml.h"
-#include "error.h"
 #include "creds.h"
-#include "http.h"
-#include "sign.h"
-#include "utils.h"
 
-#ifdef HAVE_CHECK_H
-# include <check.h>
-#else
-# error "Missing Check installation; necessary for ProFTPD testsuite"
-#endif
+int aws_creds_from_env(pool *p, char **access_key_id,
+    char **secret_access_key) {
+  errno = ENOSYS;
+  return -1;
+}
 
-Suite *tests_get_xml_suite(void);
-Suite *tests_get_error_suite(void);
-Suite *tests_get_http_suite(void);
-Suite *tests_get_creds_suite(void);
-Suite *tests_get_sign_suite(void);
-Suite *tests_get_utils_suite(void);
-
-unsigned int recvd_signal_flags;
-extern pid_t mpid;
-extern server_rec *main_server;
-
-#endif /* MOD_AWS_TESTS_H */
+int aws_creds_from_file(pool *p, const char *path, const char *profile,
+    char **access_key_id, char **secret_access_key) {
+  errno = ENOSYS;
+  return -1;
+}

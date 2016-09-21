@@ -1,5 +1,5 @@
 /*
- * ProFTPD - mod_aws API testsuite
+ * ProFTPD - mod_aws testsuite
  * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,35 +22,53 @@
  * source distribution.
  */
 
-/* Testsuite management */
+/* Creds API tests. */
 
-#ifndef MOD_AWS_TESTS_H
-#define MOD_AWS_TESTS_H
+#include "tests.h"
 
-#include "mod_aws.h"
+static pool *p = NULL;
 
-#include "xml.h"
-#include "error.h"
-#include "creds.h"
-#include "http.h"
-#include "sign.h"
-#include "utils.h"
+static void set_up(void) {
+  if (p == NULL) {
+    p = make_sub_pool(NULL);
+  }
 
-#ifdef HAVE_CHECK_H
-# include <check.h>
-#else
-# error "Missing Check installation; necessary for ProFTPD testsuite"
-#endif
+  if (getenv("TEST_VERBOSE") != NULL) {
+    pr_trace_set_levels("aws.creds", 1, 20);
+  }
+}
 
-Suite *tests_get_xml_suite(void);
-Suite *tests_get_error_suite(void);
-Suite *tests_get_http_suite(void);
-Suite *tests_get_creds_suite(void);
-Suite *tests_get_sign_suite(void);
-Suite *tests_get_utils_suite(void);
+static void tear_down(void) {
+  if (getenv("TEST_VERBOSE") != NULL) {
+    pr_trace_set_levels("aws.creds", 0, 0);
+  }
 
-unsigned int recvd_signal_flags;
-extern pid_t mpid;
-extern server_rec *main_server;
+  if (p) {
+    destroy_pool(p);
+    p = NULL;
+  } 
+}
 
-#endif /* MOD_AWS_TESTS_H */
+START_TEST (creds_from_env_test) {
+}
+END_TEST
+
+START_TEST (creds_from_file_test) {
+}
+END_TEST
+
+Suite *tests_get_creds_suite(void) {
+  Suite *suite;
+  TCase *testcase;
+
+  suite = suite_create("creds");
+  testcase = tcase_create("base");
+
+  tcase_add_checked_fixture(testcase, set_up, tear_down);
+
+  tcase_add_test(testcase, creds_from_env_test);
+  tcase_add_test(testcase, creds_from_file_test);
+
+  suite_add_tcase(suite, testcase);
+  return suite;
+}
