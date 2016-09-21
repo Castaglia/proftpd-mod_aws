@@ -43,7 +43,6 @@ static void set_up(void) {
 
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("aws.creds", 1, 20);
-    pr_trace_set_levels("fsio", 1, 20);
   }
 }
 
@@ -55,7 +54,6 @@ static void tear_down(void) {
 
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("aws.creds", 0, 0);
-    pr_trace_set_levels("fsio", 0, 0);
   }
 
   if (p) {
@@ -264,13 +262,80 @@ START_TEST (creds_from_file_test) {
 END_TEST
 
 START_TEST (creds_from_file_using_profile_test) {
-  /* Note: Show use case of reading a specific profile, finding none,
-   * and falling back to reading profile="default" if needed.
-   */
+  int res;
+  const char *path, *profile;
+  char *access_key_id, *secret_access_key, *expected;
+
+  (void) unlink(creds_test_path);
+
+  path = creds_test_path;
+  profile = "mod_aws";
+
+  res = write_lines(path, 2,
+    "accessKey = FOO\r\n",
+    "bar\n"
+  );
+  fail_unless(res == 0, "Failed to write profile %s file '%s': %s",
+    profile, path, strerror(errno));
+
+  mark_point();
+  res = aws_creds_from_file(p, path, profile, &access_key_id,
+    &secret_access_key);
+  fail_unless(res < 0, "Failed to handle malformed profiles file");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+/* Malformed section line. */
+/* One section, not matching name. */
+/* Multiple sections, not matching name. */
+/* One matching section, only ID not key. */
+/* One matching section, only key not ID. */
+/* One matching section, ID and key. */
+/* Multiple sections, 1st matched, ID and key. */
+/* Multiple sections, last matched, ID and key. *
+
+  (void) unlink(creds_test_path);
 }
 END_TEST
 
 START_TEST (creds_from_sql_test) {
+  int res;
+  const char *query;
+  char *access_key_id, *secret_access_key;
+
+  mark_point();
+  res = aws_creds_from_sql(NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_creds_from_sql(p, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null query");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  query = "no-such-query";
+
+  mark_point();
+  res = aws_creds_from_sql(p, query, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null access_key_id");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_creds_from_sql(p, query, &access_key_id, NULL);
+  fail_unless(res < 0, "Failed to handle null secret_access_key");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_creds_from_sql(p, query, &access_key_id, &secret_access_key);
+  fail_unless(res < 0, "Failed to handle invalid query '%s'", query);
+  fail_unless(errno == ENOSYS, "Expected ENOSYS (%d), got %s (%d)", ENOSYS,
+    strerror(errno), errno);
+
+/* XXX TODO */
 }
 END_TEST
 

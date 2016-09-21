@@ -102,25 +102,25 @@ static char *creds_next_line(pr_fh_t *fh, char *line, size_t linesz,
   return NULL;
 }
 
-static int creds_parse_prop(pool *p, char *prop, size_t propsz,
+static int creds_parse_prop(pool *p, char *line, size_t linesz,
     char **prop_name, size_t *prop_namesz,
     char **prop_val, size_t *prop_valsz) {
   char *ptr;
   size_t sz;
 
-  ptr = memchr(prop, '=', propsz);
+  ptr = memchr(line, '=', propsz);
   if (ptr == NULL) {
-    pr_trace_msg(trace_channel, 8, "badly formatted property '%.*s'",
-      (int) propsz, prop);
+    pr_trace_msg(trace_channel, 11, "badly formatted property '%.*s'",
+      (int) linesz, line);
     errno = EINVAL;
     return -1;
   }
 
-  sz = ptr - prop;
-  *prop_name = aws_utils_strn_trim(p, prop, sz);
+  sz = ptr - line;
+  *prop_name = aws_utils_strn_trim(p, line, sz);
   *prop_namesz = strlen(*prop_name);
 
-  sz = propsz - sz - 1;
+  sz = linesz - sz - 1;
   *prop_val = aws_utils_strn_trim(p, ptr + 1, sz);
   *prop_valsz = strlen(*prop_val);
 
@@ -151,6 +151,8 @@ static int creds_from_props(pool *p, pr_fh_t *fh, char **access_key_id,
       continue;
     }
 
+    pr_memscrub(line, linelen);
+
     if (namesz == 9) {
       if (strncmp(name, "accessKey", 10) == 0) {
         *access_key_id = val;
@@ -172,23 +174,84 @@ static int creds_from_props(pool *p, pr_fh_t *fh, char **access_key_id,
   return -1;
 }
 
+static int creds_parse_section(pool *p, char *line, size_t linesz,
+    char **section_name, size_t *section_namesz) {
+
+  if (*line != '[' ||
+      line[linesz-1] != ']') {
+    pr_trace_msg(trace_channel, 8, "badly formatted section name '%.*s'",
+      (int) linesz, line);
+    errno = EINVAL;
+    return -1;
+  }
+
+  *section_name = aws_utils_strn_trim(p, line+1, linesz-2);
+  *section_namesz = strlen(*section_name);
+
+  return 0;
+}
+
 static int creds_from_profile_props(pool *p, pr_fh_t *fh, const char *profile,
     char **access_key_id, char **secret_access_key) {
+  size_t bufsz, linelen, profilelen;
+  char *buf, *line;
+  unsigned int lineno = 0;
+  int have_section = FALSE;
 
-  /* Read each line. */
-  /* Ignore empty lines, comments. */
-  /* Trim trailing comments. */
+  bufsz = PR_TUNABLE_PARSER_BUFFER_SIZE;
+  buf = pcalloc(p, bufsz+1);
 
-  /* Parse line into section name. */
-  /* If section name matches profile name, read next lines as key/value. */
-  /* If seciton name not matches profile, read next lines as sections. */
+  *access_key_id = *secret_access_key = NULL;
+  profilelen = strlen(profile);
 
-  /* Parse line into key, value strings. */
-  /* If key is "accessKey", populate access_key_id. */
-  /* If key is "secretKey", populate secret_access_key. */
-  /* If both values are provisioned, we're done.  Otherwise, ENOENT. */
+  line = creds_next_line(fh, buf, bufsz, &lineno, &linelen);
+  while (line != NULL) {
+    char *section, *name, *val;
+    size_t sectionsz, namesz, valsz;
 
-  errno = ENOSYS;
+    pr_signals_handle();
+
+    if (have_section == FALSE) {
+      if (creds_parse_section(p, line, linelen, &section, &sectionsz) == 0) {
+        if (sectionsz == profilelen &&
+            strncmp(section, profile, profilelen) == 0) {
+          have_section = TRUE;
+
+        } else {
+          have_section = FALSE;
+        }
+      }
+
+      line = creds_next_line(fh, buf, bufsz, &lineno, &linelen);
+      continue;
+    }
+
+    if (creds_parse_prop(p, line, linelen, &name, &namesz, &val, &valsz) < 0) {
+      /* Ignore malformed lines. */
+      line = creds_next_line(fh, buf, bufsz, &lineno, &linelen);
+      continue;
+    }
+
+    pr_memscrub(line, linelen);
+
+    if (namesz == 17 &&
+        strncmp(name, "aws_access_key_id", 18) == 0) {
+      *access_key_id = val;
+
+    } else if (namesz == 21 &&
+               strncmp(name, "aws_secret_access_key", 22) == 0) {
+      *secret_access_key = val;
+    }
+
+    if (*access_key_id != NULL &&
+        *secret_access_key != NULL) {
+      return 0;
+    }
+
+    line = creds_next_line(fh, buf, bufsz, &lineno, &linelen);
+  }
+
+  errno = ENOENT;
   return -1;
 }
 
