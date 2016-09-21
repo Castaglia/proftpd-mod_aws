@@ -43,6 +43,7 @@ TEST_API_DEPS=\
   $(module_srcdir)/error.o \
   $(module_srcdir)/creds.o \
   $(module_srcdir)/http.o \
+  $(module_srcdir)/instance.o \
   $(module_srcdir)/sign.o \
   $(module_srcdir)/utils.o
 
