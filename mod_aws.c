@@ -198,15 +198,23 @@ static void verify_ctrl_port(pool *p, const struct aws_info *info,
         struct ec2_ip_rule *rule;
 
         rule = rules[i];
-        if ((rule->from_port > 0 && rule->from_port >= s->ServerPort) &&
-            (rule->to_port > 0 && rule->to_port <= s->ServerPort)) {
-          /* This SG allows access for our control port.  Good. */
 
-          (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-            "<VirtualHost> '%s' control port %u allowed by security group "
-            "ID %s (%s)", s->ServerName, s->ServerPort, sg_id, sg->name);
-          ctrl_port_allowed = TRUE;
-          break;
+        if (rule->from_port > 0 &&
+            rule->to_port > 0) {
+          unsigned int from_port, to_port;
+
+          from_port = rule->from_port;
+          to_port = rule->to_port;
+
+          if (from_port >= s->ServerPort &&
+              to_port <= s->ServerPort) {
+            /* This SG allows access for our control port.  Good. */
+            (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+              "<VirtualHost> '%s' control port %u allowed by security group "
+              "ID %s (%s)", s->ServerName, s->ServerPort, sg_id, sg->name);
+            ctrl_port_allowed = TRUE;
+            break;
+          }
         }
       }
     }
