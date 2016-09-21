@@ -30,6 +30,7 @@
 #include "http.h"
 #include "xml.h"
 #include "instance.h"
+#include "creds.h"
 #include "ec2.h"
 #include "route53.h"
 #include "health.h"
@@ -56,6 +57,10 @@ static unsigned long aws_flags = 0UL;
 
 static const char *aws_logfile = NULL;
 static const char *aws_cacerts = PR_CONFIG_DIR "/aws-cacerts.pem";
+
+/* For obtaining AWS credentials. */
+static const char *aws_profile = NULL;
+static array_header *aws_creds_providers = NULL;
 
 static unsigned long aws_connect_timeout_secs = AWS_CONNECT_DEFAULT_TIMEOUT;
 static unsigned long aws_request_timeout_secs = AWS_REQUEST_DEFAULT_TIMEOUT;
@@ -763,6 +768,48 @@ MODRET set_awscacertfile(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
+/* usage: AWSCredentials provider1 ... */
+MODRET set_awscredentials(cmd_rec *cmd) {
+  register unsigned int i;
+  config_rec *c;
+  array_header *providers;
+
+  if (cmd->argc < 2) {
+    CONF_ERROR(cmd, "wrong number of parameters");
+  }
+
+  CHECK_CONF(cmd, CONF_ROOT|CONF_VIRTUAL|CONF_GLOBAL);
+
+  c = add_config_param(cmd->argv[0], 1, NULL);
+  providers = make_array(c->pool, 1, sizeof(char *));
+
+  for (i = 1; i < cmd->argc; i++) {
+    if (strcasecmp(cmd->argv[i], "IAM") == 0) {
+      *((char **) push_array(providers)) = pstrdup(c->pool,
+        AWS_CREDS_PROVIDER_NAME_IAM);
+
+    } else if (strcasecmp(cmd->argv[i], "Profile") == 0) {
+      *((char **) push_array(providers)) = pstrdup(c->pool,
+        AWS_CREDS_PROVIDER_NAME_PROFILE);
+
+    } else if (strcasecmp(cmd->argv[i], "Properties") == 0) {
+      *((char **) push_array(providers)) = pstrdup(c->pool,
+        AWS_CREDS_PROVIDER_NAME_PROPERTIES);
+
+    } else if (strcasecmp(cmd->argv[i], "Environment") == 0) {
+      *((char **) push_array(providers)) = pstrdup(c->pool,
+        AWS_CREDS_PROVIDER_ANEM_ENVIRONMENT);
+
+    } else {
+      CONF_ERROR(cmd, pstrcat(cmd->tmp_pool,
+        ": unknown AWSCredentials provider '", cmd->argv[i], "'", NULL));
+    }
+  }
+
+  c->argv[0] = providers;
+  return PR_HANDLED(cmd);
+}
+
 /* usage: AWSEngine on|off */
 MODRET set_awsengine(cmd_rec *cmd) {
   int engine = 1;
@@ -869,21 +916,16 @@ MODRET set_awsoptions(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
-/* usage: AWSTimeoutConnect secs */
-MODRET set_awstimeoutconnect(cmd_rec *cmd) {
-  int timeout = -1;
-  char *timespec;
+/* usage: AWSProfile name */
+MODRET set_awsprofile(cmd_rec *cmd) {
+  config_rec *c;
 
   CHECK_ARGS(cmd, 1);
-  CHECK_CONF(cmd, CONF_ROOT);
+  CHECK_CONF(cmd, CONF_ROOT|CONF_VIRTUAL|CONF_GLOBAL);
 
-  timespec = cmd->argv[1];
-  if (pr_str_get_duration(timespec, &timeout) < 0) {
-    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "error parsing timeout value '",
-      timespec, "': ", strerror(errno), NULL));
-  }
+  c = add_config_param(cmd->argv[0], 1, NULL);
+  c->argv[0] = pstrdup(c->pool, cmd->argv[1]);
 
-  aws_connect_timeout_secs = timeout;
   return PR_HANDLED(cmd);
 }
 
@@ -901,6 +943,24 @@ MODRET set_awssecuritygroup(cmd_rec *cmd) {
   }
 
   aws_adjust_sg_id = sg_id;
+  return PR_HANDLED(cmd);
+}
+
+/* usage: AWSTimeoutConnect secs */
+MODRET set_awstimeoutconnect(cmd_rec *cmd) {
+  int timeout = -1;
+  char *timespec;
+
+  CHECK_ARGS(cmd, 1);
+  CHECK_CONF(cmd, CONF_ROOT);
+
+  timespec = cmd->argv[1];
+  if (pr_str_get_duration(timespec, &timeout) < 0) {
+    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "error parsing timeout value '",
+      timespec, "': ", strerror(errno), NULL));
+  }
+
+  aws_connect_timeout_secs = timeout;
   return PR_HANDLED(cmd);
 }
 
@@ -1178,8 +1238,20 @@ static int aws_init(void) {
 }
 
 static int aws_sess_init(void) {
+  config_rec *c;
+
   if (aws_engine == FALSE) {
     return 0;
+  }
+
+  c = find_config(main_server->conf, CONF_PARAM, "AWSProfile", FALSE);
+  if (c != NULL) {
+    aws_profile = c->argv[0];
+  }
+
+  c = find_config(main_server->conf, CONF_PARAM, "AWSCredentials", FALSE);
+  if (c != NULL) {
+    aws_creds_providers = c->argv[0];
   }
 
   if (instance_info == NULL) {
@@ -1260,10 +1332,12 @@ static int aws_sess_init(void) {
 static conftable aws_conftab[] = {
   { "AWSAdjustments",		set_awsadjustments,	NULL },
   { "AWSCACertificateFile",	set_awscacertfile,	NULL },
+  { "AWSCredentials",		set_awscredentials,	NULL },
   { "AWSEngine",		set_awsengine,		NULL },
   { "AWSHealthCheck",		set_awshealthcheck,	NULL },
   { "AWSLog",			set_awslog,		NULL },
   { "AWSOptions",		set_awsoptions,		NULL },
+  { "AWSProfile",		set_awsprofile,		NULL },
   { "AWSSecurityGroup",		set_awssecuritygroup,	NULL },
   { "AWSTimeoutConnect",	set_awstimeoutconnect,	NULL },
   { "AWSTimeoutRequest",	set_awstimeoutrequest,	NULL },
