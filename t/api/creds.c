@@ -28,7 +28,11 @@
 
 static pool *p = NULL;
 
+static const char *creds_test_path = "/tmp/awstest-creds.properties";
+
 static void set_up(void) {
+  (void) unlink(creds_test_path);
+
   if (p == NULL) {
     p = make_sub_pool(NULL);
   }
@@ -39,6 +43,8 @@ static void set_up(void) {
 }
 
 static void tear_down(void) {
+  (void) unlink(creds_test_path);
+
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("aws.creds", 0, 0);
   }
@@ -108,11 +114,41 @@ START_TEST (creds_from_env_test) {
 END_TEST
 
 START_TEST (creds_from_file_test) {
+  int res;
+  const char *path;
+  char *access_key_id, *secret_access_key, *expected;
 
+  (void) unlink(creds_test_path);
+
+  res = aws_creds_from_file(NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_creds_from_file(p, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null path");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_creds_from_file(p, path, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null access_key_id");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  path = creds_test_path;
+  res = aws_creds_from_file(p, path, NULL, &access_key_id, NULL);
+  fail_unless(res < 0, "Failed to handle null secret_access_key");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  (void) unlink(creds_test_path);
+}
+END_TEST
+
+START_TEST (creds_from_file_using_profile_test) {
   /* Note: Show use case of reading a specific profile, finding none,
    * and falling back to reading profile="default" if needed.
    */
-
 }
 END_TEST
 
@@ -131,6 +167,7 @@ Suite *tests_get_creds_suite(void) {
 
   tcase_add_test(testcase, creds_from_env_test);
   tcase_add_test(testcase, creds_from_file_test);
+  tcase_add_test(testcase, creds_from_file_using_profile_test);
   tcase_add_test(testcase, creds_from_sql_test);
 
   suite_add_tcase(suite, testcase);

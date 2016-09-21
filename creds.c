@@ -156,7 +156,7 @@ static int creds_from_props(pool *p, pr_fh_t *fh, char **access_key_id,
         *access_key_id = val;
 
       } else if (strncmp(name, "secretKey", 10) == 0) {
-        *secret_access_key_id = val;
+        *secret_access_key = val;
       }
     }
 
