@@ -91,7 +91,7 @@ char *aws_utils_str_ul2s(pool *p, unsigned long n) {
   return num;
 }
 
-char *aws_utils_str_trimn(pool *p, const char *str, size_t len) {
+char *aws_utils_strn_trim(pool *p, const char *str, size_t len) {
   const char *start, *end;
   char *trimmed = NULL;
 
@@ -137,5 +137,5 @@ char *aws_utils_str_trim(pool *p, const char *str) {
   }
 
   len = strlen(str);
-  return aws_utils_str_trimn(p, str, len);
+  return aws_utils_strn_trim(p, str, len);
 }

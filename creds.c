@@ -117,11 +117,11 @@ static int creds_parse_prop(pool *p, char *prop, size_t propsz,
   }
 
   sz = ptr - prop;
-  *prop_name = aws_utils_str_trimn(p, prop, sz);
+  *prop_name = aws_utils_strn_trim(p, prop, sz);
   *prop_namesz = strlen(*prop_name);
 
   sz = propsz - sz - 1;
-  *prop_val = aws_utils_str_trimn(p, ptr + 1, sz);
+  *prop_val = aws_utils_strn_trim(p, ptr + 1, sz);
   *prop_valsz = strlen(*prop_val);
 
   return 0;

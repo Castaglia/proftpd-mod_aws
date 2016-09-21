@@ -46,6 +46,6 @@ char *aws_utils_str_trim(pool *p, const char *str);
 /* Similar to aws_utils_str_trim(), except that the string length is
  * explicitly provided.
  */
-char *aws_utils_str_trimn(pool *p, const char *str, size_t len);
+char *aws_utils_strn_trim(pool *p, const char *str, size_t len);
 
 #endif /* MOD_AWS_UTILS_H */
