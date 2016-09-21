@@ -798,7 +798,7 @@ MODRET set_awscredentials(cmd_rec *cmd) {
 
     } else if (strcasecmp(cmd->argv[i], "Environment") == 0) {
       *((char **) push_array(providers)) = pstrdup(c->pool,
-        AWS_CREDS_PROVIDER_ANEM_ENVIRONMENT);
+        AWS_CREDS_PROVIDER_NAME_ENVIRONMENT);
 
     } else {
       CONF_ERROR(cmd, pstrcat(cmd->tmp_pool,
