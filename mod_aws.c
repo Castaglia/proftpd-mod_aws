@@ -198,8 +198,8 @@ static void verify_ctrl_port(pool *p, const struct aws_info *info,
         struct ec2_ip_rule *rule;
 
         rule = rules[i];
-        if (rule->from_port >= s->ServerPort &&
-            rule->to_port <= s->ServerPort) {
+        if ((rule->from_port > 0 && rule->from_port >= s->ServerPort) &&
+            (rule->to_port > 0 && rule->to_port <= s->ServerPort)) {
           /* This SG allows access for our control port.  Good. */
 
           (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -252,7 +252,7 @@ static void verify_ctrl_port(pool *p, const struct aws_info *info,
 static void verify_masq_addr(pool *p, const struct aws_info *info,
     server_rec *s) {
   config_rec *c;
-  pr_netaddr_t *public_addr;
+  const pr_netaddr_t *public_addr;
 
   /* Should we use public_hostname here instead? */
   if (info->public_ipv4 == NULL) {
