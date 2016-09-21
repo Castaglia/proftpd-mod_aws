@@ -108,6 +108,11 @@ START_TEST (creds_from_env_test) {
 END_TEST
 
 START_TEST (creds_from_file_test) {
+
+  /* Note: Show use case of reading a specific profile, finding none,
+   * and falling back to reading profile="default" if needed.
+   */
+
 }
 END_TEST
 
