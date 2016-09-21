@@ -59,21 +59,25 @@ START_TEST (creds_from_env_test) {
   int res;
   char *access_key_id, *secret_access_key, *expected;
 
+  mark_point();
   res = aws_creds_from_env(NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   res = aws_creds_from_env(p, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null access_key_id");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   res = aws_creds_from_env(p, &access_key_id, NULL);
   fail_unless(res < 0, "Failed to handle null secret_access_key");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   res = aws_creds_from_env(p, &access_key_id, &secret_access_key);
   fail_unless(res < 0, "Failed to handle missing credentials");
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
@@ -83,6 +87,7 @@ START_TEST (creds_from_env_test) {
   fail_unless(res == 0, "Failed to set AWS_ACCESS_KEY_ID env var: %s",
     strerror(errno));
 
+  mark_point();
   res = aws_creds_from_env(p, &access_key_id, &secret_access_key);
   fail_unless(res < 0, "Failed to handle missing credentials");
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
@@ -93,6 +98,8 @@ START_TEST (creds_from_env_test) {
     strerror(errno));
 
   access_key_id = secret_access_key = NULL;
+
+  mark_point();
   res = aws_creds_from_env(p, &access_key_id, &secret_access_key);
   fail_unless(res == 0, "Failed to get credentials from env vars: %s",
     strerror(errno));
@@ -113,6 +120,23 @@ START_TEST (creds_from_env_test) {
 }
 END_TEST
 
+static int write_props(const char *path, const char *id, const char *secret) {
+  FILE *fh;
+  size_t len;
+
+  fh = fopen(path, "w+");
+  if (fh == NULL) {
+    return -1;
+  }
+
+  len = strlen(id);
+  fwrite(id, len, 1, fh);
+  len = strlen(secret);
+  fwrite(secret, len, 1, fh);
+
+  return fclose(fh);
+}
+
 START_TEST (creds_from_file_test) {
   int res;
   const char *path;
@@ -120,26 +144,90 @@ START_TEST (creds_from_file_test) {
 
   (void) unlink(creds_test_path);
 
+  mark_point();
   res = aws_creds_from_file(NULL, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   res = aws_creds_from_file(p, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null path");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   res = aws_creds_from_file(p, path, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null access_key_id");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   path = creds_test_path;
+
+  mark_point();
   res = aws_creds_from_file(p, path, NULL, &access_key_id, NULL);
   fail_unless(res < 0, "Failed to handle null secret_access_key");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
+
+  mark_point();
+  res = aws_creds_from_file(p, path, NULL, &access_key_id, &secret_access_key);
+  fail_unless(res < 0, "Failed to handle nonexistent file");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  res = write_props(path, "foo\n", "bar\n");
+  fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
+    strerror(errno));
+
+  mark_point();
+  res = aws_creds_from_file(p, path, NULL, &access_key_id, &secret_access_key);
+  fail_unless(res < 0, "Failed to handle badly formatted file");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  (void) unlink(path);
+  res = write_props(path, "secretKey = FOO\n", "bar\r\n");
+  fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
+    strerror(errno));
+
+  mark_point();
+  res = aws_creds_from_file(p, path, NULL, &access_key_id, &secret_access_key);
+  fail_unless(res < 0, "Failed to handle file missing ID");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  (void) unlink(path);
+  res = write_props(path, "accessKey = FOO\r\n", "bar\n");
+  fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
+    strerror(errno));
+
+  mark_point();
+  res = aws_creds_from_file(p, path, NULL, &access_key_id, &secret_access_key);
+  fail_unless(res < 0, "Failed to handle file missing secret");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  (void) unlink(path);
+  res = write_props(path, "accessKey = FOO\n", "secretKey=BAR\n");
+  fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
+    strerror(errno));
+
+  mark_point();
+  res = aws_creds_from_file(p, path, NULL, &access_key_id, &secret_access_key);
+  fail_unless(res == 0, "Failed to handle properties file '%s': %s", path,
+    strerror(errno));
+
+  expected = "FOO";
+  fail_unless(access_key_id != NULL, "Expected access_key_id, got null");
+  fail_unless(strcmp(access_key_id, expected) == 0, "Expected '%s', got '%s'",
+    expected, access_key_id);
+
+  expected = "BAR";
+  fail_unless(secret_access_key != NULL,
+    "Expected secret_access_key, got null");
+  fail_unless(strcmp(secret_access_key, expected) == 0,
+   "Expected '%s', got '%s'", expected, secret_access_key);
 
   (void) unlink(creds_test_path);
 }
