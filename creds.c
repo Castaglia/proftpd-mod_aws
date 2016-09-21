@@ -64,7 +64,7 @@ int aws_creds_from_env(pool *p, char **access_key_id,
 static char *creds_next_line(pr_fh_t *fh, char *line, size_t linesz,
     unsigned int *lineno, size_t *linelen) {
 
-  while ((pr_fsio_getline(line, linesz, fh, lineno) != NULL) {
+  while (pr_fsio_getline(line, linesz, fh, lineno) != NULL) {
     size_t len;
     char *ptr;
 
@@ -152,7 +152,7 @@ static int creds_from_props(pool *p, pr_fh_t *fh, char **access_key_id,
     }
 
     if (namesz == 9) {
-      if strncmp(name, "accessKey", 10) == 0) {
+      if (strncmp(name, "accessKey", 10) == 0) {
         *access_key_id = val;
 
       } else if (strncmp(name, "secretKey", 10) == 0) {
@@ -211,7 +211,7 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
   sub_pool = make_sub_pool(p);
   pr_pool_tag(sub_pool, "AWS file credentials pool");
 
-  fh = pr_fsio_open(sub_pool, path, O_RDONLY);
+  fh = pr_fsio_open(path, O_RDONLY);
   if (fh == NULL) {
     xerrno = errno;
 
