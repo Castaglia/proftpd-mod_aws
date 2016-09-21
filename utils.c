@@ -91,10 +91,9 @@ char *aws_utils_str_ul2s(pool *p, unsigned long n) {
   return num;
 }
 
-char *aws_utils_str_trim(pool *p, const char *str) {
+char *aws_utils_str_trimn(pool *p, const char *str, size_t len) {
   const char *start, *end;
   char *trimmed = NULL;
-  size_t len;
 
   if (p == NULL ||
       str == NULL) {
@@ -102,7 +101,6 @@ char *aws_utils_str_trim(pool *p, const char *str) {
     return NULL;
   }
 
-  len = strlen(str);
   if (len == 0) {
     return pstrdup(p, "");
   }
@@ -127,4 +125,17 @@ char *aws_utils_str_trim(pool *p, const char *str) {
 
   trimmed = pstrndup(p, start, end - start + 1);
   return trimmed;
+}
+
+char *aws_utils_str_trim(pool *p, const char *str) {
+  size_t len;
+
+  if (p == NULL ||
+      str == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  len = strlen(str);
+  return aws_utils_str_trimn(p, str, len);
 }
