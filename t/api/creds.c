@@ -120,19 +120,25 @@ START_TEST (creds_from_env_test) {
 }
 END_TEST
 
-static int write_props(const char *path, const char *id, const char *secret) {
+static int write_lines(const char *path, unsigned int count, ...) {
+  va_list ap;
   FILE *fh;
-  size_t len;
 
   fh = fopen(path, "w+");
   if (fh == NULL) {
     return -1;
   }
 
-  len = strlen(id);
-  fwrite(id, len, 1, fh);
-  len = strlen(secret);
-  fwrite(secret, len, 1, fh);
+  va_start(ap, count);
+
+  while (count-- > 0) {
+    size_t len;
+    char *line;
+
+    line = va_arg(ap, char *);
+    len = strlen(line);
+    fwrite(line, len, 1, fh);
+  }
 
   return fclose(fh);
 }
@@ -176,7 +182,7 @@ START_TEST (creds_from_file_test) {
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
     strerror(errno), errno);
 
-  res = write_props(path, "foo\n", "bar\n");
+  res = write_lines(path, 2, "foo\n", "bar\n");
   fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
     strerror(errno));
 
@@ -187,7 +193,7 @@ START_TEST (creds_from_file_test) {
     strerror(errno), errno);
 
   (void) unlink(path);
-  res = write_props(path, "secretKey = FOO\n", "bar\r\n");
+  res = write_lines(path, 2, "secretKey = FOO\n", "bar\r\n");
   fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
     strerror(errno));
 
@@ -198,7 +204,7 @@ START_TEST (creds_from_file_test) {
     strerror(errno), errno);
 
   (void) unlink(path);
-  res = write_props(path, "accessKey = FOO\r\n", "bar\n");
+  res = write_lines(path, 2, "accessKey = FOO\r\n", "bar\n");
   fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
     strerror(errno));
 
@@ -209,7 +215,8 @@ START_TEST (creds_from_file_test) {
     strerror(errno), errno);
 
   (void) unlink(path);
-  res = write_props(path, "accessKey = FOO\n", "secretKey=BAR\n");
+  res = write_lines(path, 4, "foo=bar\n", "accessKey = FOO\n",
+    "# Comment here\n", "secretKey=BAR\n");
   fail_unless(res == 0, "Failed to write creds file '%s': %s", path,
     strerror(errno));
 
