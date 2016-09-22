@@ -263,7 +263,7 @@ static int creds_from_profile_props(pool *p, pr_fh_t *fh, const char *profile,
   if (*access_key_id != NULL &&
       *secret_access_key != NULL) {
 
-    if (session_token != NUL) {
+    if (session_token != NULL) {
       *session_token = token;
     }
 
@@ -374,6 +374,20 @@ int aws_creds_from_chain(pool *p, array_header *providers,
     struct iam_info *iam;
 
     iam = aws_instance_get_iam_credentials(p, iam_role);
+    if (iam == NULL) {
+      if (iam_role != NULL) {
+        pr_trace_msg(trace_channel, 9,
+          "unable to obtain credentials for IAM role '%s' via instance: %s",
+          iam_role, strerror(errno);
+
+      } else {
+        pr_trace_msg(trace_channel, 9,
+          "unable to obtain credentials via instance: %s", strerror(errno);
+      }
+
+      errno = ENOENT;
+      return -1;
+    }
   }
 
   errno = ENOSYS;
