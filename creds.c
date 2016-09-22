@@ -378,11 +378,11 @@ int aws_creds_from_chain(pool *p, array_header *providers,
       if (iam_role != NULL) {
         pr_trace_msg(trace_channel, 9,
           "unable to obtain credentials for IAM role '%s' via instance: %s",
-          iam_role, strerror(errno);
+          iam_role, strerror(errno));
 
       } else {
         pr_trace_msg(trace_channel, 9,
-          "unable to obtain credentials via instance: %s", strerror(errno);
+          "unable to obtain credentials via instance: %s", strerror(errno));
       }
 
       errno = ENOENT;
