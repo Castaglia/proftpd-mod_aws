@@ -28,6 +28,9 @@
 #ifndef MOD_AWS_CREDS_H
 #define MOD_AWS_CREDS_H
 
+/* Default profile name. */
+#define AWS_CREDS_DEFAULT_PROFILE	"default"
+
 /* Obtain AWS credentials from the environment, via the following environment
  * variables:
  *

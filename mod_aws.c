@@ -59,7 +59,7 @@ static const char *aws_logfile = NULL;
 static const char *aws_cacerts = PR_CONFIG_DIR "/aws-cacerts.pem";
 
 /* For obtaining AWS credentials. */
-static const char *aws_profile = NULL;
+static const char *aws_profile = AWS_CREDS_DEFAULT_PROFILE;
 static array_header *aws_creds_providers = NULL;
 
 static unsigned long aws_connect_timeout_secs = AWS_CONNECT_DEFAULT_TIMEOUT;
@@ -803,6 +803,23 @@ MODRET set_awscredentials(cmd_rec *cmd) {
     } else {
       CONF_ERROR(cmd, pstrcat(cmd->tmp_pool,
         ": unknown AWSCredentials provider '", cmd->argv[i], "'", NULL));
+    }
+  }
+
+  /* Make sure there are no duplicates. */
+  for (i = 0; i < providers->nelts; i++) {
+    register unsigned int j;
+    const char *ith;
+
+    ith = ((char **) providers->elts)[i];
+    for (j = i + 1; j < providers->nelts; j++) {
+      const char *jth;
+
+      jth = ((char **) providers->elts)[j];
+      if (strcmp(ith, jth) == 0) {
+        CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "provider '", ith,
+          "' appears multiple times", NULL));
+      }
     }
   }
 

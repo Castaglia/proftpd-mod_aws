@@ -357,10 +357,35 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
   return res;
 }
 
+static int creds_from_iam(pool *p, const char *iam_role,
+    char **access_key_id, char **secret_access_key, char **session_token) {
+  struct iam_info *iam;
+
+  iam = aws_instance_get_iam_credentials(p, iam_role);
+  if (iam == NULL) {
+    if (iam_role != NULL) {
+      pr_trace_msg(trace_channel, 9,
+        "unable to obtain credentials for IAM role '%s' via instance: %s",
+        iam_role, strerror(errno));
+
+    } else {
+      pr_trace_msg(trace_channel, 9,
+        "unable to obtain credentials via instance: %s", strerror(errno));
+    }
+
+    errno = ENOENT;
+    return -1;
+  }
+
+  return 0;
+}
+
 int aws_creds_from_chain(pool *p, array_header *providers,
     char **access_key_id, char **secret_access_key, char **session_token,
     const char *iam_role, const char *profile, const char *path) {
-  int res, xerrno;
+  register unsigned int i;
+  int res;
+  pool *sub_pool;
 
   if (p == NULL ||
       access_key_id == NULL ||
@@ -371,27 +396,66 @@ int aws_creds_from_chain(pool *p, array_header *providers,
 
   if (providers == NULL) {
     /* Default to just the "IAM" provider */
-    struct iam_info *iam;
+    res = creds_from_iam(p, iam_role, access_key_id, secret_access_key,
+      session_token);
+    return res;
+  }
 
-    iam = aws_instance_get_iam_credentials(p, iam_role);
-    if (iam == NULL) {
-      if (iam_role != NULL) {
-        pr_trace_msg(trace_channel, 9,
-          "unable to obtain credentials for IAM role '%s' via instance: %s",
-          iam_role, strerror(errno));
+  sub_pool = make_sub_pool(p);
+  for (i = 0; i < providers->nelts; i++) {
+    const char *provider;
 
-      } else {
-        pr_trace_msg(trace_channel, 9,
-          "unable to obtain credentials via instance: %s", strerror(errno));
+    provider = ((char **) providers->elts)[i];
+
+    if (strcmp(provider, AWS_CREDS_PROVIDER_NAME_IAM) == 0) {
+      res = creds_from_iam(p, iam_role, access_key_id, secret_access_key,
+        session_token);
+
+    } else if (strcmp(provider, AWS_CREDS_PROVIDER_NAME_PROFILE) == 0) {
+      const char *default_path;
+      char *profile_path;
+
+      default_path = "~/.aws/credentials";
+      profile_path = pr_env_get(sub_pool, "AWS_CREDENTIAL_PROFILES_FILE");
+      if (profile_path == NULL) {
+        size_t sz = PR_TUNABLE_PATH_MAX;
+
+        profile_path = pcalloc(sub_pool, sz+1);
+        res = pr_fs_interpolate(default_path, profile_path, sz);
+        if (res < 0) {
+          pr_trace_msg(trace_channel, 5, "unable to interpolate '%s': %s",
+            default_path, strerror(errno));
+          profile_path = NULL;
+        }
       }
 
-      errno = ENOENT;
-      return -1;
+      if (profile_path  != NULL) {
+        res = aws_creds_from_file(p, profile_path, profile, access_key_id,
+          secret_access_key, session_token);
+      }
+
+    } else if (strcmp(provider, AWS_CREDS_PROVIDER_NAME_PROPERTIES) == 0) {
+      res = aws_creds_from_file(p, path, NULL, access_key_id,
+        secret_access_key, session_token);
+
+    } else if (strcmp(provider, AWS_CREDS_PROVIDER_NAME_ENVIRONMENT) == 0) {
+      res = aws_creds_from_env(p, access_key_id, secret_access_key,
+        session_token);
+
+    } else {
+      pr_trace_msg(trace_channel, 4,
+        "unknown/unsupported credentials provider: %s", provider);
+      res = -1;
+    }
+
+    if (res == 0) {
+      break;
     }
   }
 
-  errno = ENOSYS;
-  return -1;
+  destroy_pool(sub_pool);
+  errno = ENOENT;
+  return res;
 }
 
 int aws_creds_from_sql(pool *p, const char *query, char **access_key_id,

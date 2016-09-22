@@ -558,6 +558,24 @@ START_TEST (creds_from_file_using_profile_test) {
 END_TEST
 
 START_TEST (creds_from_chain_test) {
+  int res;
+  char *access_key_id, *secret_access_key;
+
+  res = aws_creds_from_chain(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_creds_from_chain(p, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null access_key_id");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_creds_from_chain(p, NULL, &access_key_id, NULL, NULL, NULL, NULL,
+    NULL);
+  fail_unless(res < 0, "Failed to handle null secret_access_key");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
 }
 END_TEST
 
