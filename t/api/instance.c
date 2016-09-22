@@ -72,7 +72,7 @@ START_TEST (instance_get_iam_credentials_test) {
   iam_role = "foo";
   iam = aws_instance_get_iam_credentials(p, iam_role);
   fail_unless(iam == NULL, "Failed to handle unavailable creds for role");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
     strerror(errno), errno);
 }
 END_TEST

@@ -199,14 +199,14 @@ static int creds_parse_section(pool *p, char *line, size_t linesz,
 static int creds_from_profile_props(pool *p, pr_fh_t *fh, const char *profile,
     char **access_key_id, char **secret_access_key, char **session_token) {
   size_t bufsz, linelen, profilelen;
-  char *buf, *line;
+  char *buf, *line, *token;
   unsigned int lineno = 0;
   int have_section = FALSE;
 
   bufsz = PR_TUNABLE_PARSER_BUFFER_SIZE;
   buf = pcalloc(p, bufsz+1);
 
-  *access_key_id = *secret_access_key = NULL;
+  *access_key_id = *secret_access_key = token = NULL;
   profilelen = strlen(profile);
 
   line = creds_next_line(fh, buf, bufsz, &lineno, &linelen);
@@ -232,6 +232,11 @@ static int creds_from_profile_props(pool *p, pr_fh_t *fh, const char *profile,
     }
 
     if (creds_parse_prop(p, line, linelen, &name, &namesz, &val, &valsz) < 0) {
+      if (creds_parse_section(p, line, linelen, &section, &sectionsz) == 0) {
+        /* We're now in a new section; we're done. */
+        break;
+      }
+
       /* Ignore malformed lines. */
       line = creds_next_line(fh, buf, bufsz, &lineno, &linelen);
       continue;
@@ -243,9 +248,8 @@ static int creds_from_profile_props(pool *p, pr_fh_t *fh, const char *profile,
       if (strncmp(name, "aws_access_key_id", 18) == 0) {
         *access_key_id = val;
 
-      } else if (session_token != NULL &&
-                 strncmp(name, "aws_session_token", 18) == 0) {
-        *session_token = val;
+      } else if (strncmp(name, "aws_session_token", 18) == 0) {
+        token = val;
       }
 
     } else if (namesz == 21 &&
@@ -253,19 +257,17 @@ static int creds_from_profile_props(pool *p, pr_fh_t *fh, const char *profile,
       *secret_access_key = val;
     }
 
-    if (*access_key_id != NULL &&
-        *secret_access_key != NULL) {
+    line = creds_next_line(fh, buf, bufsz, &lineno, &linelen);
+  }
 
-      if (session_token == NULL) {
-        return 0;
-      }
+  if (*access_key_id != NULL &&
+      *secret_access_key != NULL) {
 
-      if (*session_token != NULL) {
-        return 0;
-      }
+    if (session_token != NUL) {
+      *session_token = token;
     }
 
-    line = creds_next_line(fh, buf, bufsz, &lineno, &linelen);
+    return 0;
   }
 
   errno = ENOENT;
