@@ -31,8 +31,9 @@
 
 #include "xml.h"
 #include "error.h"
-#include "creds.h"
 #include "http.h"
+#include "instance.h"
+#include "creds.h"
 #include "sign.h"
 #include "utils.h"
 
@@ -45,6 +46,7 @@
 Suite *tests_get_xml_suite(void);
 Suite *tests_get_error_suite(void);
 Suite *tests_get_http_suite(void);
+Suite *tests_get_instance_suite(void);
 Suite *tests_get_creds_suite(void);
 Suite *tests_get_sign_suite(void);
 Suite *tests_get_utils_suite(void);
