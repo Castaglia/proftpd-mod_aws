@@ -77,6 +77,11 @@ struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
 int aws_ec2_conn_destroy(pool *p, struct ec2_conn *ec2) {
   int res, xerrno;
 
+  if (ec2 == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
   res = aws_http_destroy(p, ec2->http);
   xerrno = errno;
 

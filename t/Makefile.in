@@ -45,7 +45,8 @@ TEST_API_DEPS=\
   $(module_srcdir)/instance.o \
   $(module_srcdir)/creds.o \
   $(module_srcdir)/sign.o \
-  $(module_srcdir)/utils.o
+  $(module_srcdir)/utils.o \
+  $(module_srcdir)/s3.o
 
 TEST_API_LIBS=-lcheck
 
@@ -57,6 +58,7 @@ TEST_API_OBJS=\
   api/creds.o \
   api/sign.o \
   api/utils.o \
+  api/s3.o \
   api/stubs.o \
   api/tests.o
 

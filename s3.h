@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_aws API testsuite
- * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+ * ProFTPD - mod_aws S3 API
+ * Copyright (c) 2016 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,39 +22,38 @@
  * source distribution.
  */
 
-/* Testsuite management */
-
-#ifndef MOD_AWS_TESTS_H
-#define MOD_AWS_TESTS_H
-
 #include "mod_aws.h"
 
-#include "xml.h"
-#include "error.h"
-#include "http.h"
-#include "instance.h"
-#include "creds.h"
-#include "sign.h"
-#include "utils.h"
-#include "s3.h"
+#ifndef MOD_AWS_S3_H
+#define MOD_AWS_S3_H
 
-#ifdef HAVE_CHECK_H
-# include <check.h>
-#else
-# error "Missing Check installation; necessary for ProFTPD testsuite"
-#endif
+/* S3 Connections */
+struct s3_conn {
+  pool *pool;
 
-Suite *tests_get_xml_suite(void);
-Suite *tests_get_error_suite(void);
-Suite *tests_get_http_suite(void);
-Suite *tests_get_instance_suite(void);
-Suite *tests_get_creds_suite(void);
-Suite *tests_get_sign_suite(void);
-Suite *tests_get_utils_suite(void);
-Suite *tests_get_s3_suite(void);
+  void *http;
+  const char *region;
+  const char *domain;
 
-unsigned int recvd_signal_flags;
-extern pid_t mpid;
-extern server_rec *main_server;
+  /* To be refreshed whenever the credentials are deemed too old. */
+  const char *access_key_id;
+  const char *secret_access_key;
+  const char *session_token;
 
-#endif /* MOD_AWS_TESTS_H */
+  /* For handling request/response documents. */
+  pool *req_pool;
+  char *resp;
+  size_t respsz;
+};
+
+struct s3_conn *aws_s3_conn_alloc(pool *p, unsigned long max_connect_secs,
+  unsigned long max_request_secs, const char *cacerts, const char *region,
+  const char *domain, const char *access_key_id, const char *secret_access_key,
+  const char *session_token);
+int aws_s3_conn_destroy(pool *p, struct s3_conn *s3);
+
+/* Returns a list of the bucket names. */
+array_header *aws_s3_get_buckets(pool *p, struct s3_conn *s3,
+  const char **owner_id, const char **owner_name);
+
+#endif /* MOD_AWS_S3_H */

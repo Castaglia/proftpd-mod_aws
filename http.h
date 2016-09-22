@@ -44,6 +44,7 @@
 #define AWS_HTTP_HEADER_HOST				"Host"
 #define AWS_HTTP_HEADER_LAST_MODIFIED			"Last-Modified"
 #define AWS_HTTP_HEADER_USER_AGENT			"User-Agent"
+#define AWS_HTTP_HEADER_X_AMZ_CONTENT_SHA256		"x-amz-content-sha256"
 #define AWS_HTTP_HEADER_X_AMZ_DATE			"X-Amz-Date"
 #define AWS_HTTP_HEADER_X_AMZ_REQUEST_ID		"x-amz-request-id"
 #define AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN		"X-Amz-Security-Token"

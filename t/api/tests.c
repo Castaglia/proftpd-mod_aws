@@ -37,6 +37,7 @@ static struct testsuite_info suites[] = {
   { "creds",		tests_get_creds_suite },
   { "sign",		tests_get_sign_suite },
   { "utils",		tests_get_utils_suite },
+  { "s3",		tests_get_s3_suite },
 
   { NULL, NULL }
 };

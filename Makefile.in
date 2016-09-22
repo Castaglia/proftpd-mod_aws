@@ -21,6 +21,7 @@ MODULE_OBJS=mod_aws.o \
   error.o \
   sign.o \
   ec2.o \
+  s3.o \
   route53.o
 
 SHARED_MODULE_OBJS=mod_aws.lo \
@@ -33,6 +34,7 @@ SHARED_MODULE_OBJS=mod_aws.lo \
   error.lo \
   sign.lo \
   ec2.lo \
+  s3.lo \
   route53.lo
 
 # Necessary redefinitions
