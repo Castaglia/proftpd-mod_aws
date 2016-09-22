@@ -33,6 +33,8 @@ static struct testsuite_info suites[] = {
   { "xml",		tests_get_xml_suite },
   { "error",		tests_get_error_suite },
   { "http",		tests_get_http_suite },
+  { "instance",		tests_get_instance_suite },
+  { "creds",		tests_get_creds_suite },
   { "sign",		tests_get_sign_suite },
   { "utils",		tests_get_utils_suite },
 

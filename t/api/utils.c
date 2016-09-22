@@ -186,6 +186,62 @@ START_TEST (utils_str_trim_test) {
 }
 END_TEST
 
+START_TEST (utils_strn_trim_test) {
+  char *res, *expected;
+  const char *str;
+
+  res = aws_utils_strn_trim(NULL, NULL, 0);
+  fail_unless(res == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  res = aws_utils_strn_trim(p, NULL, 0);
+  fail_unless(res == NULL, "Failed to handle null string");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  str = "";
+  expected = "";
+  res = aws_utils_strn_trim(p, str, 0);
+  fail_unless(res != NULL, "Failed to trim string '%s': %s", str,
+    strerror(errno));
+  fail_unless(strcmp(res, expected) == 0,
+    "Expected '%s', got '%s'", expected, res);
+
+  str = "  foo";
+  expected = "foo";
+  res = aws_utils_strn_trim(p, str, strlen(str));
+  fail_unless(res != NULL, "Failed to trim string '%s': %s", str,
+    strerror(errno));
+  fail_unless(strcmp(res, expected) == 0,
+    "Expected '%s', got '%s'", expected, res);
+
+  str = "bar  ";
+  expected = "bar";
+  res = aws_utils_strn_trim(p, str, strlen(str));
+  fail_unless(res != NULL, "Failed to trim string '%s': %s", str,
+    strerror(errno));
+  fail_unless(strcmp(res, expected) == 0,
+    "Expected '%s', got '%s'", expected, res);
+
+  str = "  foo  bar  ";
+  expected = "foo  bar";
+  res = aws_utils_strn_trim(p, str, strlen(str));
+  fail_unless(res != NULL, "Failed to trim string '%s': %s", str,
+    strerror(errno));
+  fail_unless(strcmp(res, expected) == 0,
+    "Expected '%s', got '%s'", expected, res);
+
+  str = "  foo  bar  ";
+  expected = "foo";
+  res = aws_utils_strn_trim(p, str, 7);
+  fail_unless(res != NULL, "Failed to trim string '%s': %s", str,
+    strerror(errno));
+  fail_unless(strcmp(res, expected) == 0,
+    "Expected '%s', got '%s'", expected, res);
+}
+END_TEST
+
 Suite *tests_get_utils_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -199,6 +255,7 @@ Suite *tests_get_utils_suite(void) {
   tcase_add_test(testcase, utils_str_n2s_test);
   tcase_add_test(testcase, utils_str_ul2s_test);
   tcase_add_test(testcase, utils_str_trim_test);
+  tcase_add_test(testcase, utils_strn_trim_test);
 
   suite_add_tcase(suite, testcase);
   return suite;

@@ -30,6 +30,7 @@
 #include "http.h"
 #include "xml.h"
 #include "instance.h"
+#include "creds.h"
 #include "ec2.h"
 #include "route53.h"
 #include "health.h"
@@ -56,6 +57,10 @@ static unsigned long aws_flags = 0UL;
 
 static const char *aws_logfile = NULL;
 static const char *aws_cacerts = PR_CONFIG_DIR "/aws-cacerts.pem";
+
+/* For obtaining AWS credentials. */
+static const char *aws_profile = AWS_CREDS_DEFAULT_PROFILE;
+static array_header *aws_creds_providers = NULL;
 
 static unsigned long aws_connect_timeout_secs = AWS_CONNECT_DEFAULT_TIMEOUT;
 static unsigned long aws_request_timeout_secs = AWS_REQUEST_DEFAULT_TIMEOUT;
@@ -198,15 +203,23 @@ static void verify_ctrl_port(pool *p, const struct aws_info *info,
         struct ec2_ip_rule *rule;
 
         rule = rules[i];
-        if (rule->from_port >= s->ServerPort &&
-            rule->to_port <= s->ServerPort) {
-          /* This SG allows access for our control port.  Good. */
 
-          (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-            "<VirtualHost> '%s' control port %u allowed by security group "
-            "ID %s (%s)", s->ServerName, s->ServerPort, sg_id, sg->name);
-          ctrl_port_allowed = TRUE;
-          break;
+        if (rule->from_port > 0 &&
+            rule->to_port > 0) {
+          unsigned int from_port, to_port;
+
+          from_port = rule->from_port;
+          to_port = rule->to_port;
+
+          if (from_port >= s->ServerPort &&
+              to_port <= s->ServerPort) {
+            /* This SG allows access for our control port.  Good. */
+            (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+              "<VirtualHost> '%s' control port %u allowed by security group "
+              "ID %s (%s)", s->ServerName, s->ServerPort, sg_id, sg->name);
+            ctrl_port_allowed = TRUE;
+            break;
+          }
         }
       }
     }
@@ -252,7 +265,7 @@ static void verify_ctrl_port(pool *p, const struct aws_info *info,
 static void verify_masq_addr(pool *p, const struct aws_info *info,
     server_rec *s) {
   config_rec *c;
-  pr_netaddr_t *public_addr;
+  const pr_netaddr_t *public_addr;
 
   /* Should we use public_hostname here instead? */
   if (info->public_ipv4 == NULL) {
@@ -280,7 +293,7 @@ static void verify_masq_addr(pool *p, const struct aws_info *info,
           pr_netaddr_get_ipstr(public_addr), s->ServerName);
 
       } else {
-        c->argv[0] = public_addr;
+        c->argv[0] = (void *) public_addr;
         c->argv[1] = pstrndup(c->pool, info->public_ipv4, info->public_ipv4sz);
 
         (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -301,7 +314,7 @@ static void verify_masq_addr(pool *p, const struct aws_info *info,
       c->config_type = CONF_PARAM;
       c->argc = 2;
       c->argv = pcalloc(c->pool, sizeof(void *) * (c->argc + 1));
-      c->argv[0] = public_addr;
+      c->argv[0] = (void *) public_addr;
       c->argv[1] = pstrndup(c->pool, info->public_ipv4, info->public_ipv4sz);
 
       (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
@@ -755,6 +768,65 @@ MODRET set_awscacertfile(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
+/* usage: AWSCredentials provider1 ... */
+MODRET set_awscredentials(cmd_rec *cmd) {
+  register unsigned int i;
+  config_rec *c;
+  array_header *providers;
+
+  if (cmd->argc < 2) {
+    CONF_ERROR(cmd, "wrong number of parameters");
+  }
+
+  CHECK_CONF(cmd, CONF_ROOT|CONF_VIRTUAL|CONF_GLOBAL);
+
+  c = add_config_param(cmd->argv[0], 1, NULL);
+  providers = make_array(c->pool, 1, sizeof(char *));
+
+  for (i = 1; i < cmd->argc; i++) {
+    if (strcasecmp(cmd->argv[i], "IAM") == 0) {
+      *((char **) push_array(providers)) = pstrdup(c->pool,
+        AWS_CREDS_PROVIDER_NAME_IAM);
+
+    } else if (strcasecmp(cmd->argv[i], "Profile") == 0) {
+      *((char **) push_array(providers)) = pstrdup(c->pool,
+        AWS_CREDS_PROVIDER_NAME_PROFILE);
+
+    } else if (strcasecmp(cmd->argv[i], "Properties") == 0) {
+      *((char **) push_array(providers)) = pstrdup(c->pool,
+        AWS_CREDS_PROVIDER_NAME_PROPERTIES);
+
+    } else if (strcasecmp(cmd->argv[i], "Environment") == 0) {
+      *((char **) push_array(providers)) = pstrdup(c->pool,
+        AWS_CREDS_PROVIDER_NAME_ENVIRONMENT);
+
+    } else {
+      CONF_ERROR(cmd, pstrcat(cmd->tmp_pool,
+        ": unknown AWSCredentials provider '", cmd->argv[i], "'", NULL));
+    }
+  }
+
+  /* Make sure there are no duplicates. */
+  for (i = 0; i < providers->nelts; i++) {
+    register unsigned int j;
+    const char *ith;
+
+    ith = ((char **) providers->elts)[i];
+    for (j = i + 1; j < providers->nelts; j++) {
+      const char *jth;
+
+      jth = ((char **) providers->elts)[j];
+      if (strcmp(ith, jth) == 0) {
+        CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "provider '", ith,
+          "' appears multiple times", NULL));
+      }
+    }
+  }
+
+  c->argv[0] = providers;
+  return PR_HANDLED(cmd);
+}
+
 /* usage: AWSEngine on|off */
 MODRET set_awsengine(cmd_rec *cmd) {
   int engine = 1;
@@ -861,21 +933,16 @@ MODRET set_awsoptions(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
-/* usage: AWSTimeoutConnect secs */
-MODRET set_awstimeoutconnect(cmd_rec *cmd) {
-  int timeout = -1;
-  char *timespec;
+/* usage: AWSProfile name */
+MODRET set_awsprofile(cmd_rec *cmd) {
+  config_rec *c;
 
   CHECK_ARGS(cmd, 1);
-  CHECK_CONF(cmd, CONF_ROOT);
+  CHECK_CONF(cmd, CONF_ROOT|CONF_VIRTUAL|CONF_GLOBAL);
 
-  timespec = cmd->argv[1];
-  if (pr_str_get_duration(timespec, &timeout) < 0) {
-    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "error parsing timeout value '",
-      timespec, "': ", strerror(errno), NULL));
-  }
+  c = add_config_param(cmd->argv[0], 1, NULL);
+  c->argv[0] = pstrdup(c->pool, cmd->argv[1]);
 
-  aws_connect_timeout_secs = timeout;
   return PR_HANDLED(cmd);
 }
 
@@ -893,6 +960,24 @@ MODRET set_awssecuritygroup(cmd_rec *cmd) {
   }
 
   aws_adjust_sg_id = sg_id;
+  return PR_HANDLED(cmd);
+}
+
+/* usage: AWSTimeoutConnect secs */
+MODRET set_awstimeoutconnect(cmd_rec *cmd) {
+  int timeout = -1;
+  char *timespec;
+
+  CHECK_ARGS(cmd, 1);
+  CHECK_CONF(cmd, CONF_ROOT);
+
+  timespec = cmd->argv[1];
+  if (pr_str_get_duration(timespec, &timeout) < 0) {
+    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "error parsing timeout value '",
+      timespec, "': ", strerror(errno), NULL));
+  }
+
+  aws_connect_timeout_secs = timeout;
   return PR_HANDLED(cmd);
 }
 
@@ -1170,8 +1255,20 @@ static int aws_init(void) {
 }
 
 static int aws_sess_init(void) {
+  config_rec *c;
+
   if (aws_engine == FALSE) {
     return 0;
+  }
+
+  c = find_config(main_server->conf, CONF_PARAM, "AWSProfile", FALSE);
+  if (c != NULL) {
+    aws_profile = c->argv[0];
+  }
+
+  c = find_config(main_server->conf, CONF_PARAM, "AWSCredentials", FALSE);
+  if (c != NULL) {
+    aws_creds_providers = c->argv[0];
   }
 
   if (instance_info == NULL) {
@@ -1252,10 +1349,12 @@ static int aws_sess_init(void) {
 static conftable aws_conftab[] = {
   { "AWSAdjustments",		set_awsadjustments,	NULL },
   { "AWSCACertificateFile",	set_awscacertfile,	NULL },
+  { "AWSCredentials",		set_awscredentials,	NULL },
   { "AWSEngine",		set_awsengine,		NULL },
   { "AWSHealthCheck",		set_awshealthcheck,	NULL },
   { "AWSLog",			set_awslog,		NULL },
   { "AWSOptions",		set_awsoptions,		NULL },
+  { "AWSProfile",		set_awsprofile,		NULL },
   { "AWSSecurityGroup",		set_awssecuritygroup,	NULL },
   { "AWSTimeoutConnect",	set_awstimeoutconnect,	NULL },
   { "AWSTimeoutRequest",	set_awstimeoutrequest,	NULL },

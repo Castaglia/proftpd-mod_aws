@@ -42,6 +42,8 @@ TEST_API_DEPS=\
   $(module_srcdir)/xml.o \
   $(module_srcdir)/error.o \
   $(module_srcdir)/http.o \
+  $(module_srcdir)/instance.o \
+  $(module_srcdir)/creds.o \
   $(module_srcdir)/sign.o \
   $(module_srcdir)/utils.o
 
@@ -51,6 +53,8 @@ TEST_API_OBJS=\
   api/error.o \
   api/xml.o \
   api/http.o \
+  api/instance.o \
+  api/creds.o \
   api/sign.o \
   api/utils.o \
   api/stubs.o \

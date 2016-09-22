@@ -1175,6 +1175,11 @@ struct iam_info *aws_instance_get_iam_credentials(pool *p,
   struct iam_info *info;
   void *http;
 
+  if (iam_role == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
   http = aws_http_alloc(p, 1UL, 1UL, NULL);
   if (http == NULL) {
     return NULL;

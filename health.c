@@ -414,7 +414,8 @@ static int health_ping_cb(CALLBACK_FRAME) {
   return 1;
 }
 
-static conn_t *health_make_listener(pool *p, pr_netaddr_t *addr, int port) {
+static conn_t *health_make_listener(pool *p, const pr_netaddr_t *addr,
+    int port) {
   int res;
   conn_t *conn;
 
