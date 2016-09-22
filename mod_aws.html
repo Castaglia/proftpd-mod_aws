@@ -144,7 +144,11 @@ configure the path to the file containing the new certificates.
 <strong>Compatibility:</strong> 1.3.6rc2 and later
 
 <p>
-The <code>AWSCredentials</code> directive ...
+The <code>AWSCredentials</code> directive specifies which credentials
+<em>providers</em> are checked, and in which order, to see which can provide
+AWS credentials for use in signing requests to the various AWS APIs.  By
+default, <code>mod_aws</code> will <b>only</b> look for IAM instance
+credentials.
 
 <p>
 The list of possible credentials <em>providers</em> are:
@@ -235,7 +239,10 @@ The currently implemented options are:
 <strong>Compatibility:</strong> 1.3.6rc2 and later
 
 <p>
-The <code>AWSProfile</code> directive ...
+The <code>AWSProfile</code> directive configures the <em>name</em> of a
+"profile" to use when <i>e.g.</i> obtaining AWS credentials from a profiles
+credentials file (usually <code>~/.aws/credentials</code>).  The default
+profile name of "default" is used when not explicitly configured.
 
 <p>
 <hr>
@@ -349,18 +356,7 @@ use only, and should be removed from any production configuration.
 
 <p><a name="FAQ">
 <b>Frequently Asked Questions</b><br>
-<a name="AWSCredentials">
-<font color=red>Question</font>: Why does <code>mod_aws</code> <b>not</b> need
-to my AWS credentials (access key ID and secret access key)?  I don't see a
-way to configure them.<br>
-<font color=blue>Answer</font>: The best practice for managing credentials
-for using the AWS services is to use
-<a href="https://aws.amazon.com/iam/">AWS IAM</a> roles, rather than using
-your account credentials directly.  The <code>mod_aws</code> module
-<b>requires</b> that your EC2 instance use an IAM role in order to perform
-its more advanced functionality.
 
-<p>
 <hr>
 <h2><a name="Installation">Installation</a></h2>
 To install <code>mod_aws</code>, go to the third-party module area in

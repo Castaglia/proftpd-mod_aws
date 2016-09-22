@@ -110,15 +110,23 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
   }
 
   if (ec2->iam_info == NULL) {
-    /* Need to get the temporary IAM credentials for signing. */
+    /* Need to get AWS credentials for signing requests. */
+    if (ec2->iam_role != NULL) {
+      ec2->iam_info = aws_instance_get_iam_credentials(ec2->pool,
+        ec2->iam_role);
+      if (ec2->iam_info == NULL) {
+        pr_trace_msg(trace_channel, 1,
+          "error obtaining IAM credentials for role '%s': %s", ec2->iam_role,
+          strerror(errno));
+        errno = EPERM;
+        return -1;
+      }
 
-    ec2->iam_info = aws_instance_get_iam_credentials(ec2->pool, ec2->iam_role);
-    if (ec2->iam_info == NULL) {
-      pr_trace_msg(trace_channel, 1,
-        "error obtaining IAM credentials for role '%s': %s", ec2->iam_role,
-        strerror(errno));
-      errno = EPERM;
-      return -1;
+    } else {
+      /* XXX TODO:
+       * Use aws_creds_from_chain, with a providers list of "profile",
+       * "properties", "env", to try to get credentials.
+       */
     }
   }
 
