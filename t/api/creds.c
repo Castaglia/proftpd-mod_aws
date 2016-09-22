@@ -192,13 +192,13 @@ START_TEST (creds_from_file_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  path = creds_test_path;
+
   mark_point();
   res = aws_creds_from_file(p, path, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null access_key_id");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
-
-  path = creds_test_path;
 
   mark_point();
   res = aws_creds_from_file(p, path, NULL, &access_key_id, NULL, NULL);

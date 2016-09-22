@@ -253,16 +253,23 @@ static int creds_from_profile_props(pool *p, pr_fh_t *fh, const char *profile,
       *secret_access_key = val;
     }
 
+    if (*access_key_id != NULL &&
+        *secret_access_key != NULL) {
+
+      if (session_token == NULL) {
+        return 0;
+      }
+
+      if (*session_token != NULL) {
+        return 0;
+      }
+    }
+
     line = creds_next_line(fh, buf, bufsz, &lineno, &linelen);
   }
 
-  if (*access_key_id == NULL &&
-      *secret_access_key == NULL) {
-    errno = ENOENT;
-    return -1;
-  }
-
-  return 0;
+  errno = ENOENT;
+  return -1;
 }
 
 int aws_creds_from_file(pool *p, const char *path, const char *profile,
@@ -318,7 +325,13 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
   id = key = token = NULL;
 
   if (profile != NULL) {
-    res = creds_from_profile_props(sub_pool, fh, profile, &id, &key, &token);
+    char **token_ptr = NULL;
+
+    if (session_token != NULL) {
+      token_ptr = &token;
+    }
+
+    res = creds_from_profile_props(sub_pool, fh, profile, &id, &key, token_ptr);
 
   } else {
     res = creds_from_props(sub_pool, fh, &id, &key);
