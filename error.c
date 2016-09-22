@@ -57,7 +57,8 @@ struct err_info {
  *
  *  http://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/UnderstandingResponses.html#UnderstandingResponses-structure-of-an-error-response
  *
- * And Route53's error might look different, too.
+ * And Route53's error might look different, too.  S3's errors DO look
+ * different.
  */
 
 static struct err_info errs[] = {
@@ -89,6 +90,8 @@ static struct err_info errs[] = {
 
   /* EC2 error codes */
 
+  /* S3 error codes */
+
   { "DryRunOperation", 15,
     AWS_ERROR_CODE_DRY_RUN_OPERATION },
 
@@ -99,7 +102,7 @@ static struct err_info errs[] = {
   { NULL, 0, 0 }
 };
 
-unsigned int aws_error_get_code(pool *p, const char *err_name) {
+unsigned int aws_error_get_code(pool *p, const char *err_name, int fmt) {
   register unsigned int i;
   unsigned int err_code;
 
@@ -125,7 +128,7 @@ unsigned int aws_error_get_code(pool *p, const char *err_name) {
   return err_code;
 }
 
-const char *aws_error_get_name(unsigned int err_code) {
+const char *aws_error_get_name(unsigned int err_code, int fmt) {
   register unsigned int i;
   const char *err_name;
 
@@ -142,8 +145,8 @@ const char *aws_error_get_name(unsigned int err_code) {
 }
 
 struct aws_error *aws_error_parse_xml(pool *p, const char *data,
-    size_t datasz) {
-  void *doc, *response, *errors, *error, *elt, *req_id;
+    size_t datasz, int fmt) {
+  void *doc, *root, *errors, *error, *elt, *req_id;
   pool *err_pool;
   struct aws_error *err;
   unsigned long count;
@@ -164,8 +167,8 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
     return NULL;
   }
 
-  response = aws_xml_doc_get_root_elt(p, doc);
-  if (response == NULL) {
+  root = aws_xml_doc_get_root_elt(p, doc);
+  if (root == NULL) {
     /* Malformed XML. */
     aws_xml_doc_free(p, doc);
 
@@ -174,53 +177,75 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
     return NULL;
   }
 
-  elt_name = aws_xml_elt_get_name(p, response, &elt_namelen);
-  if (elt_namelen != 8 ||
-      strncmp(elt_name, "Response", elt_namelen + 1) != 0) {
-    aws_xml_doc_free(p, doc);
+  if (fmt == AWS_ERROR_XML_FORMAT_S3) {
+    /* AWS S3 XML errors only use a single <Error> element, as opposed to
+     * the <Response><Errors><Error/>...</Errors></Response> elements that
+     * EC2, Route53, et al use.
+     */
+    elt_name = aws_xml_elt_get_name(p, root, &elt_namelen);
+    if (elt_namelen != 5 ||
+        strncmp(elt_name, "Error", elt_namelen + 1) != 0) {
+      aws_xml_doc_free(p, doc);
 
-    pr_trace_msg(trace_channel, 9,
-      "malformed XML: root element lacks <Response> element");
-    errno = EINVAL;
-    return NULL;
-  }
+      pr_trace_msg(trace_channel, 9,
+        "malformed XML: root element lacks <Error> element (found <%.*s>)",
+        (int) elt_namelen, elt_name);
+      errno = EINVAL;
+      return NULL;
+    }
 
-  /* We expect only 2 child elements: <Errors> and <RequestID> */
-  (void) aws_xml_elt_get_child_count(p, response, &count);
-  if (count != 2) {
-    pr_trace_msg(trace_channel, 2,
-      "unexpected count of <Response> child elements (%lu != 2)", count);
+    error = root;
 
-    aws_xml_doc_free(p, doc);
+  } else {
+    elt_name = aws_xml_elt_get_name(p, root, &elt_namelen);
+    if (elt_namelen != 8 ||
+        strncmp(elt_name, "Response", elt_namelen + 1) != 0) {
+      aws_xml_doc_free(p, doc);
 
-    errno = EINVAL;
-    return NULL;
-  }
+      pr_trace_msg(trace_channel, 9,
+        "malformed XML: root element lacks <Response> element (found <%.*s>)",
+        (int) elt_namelen, elt_name);
+      errno = EINVAL;
+      return NULL;
+    }
 
-  errors = aws_xml_elt_get_child(p, response, "Errors", 6);
-  if (errors == NULL) {
-    aws_xml_doc_free(p, doc);
+    /* We expect only 2 child elements: <Errors> and <RequestID> */
+    (void) aws_xml_elt_get_child_count(p, root, &count);
+    if (count != 2) {
+      pr_trace_msg(trace_channel, 2,
+        "unexpected count of <Response> child elements (%lu != 2)", count);
 
-    pr_trace_msg(trace_channel, 9,
-      "malformed XML: <Response> element lacks <Errors> element");
-    errno = EINVAL;
-    return NULL;
-  }
+      aws_xml_doc_free(p, doc);
 
-  (void) aws_xml_elt_get_child_count(p, errors, &count);
-  if (count != 1) {
-    pr_trace_msg(trace_channel, 5,
-      "expected 1 error element, found %lu", count);
-  }
+      errno = EINVAL;
+      return NULL;
+    }
 
-  error = aws_xml_elt_get_child(p, errors, "Error", 5);
-  if (error == NULL) {
-    aws_xml_doc_free(p, doc);
+    errors = aws_xml_elt_get_child(p, root, "Errors", 6);
+    if (errors == NULL) {
+      aws_xml_doc_free(p, doc);
 
-    pr_trace_msg(trace_channel, 9,
-      "malformed XML: <Errors> element lacks <Error> element");
-    errno = EINVAL;
-    return NULL;
+      pr_trace_msg(trace_channel, 9,
+        "malformed XML: <Response> element lacks <Errors> element");
+      errno = EINVAL;
+      return NULL;
+    }
+
+    (void) aws_xml_elt_get_child_count(p, errors, &count);
+    if (count != 1) {
+      pr_trace_msg(trace_channel, 5,
+        "expected 1 error element, found %lu", count);
+    }
+
+    error = aws_xml_elt_get_child(p, errors, "Error", 5);
+    if (error == NULL) {
+      aws_xml_doc_free(p, doc);
+
+      pr_trace_msg(trace_channel, 9,
+        "malformed XML: <Errors> element lacks <Error> element");
+      errno = EINVAL;
+      return NULL;
+    }
   }
 
   elt = aws_xml_elt_get_child(p, error, "Code", 4);
@@ -239,7 +264,7 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
   err->pool = err_pool;
 
   err->err_code = aws_error_get_code(err->pool,
-    aws_xml_elt_get_text(err->pool, elt));
+    aws_xml_elt_get_text(err->pool, elt), fmt);
 
   elt = aws_xml_elt_get_child(p, error, "Message", 7);
   if (elt == NULL) {
@@ -254,18 +279,43 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
 
   err->err_msg = aws_xml_elt_get_text(err->pool, elt);
 
-  req_id = aws_xml_elt_get_child(p, response, "RequestID", 9);
-  if (req_id == NULL) {
-    destroy_pool(err->pool);
-    aws_xml_doc_free(p, doc);
+  if (fmt == AWS_ERROR_XML_FORMAT_S3) {
+    void *rsrc;
 
-    pr_trace_msg(trace_channel, 9,
-      "malformed XML: <Response> element lacks <RequestID> element");
-    errno = EINVAL;
-    return NULL;
+    rsrc = aws_xml_elt_get_child(p, error, "Resource", 8);
+    if (rsrc != NULL) {
+      err->err_extra = aws_xml_elt_get_text(err->pool, rsrc);
+    }
+
+    /* What about the <HostId> element I've seen in S3 errror responses? */
+
+    req_id = aws_xml_elt_get_child(p, error, "RequestId", 9);
+    if (req_id == NULL) {
+      destroy_pool(err->pool);
+      aws_xml_doc_free(p, doc);
+
+      pr_trace_msg(trace_channel, 9,
+        "malformed XML: <Error> element lacks <RequestId> element");
+      errno = EINVAL;
+      return NULL;
+    }
+
+    err->req_id = aws_xml_elt_get_text(err->pool, req_id);
+
+  } else {
+    req_id = aws_xml_elt_get_child(p, root, "RequestID", 9);
+    if (req_id == NULL) {
+      destroy_pool(err->pool);
+      aws_xml_doc_free(p, doc);
+
+      pr_trace_msg(trace_channel, 9,
+        "malformed XML: <Response> element lacks <RequestID> element");
+      errno = EINVAL;
+      return NULL;
+    }
+
+    err->req_id = aws_xml_elt_get_text(err->pool, req_id);
   }
-
-  err->req_id = aws_xml_elt_get_text(err->pool, req_id);
 
   aws_xml_doc_free(p, doc);
   return err;

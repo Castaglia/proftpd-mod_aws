@@ -97,21 +97,37 @@
 #define AWS_ERROR_CODE_EC2_UNSUPPORTED_OPERATION		131
 #define AWS_ERROR_CODE_EC2_VPC_ID_NOT_SPECIFIED			132
 
+/* Error code specific to S3 actions */
+#define AWS_ERROR_CODE_S3_INVALID_REQUEST			1000
+
 struct aws_error {
   pool *pool;
 
   unsigned int err_code;
   const char *err_msg;
+
+  /* Some errors (e.g. S3) might have extra elements in their errors
+   * (e.g. <Resource>); this is the space for that data.
+   */
+  const char *err_extra;
+
   const char *req_id;
 };
 
+/* Different AWS services provide errors in different assortments of XML
+ * elements, termed here as "formats".
+ */
+#define AWS_ERROR_XML_FORMAT_DEFAULT	0
+#define AWS_ERROR_XML_FORMAT_S3		1
+
 /* Look up the appropriate error code for the given error name string. */
-unsigned int aws_error_get_code(pool *p, const char *err_name);
+unsigned int aws_error_get_code(pool *p, const char *err_name, int fmt);
 
 /* Return the error name for a given error code. */
-const char *aws_error_get_name(unsigned int err_code);
+const char *aws_error_get_name(unsigned int err_code, int fmt);
 
 /* Parse an error response XML document into an error object. */
-struct aws_error *aws_error_parse_xml(pool *p, const char *data, size_t datasz);
+struct aws_error *aws_error_parse_xml(pool *p, const char *data, size_t datasz,
+  int fmt);
 
 #endif /* MOD_AWS_ERROR_H */

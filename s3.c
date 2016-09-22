@@ -228,12 +228,19 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
       if (content_type == NULL ||
           strstr(content_type, AWS_HTTP_CONTENT_TYPE_XML) != NULL) {
         struct aws_error *err;
+        int fmt = AWS_ERROR_XML_FORMAT_S3;
 
-        pr_trace_msg(trace_channel, 1, "XML error response: %.*s", (int) s3->respsz, s3->resp);
-        err = aws_error_parse_xml(p, s3->resp, s3->respsz);
+        err = aws_error_parse_xml(p, s3->resp, s3->respsz, fmt);
         if (err == NULL) {
-          pr_trace_msg(trace_channel, 3,
-            "unable to parse XML error response: %s", strerror(errno));
+          if (errno == EINVAL) {
+            pr_trace_msg(trace_channel, 3,
+              "unable to parse XML error response with unexpected elements:\n"
+              "%.*s", (int) s3->respsz, s3->resp);
+
+          } else {
+            pr_trace_msg(trace_channel, 3,
+              "unable to parse XML error response: %s", strerror(errno));
+          }
 
         } else {
           if (err->err_code == AWS_ERROR_CODE_UNKNOWN) {
@@ -241,10 +248,18 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
               "received error response: '%.*s'", (int) s3->respsz, s3->resp);
           }
 
-          (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-            "received error: code = %s (%u), msg = %s, request_id = %s",
-            aws_error_get_name(err->err_code), err->err_code, err->err_msg,
+          if (err->err_extra != NULL) {
+            (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+              "received error: code = %s (%u), msg = %s, resource = %s, "
+              "request_id = %s", aws_error_get_name(err->err_code, fmt),
+              err->err_code, err->err_msg, err->err_extra, err->req_id);
+
+          } else {
+            (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+              "received error: code = %s (%u), msg = %s, request_id = %s",
+            aws_error_get_name(err->err_code, fmt), err->err_code, err->err_msg,
             err->req_id);
+          }
         }
       }
     }
