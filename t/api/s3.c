@@ -210,7 +210,7 @@ START_TEST (s3_get_object_test) {
   int res;
   struct s3_conn *s3;
   const char *bucket, *key;
-  pr_table_t *metadata;
+  pr_table_t *metadata = NULL;
 
   res = aws_s3_get_object(NULL, NULL, NULL, NULL, 0, 0, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
@@ -259,7 +259,7 @@ START_TEST (s3_get_object_test) {
 
   mark_point();
 
-  res = aws_s3_get_object(p, s3, bucket, key, 0, 0, &metadata, consume_s3_obj);
+  res = aws_s3_get_object(p, s3, bucket, key, 0, 0, metadata, consume_s3_obj);
   fail_unless(res == 0, "Failed to get object %s from bucket %s: %s", key,
     bucket, strerror(errno));
 

@@ -36,6 +36,11 @@ static CURLSH *curl_share = NULL;
 static pool *http_resp_pool = NULL;
 static char *http_resp_msg = NULL;
 
+struct http_headers {
+  pool *pool;
+  pr_table_t *tab;
+};
+
 static const char *trace_channel = "aws.http";
 
 pr_table_t *aws_http_default_headers(pool *p, struct tm *gmt_tm) {
@@ -192,21 +197,27 @@ static int http_perform(pool *p, CURL *curl, const char *url,
     }
   }
 
-  if (resp_headers != NULL) {
-    curl_code = curl_easy_setopt(curl, CURLOPT_HEADERDATA, resp_headers);
-    if (curl_code != CURLE_OK) {
-      pr_trace_msg(trace_channel, 1,
-        "error setting CURLOPT_HEADERDATA: %s",
-        curl_easy_strerror(curl_code));
-    }
-  }
-
   /* Clear error buffer, response message before performing request,
    * per docs.
    */
   curl_errorbuf[0] = '\0';
   clear_http_response();
   http_resp_pool = make_sub_pool(p);
+
+  if (resp_headers != NULL) {
+    struct http_headers *headers;
+
+    headers = palloc(http_resp_pool, sizeof(struct http_headers));
+    headers->pool = p;
+    headers->tab = resp_headers;
+
+    curl_code = curl_easy_setopt(curl, CURLOPT_HEADERDATA, headers);
+    if (curl_code != CURLE_OK) {
+      pr_trace_msg(trace_channel, 1,
+        "error setting CURLOPT_HEADERDATA: %s",
+        curl_easy_strerror(curl_code));
+    }
+  }
 
   curl_code = curl_easy_perform(curl);
 
@@ -410,6 +421,10 @@ static void stash_resp_header(pool *p, pr_table_t *headers, char *data,
     size_t datasz) {
   char *ptr;
 
+  if (datasz == 0) {
+    return;
+  }
+
   ptr = memchr(data, ':', datasz);
   if (ptr != NULL) {
     int res;
@@ -421,6 +436,9 @@ static void stash_resp_header(pool *p, pr_table_t *headers, char *data,
 
     vlen = datasz - klen - 2;
     v = pstrndup(p, ptr + 2, vlen);
+
+    pr_trace_msg(trace_channel, 17, "stashing response header: %.*s = %.*s",
+      (int) klen, k, (int) vlen, v);
 
     /* TODO: Handle header folding better (i.e. duplicated headers). */
     res = pr_table_add(headers, k, v, vlen);
@@ -437,14 +455,15 @@ static void stash_resp_header(pool *p, pr_table_t *headers, char *data,
 
   } else {
     pr_trace_msg(trace_channel, 13,
-      "ignoring malformed response header: %.*s", (int) datasz, data);
+      "ignoring malformed response header: %.*s (%lu bytes)", (int) datasz,
+      data, (unsigned long) datasz);
   }
 }
 
 static size_t http_resp_header_cb(char *data, size_t itemsz, size_t item_count,
     void *user_data) {
   size_t datasz;
-  pr_table_t *headers;
+  struct http_headers *headers;
 
   headers = user_data;
   datasz = itemsz * item_count;
@@ -471,7 +490,8 @@ static size_t http_resp_header_cb(char *data, size_t itemsz, size_t item_count,
 
   } else {
     if (headers != NULL) {
-      stash_resp_header(http_resp_pool, headers, data, datasz);
+      /* Trim off/ignore the trailing CRLF characters which libcurl provides. */
+      stash_resp_header(headers->pool, headers->tab, data, datasz-2);
     }
   }
 

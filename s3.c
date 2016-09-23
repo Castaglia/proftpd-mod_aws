@@ -859,10 +859,35 @@ int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
       bucket_name);
 
     if (object_metadata != NULL) {
-      /* XXX Need to scan through the response headers for the "x-amz-meta-"
-       * prefix (make a named constant), and populate them into the
-       * metadata table.
-       */
+      const void *k;
+
+      if (pr_trace_get_level(trace_channel) >= 17) {
+        pr_trace_msg(trace_channel, 17, "object %s response header count: %d",
+          object_key, pr_table_count(resp_headers));
+      }
+
+      (void) pr_table_rewind(resp_headers);
+
+      k = pr_table_next(resp_headers);
+      while (k != NULL) {
+        pr_signals_handle();
+
+        if (strncasecmp(k, AWS_S3_OBJECT_METADATA_PREFIX,
+            AWS_S3_OBJECT_METADATA_PREFIX_LEN) == 0) {
+          const void *v;
+          size_t vlen;
+
+          v = pr_table_get(resp_headers, k, &vlen);
+          if (v != NULL) {
+            pr_trace_msg(trace_channel, 9, "object %s metadata: %s = %.*s",
+              object_key, k, (int) vlen, v);
+            pr_table_add(object_metadata, pstrdup(p, k),
+              pstrndup(p, v, vlen), 0);
+          }
+        }
+
+        k = pr_table_next(resp_headers);
+      }
     }
   }
 

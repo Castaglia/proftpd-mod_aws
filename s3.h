@@ -56,6 +56,9 @@ int aws_s3_conn_destroy(pool *p, struct s3_conn *s3);
 array_header *aws_s3_get_buckets(pool *p, struct s3_conn *s3,
   const char **owner_id, const char **owner_name);
 
+/* XXX Can we access this bucket? (HEAD /bucket) */
+int aws_s3_access_bucket(pool *p, struct s3_conn *s3, const char *bucket_name);
+
 /* Returns a list of the object keys in the given bucket. */
 array_header *aws_s3_get_bucket_keys(pool *p, struct s3_conn *s3,
   const char *bucket_name, const char *prefix);
@@ -71,5 +74,8 @@ int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
   const char *object_key, off_t object_offset, off_t object_len,
   pr_table_t *object_metadata,
   int (*consume)(pool *p, void *data, off_t data_offset, off_t data_len));
+
+#define AWS_S3_OBJECT_METADATA_PREFIX		"x-amz-meta-"
+#define AWS_S3_OBJECT_METADATA_PREFIX_LEN	11
 
 #endif /* MOD_AWS_S3_H */
