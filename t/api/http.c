@@ -216,9 +216,10 @@ START_TEST (http_urlencode_test) {
 
   item = "foo bar";
   res = aws_http_urlencode(p, http, item, 0);
-  fail_unless(res == NULL, "Failed to handle empty item");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
+  fail_unless(res != NULL, "Failed to encode item '%s': %s", item,
+    strerror(errno));
+  fail_unless(strcmp(res, "foo%20bar") == 0,
+    "Expected 'foo%%20bar', got '%s'", res);
 
   item = "foo bar";
   item_len = strlen(item);

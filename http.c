@@ -104,10 +104,13 @@ const char *aws_http_urlencode(pool *p, void *http, const char *item,
 
   if (p == NULL ||
       http == NULL ||
-      item == NULL ||
-      item_len == 0) {
+      item == NULL) {
     errno = EINVAL;
     return NULL;
+  }
+
+  if (item_len == 0) {
+    item_len = strlen(item);
   }
 
   curl = http;
