@@ -55,6 +55,11 @@ struct route53_conn *aws_route53_conn_alloc(pool *p,
   struct route53_conn *route53;
   void *http;
 
+  if (p == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
   http = aws_http_alloc(p, max_connect_secs, max_request_secs, cacerts);
   if (http == NULL) {
     return NULL;

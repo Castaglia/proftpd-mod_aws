@@ -83,17 +83,11 @@ START_TEST (s3_conn_alloc_test) {
 }
 END_TEST
 
-START_TEST (s3_get_buckets_test) {
+static struct s3_conn *get_s3(pool *p) {
   int res;
-  const char *cacerts, *region, *domain;
-  const char *path, *profile, *owner_id, *owner_name;
+  const char *path, *profile, *cacerts, *region, *domain;
   char *access_key_id, *secret_access_key, *session_token;
   struct s3_conn *s3;
-  array_header *buckets;
-
-  if (getenv("TRAVIS_CI") != NULL) {
-    return;
-  }
 
   path = "/Users/tj/.aws/credentials";
   profile = "default";
@@ -102,6 +96,10 @@ START_TEST (s3_get_buckets_test) {
   mark_point();
   res = aws_creds_from_file(p, path, profile, &access_key_id,
     &secret_access_key, &session_token);
+  if (res < 0) {
+    return NULL;
+  }
+
   fail_unless(res == 0, "Failed to get '%s' creds from '%s': %s", profile,
     path, strerror(errno));
 
@@ -113,12 +111,157 @@ START_TEST (s3_get_buckets_test) {
   mark_point();
   s3 = aws_s3_conn_alloc(p, 5, 5, cacerts, region, domain, access_key_id,
     secret_access_key, session_token);
+  return s3;
+}
+
+START_TEST (s3_get_buckets_test) {
+  const char *owner_id, *owner_name;
+  struct s3_conn *s3;
+  array_header *buckets;
+
+  buckets = aws_s3_get_buckets(NULL, NULL, NULL, NULL);
+  fail_unless(buckets == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  buckets = aws_s3_get_buckets(p, NULL, NULL, NULL);
+  fail_unless(buckets == NULL, "Failed to handle null s3");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  if (getenv("TRAVIS_CI") != NULL) {
+    return;
+  }
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
 
   owner_id = owner_name = NULL;
 
   mark_point();
   buckets = aws_s3_get_buckets(p, s3, &owner_id, &owner_name);
   fail_unless(buckets != NULL, "Failed to get S3 buckets: %s", strerror(errno));
+
+  (void) aws_s3_conn_destroy(p, s3);
+}
+END_TEST
+
+START_TEST (s3_get_bucket_keys_test) {
+  array_header *keys;
+  struct s3_conn *s3;
+  const char *bucket, *prefix;
+
+  mark_point();
+  keys = aws_s3_get_bucket_keys(NULL, NULL, NULL, NULL);
+  fail_unless(keys == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  keys = aws_s3_get_bucket_keys(p, NULL, NULL, NULL);
+  fail_unless(keys == NULL, "Failed to handle null s3");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  keys = aws_s3_get_bucket_keys(p, s3, NULL, NULL);
+  fail_unless(keys == NULL, "Failed to handle null bucket_name");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  if (getenv("TRAVIS_CI") != NULL) {
+    return;
+  }
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
+
+  bucket = getenv("AWS_S3_BUCKET");
+  fail_unless(bucket != NULL,
+    "Failed to provide AWS_S3_BUCKET environment variable");
+
+  mark_point();
+  keys = aws_s3_get_bucket_keys(p, s3, bucket, NULL);
+  fail_unless(keys != NULL, "Failed to get all keys for bucket '%s': %s",
+    bucket, strerror(errno));
+
+  /* Using a prefix of ".../" leads to an object key of ".../" being among
+   * the returned keys.  Just what IS that object?  It has a size = 0.
+   */
+  prefix = getenv("AWS_S3_BUCKET_PREFIX");
+  fail_unless(prefix != NULL,
+    "Failed to provide AWS_S3_BUCKET_PREFIX environment variable");
+
+  mark_point();
+  keys = aws_s3_get_bucket_keys(p, s3, bucket, prefix);
+  fail_unless(keys != NULL, "Failed to get '%s' keys for bucket '%s': %s",
+    prefix, bucket, strerror(errno));
+
+  (void) aws_s3_conn_destroy(p, s3);
+}
+END_TEST
+
+static int consume_s3_obj(pool *p, void *data, off_t data_offset,
+    off_t data_len) {
+  return 0;
+}
+
+START_TEST (s3_get_object_test) {
+  int res;
+  struct s3_conn *s3;
+  const char *bucket, *key;
+  pr_table_t *metadata;
+
+  res = aws_s3_get_object(NULL, NULL, NULL, NULL, 0, 0, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_get_object(p, NULL, NULL, NULL, 0, 0, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null s3");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_get_object(p, s3, NULL, NULL, 0, 0, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null bucket_name");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_get_object(p, s3, bucket, NULL, 0, 0, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null object_key");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_get_object(p, s3, bucket, key, 0, 0, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null consumer");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  if (getenv("TRAVIS_CI") != NULL) {
+    return;
+  }
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
+
+  bucket = getenv("AWS_S3_BUCKET");
+  fail_unless(bucket != NULL,
+    "Failed to provide AWS_S3_BUCKET environment variable");
+  key = getenv("AWS_S3_OBJECT_KEY");
+  fail_unless(key != NULL,
+    "Failed to provide AWS_S3_OBJECT_KEY environment variable");
+
+  metadata = pr_table_alloc(p, 0);
+
+  mark_point();
+
+  res = aws_s3_get_object(p, s3, bucket, key, 0, 0, &metadata, consume_s3_obj);
+  fail_unless(res == 0, "Failed to get object %s from bucket %s: %s", key,
+    bucket, strerror(errno));
 
   (void) aws_s3_conn_destroy(p, s3);
 }
@@ -136,8 +279,10 @@ Suite *tests_get_s3_suite(void) {
 #if 0
   tcase_add_test(testcase, s3_conn_destroy_test);
   tcase_add_test(testcase, s3_conn_alloc_test);
-#endif
   tcase_add_test(testcase, s3_get_buckets_test);
+  tcase_add_test(testcase, s3_get_bucket_keys_test);
+#endif
+  tcase_add_test(testcase, s3_get_object_test);
 
   suite_add_tcase(suite, testcase);
   return suite;

@@ -56,6 +56,11 @@ struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
   struct ec2_conn *ec2;
   void *http;
 
+  if (p == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
   http = aws_http_alloc(p, max_connect_secs, max_request_secs, cacerts);
   if (http == NULL) {
     return NULL;

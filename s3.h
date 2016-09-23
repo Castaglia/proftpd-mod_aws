@@ -56,4 +56,20 @@ int aws_s3_conn_destroy(pool *p, struct s3_conn *s3);
 array_header *aws_s3_get_buckets(pool *p, struct s3_conn *s3,
   const char **owner_id, const char **owner_name);
 
+/* Returns a list of the object keys in the given bucket. */
+array_header *aws_s3_get_bucket_keys(pool *p, struct s3_conn *s3,
+  const char *bucket_name, const char *prefix);
+
+/* Get an object from the specified bucket, using a byte range specified by the
+ * given offset and length.
+ *
+ * The caller will provide a callback for consuming the retrieved data.  Any
+ * metadata for the retrieved object will be returned in a table, if desired
+ * by the caller.
+ */
+int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
+  const char *object_key, off_t object_offset, off_t object_len,
+  pr_table_t **object_metadata,
+  int (*consume)(pool *p, void *data, off_t data_offset, off_t data_len));
+
 #endif /* MOD_AWS_S3_H */
