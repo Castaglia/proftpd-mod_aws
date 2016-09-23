@@ -116,6 +116,10 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
       method_name = "GET";
       break;
 
+    case AWS_HTTP_METHOD_HEAD:
+      method_name = "HEAD";
+      break;
+
     case AWS_HTTP_METHOD_POST:
       method_name = "POST";
       break;
@@ -209,6 +213,11 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
         &resp_code, &content_type, resp_headers);
       break;
 
+    case AWS_HTTP_METHOD_HEAD:
+      res = aws_http_head(p, http, url, req_headers, &resp_code, &content_type,
+        resp_headers);
+      break;
+
     case AWS_HTTP_METHOD_POST:
       res = aws_http_post(p, http, url, req_headers, resp_body_cb, user_data,
         request_body, &resp_code, &content_type, resp_headers);
@@ -221,7 +230,8 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
 
   if (resp_code != AWS_HTTP_RESPONSE_CODE_OK) {
     pr_trace_msg(trace_channel, 2,
-      "received %ld response code for '%s' request", resp_code, url);
+      "received %ld response code for '%s %s' request", resp_code, http_method,
+      url);
 
     if (resp_code >= 400L) {
       /* If we received an error, AND no Content-Type, then ASSUME that
@@ -348,6 +358,33 @@ static int s3_get(pool *p, void *http, const char *path,
 
   res = s3_perform(p, http, AWS_HTTP_METHOD_GET, path, query_params,
     req_headers, NULL, request_time, resp_headers, resp_body_cb, user_data, s3);
+  return res;
+}
+
+static int s3_head(pool *p, void *http, const char *path,
+    array_header *query_params, pr_table_t *resp_headers, struct s3_conn *s3) {
+  int res;
+  pr_table_t *req_headers;
+  time_t request_time;
+  struct tm *gmt_tm;
+
+  time(&request_time);
+
+  gmt_tm = pr_gmtime(p, &request_time);
+  if (gmt_tm == NULL) {
+    int xerrno = errno;
+
+    pr_trace_msg(trace_channel, 1,
+      "error obtaining gmtime: %s", strerror(xerrno));
+
+    errno = xerrno;
+    return -1;
+  }
+
+  req_headers = aws_http_default_headers(p, gmt_tm);
+
+  res = s3_perform(p, http, AWS_HTTP_METHOD_HEAD, path, query_params,
+    req_headers, NULL, request_time, resp_headers, NULL, NULL, s3);
   return res;
 }
 
@@ -584,6 +621,37 @@ array_header *aws_s3_get_buckets(pool *p, struct s3_conn *s3,
   }
 
   return buckets;
+}
+
+int aws_s3_access_bucket(pool *p, struct s3_conn *s3, const char *bucket_name) {
+  int res, xerrno;
+  const char *path;
+  pool *req_pool;
+  array_header *query_params;
+
+  if (p == NULL ||
+      s3 == NULL ||
+      bucket_name == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  req_pool = make_sub_pool(s3->pool);
+  pr_pool_tag(req_pool, "S3 Request Pool");
+  s3->req_pool = req_pool;
+
+  path = pstrcat(req_pool, "/",
+    aws_http_urlencode(req_pool, s3->http, bucket_name, 0), NULL);
+
+  query_params = make_array(req_pool, 1, sizeof(char *));
+
+  res = s3_head(p, s3->http, path, query_params, NULL, s3);
+  xerrno = errno;
+
+  clear_response(s3);
+
+  errno = xerrno;
+  return res;
 }
 
 static const char *parse_bucket_content(pool *p, void *content) {

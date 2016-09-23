@@ -163,6 +163,8 @@ START_TEST (s3_get_bucket_keys_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  s3 = (struct s3_conn *) 1;
+
   mark_point();
   keys = aws_s3_get_bucket_keys(p, s3, NULL, NULL);
   fail_unless(keys == NULL, "Failed to handle null bucket_name");
@@ -196,6 +198,51 @@ START_TEST (s3_get_bucket_keys_test) {
   keys = aws_s3_get_bucket_keys(p, s3, bucket, prefix);
   fail_unless(keys != NULL, "Failed to get '%s' keys for bucket '%s': %s",
     prefix, bucket, strerror(errno));
+
+  (void) aws_s3_conn_destroy(p, s3);
+}
+END_TEST
+
+START_TEST (s3_access_bucket_test) {
+  int res;
+  struct s3_conn *s3;
+  const char *bucket;
+
+  mark_point();
+  res = aws_s3_access_bucket(NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_access_bucket(p, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  s3 = (struct s3_conn *) 1;
+
+  mark_point();
+  res = aws_s3_access_bucket(p, s3, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  if (getenv("TRAVIS_CI") != NULL) {
+    return;
+  }
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
+
+  bucket = getenv("AWS_S3_BUCKET");
+  fail_unless(bucket != NULL,
+    "Failed to provide AWS_S3_BUCKET environment variable");
+
+  mark_point();
+  res = aws_s3_access_bucket(p, s3, bucket);
+  fail_unless(res == 0, "Failed to check bucket %s: %s", bucket,
+    strerror(errno));
 
   (void) aws_s3_conn_destroy(p, s3);
 }
@@ -276,12 +323,15 @@ Suite *tests_get_s3_suite(void) {
 
   tcase_add_checked_fixture(testcase, set_up, tear_down);
 
-#if 0
   tcase_add_test(testcase, s3_conn_destroy_test);
   tcase_add_test(testcase, s3_conn_alloc_test);
+
+  /* Buckets */
   tcase_add_test(testcase, s3_get_buckets_test);
   tcase_add_test(testcase, s3_get_bucket_keys_test);
-#endif
+  tcase_add_test(testcase, s3_access_bucket_test);
+
+  /* Objects */
   tcase_add_test(testcase, s3_get_object_test);
 
   suite_add_tcase(suite, testcase);
