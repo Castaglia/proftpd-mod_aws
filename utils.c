@@ -91,6 +91,22 @@ char *aws_utils_str_ul2s(pool *p, unsigned long n) {
   return num;
 }
 
+char *aws_utils_str_off2s(pool *p, off_t n) {
+  char buf[256], *num;
+  int len;
+
+  if (p == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  memset(buf, '\0', sizeof(buf));
+  len = snprintf(buf, sizeof(buf)-1, "%" PR_LU, (pr_off_t) n);
+  num = pstrndup(p, buf, len);
+
+  return num;
+}
+
 char *aws_utils_strn_trim(pool *p, const char *str, size_t len) {
   const char *start, *end;
   char *trimmed = NULL;
