@@ -179,6 +179,7 @@ static int http_perform(pool *p, CURL *curl, const char *url,
         errno = EINVAL;
         return -1;
       }
+
     } else {
       (void) curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
     }
@@ -207,6 +208,9 @@ static int http_perform(pool *p, CURL *curl, const char *url,
         "error setting CURLOPT_HTTPHEADER: %s",
         curl_easy_strerror(curl_code));
     }
+
+  } else {
+    (void) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, NULL);
   }
 
   /* Clear error buffer, response message before performing request,
@@ -377,6 +381,10 @@ int aws_http_get(pool *p, void *http, const char *url, pr_table_t *req_headers,
 
   curl = http;
 
+  (void) curl_easy_setopt(curl, CURLOPT_NOBODY, 0L);
+  (void) curl_easy_setopt(curl, CURLOPT_HTTPPOST, 0L);
+  (void) curl_easy_setopt(curl, CURLOPT_POSTFIELDS, NULL);
+
   curl_code = curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
   if (curl_code != CURLE_OK) {
     pr_trace_msg(trace_channel, 1,
@@ -404,6 +412,10 @@ int aws_http_head(pool *p, void *http, const char *url, pr_table_t *req_headers,
   }
 
   curl = http;
+
+  (void) curl_easy_setopt(curl, CURLOPT_HTTPGET, 0L);
+  (void) curl_easy_setopt(curl, CURLOPT_HTTPPOST, 0L);
+  (void) curl_easy_setopt(curl, CURLOPT_POSTFIELDS, NULL);
 
   curl_code = curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
   if (curl_code != CURLE_OK) {
@@ -436,6 +448,9 @@ int aws_http_post(pool *p, void *http, const char *url, pr_table_t *req_headers,
   }
 
   curl = http;
+
+  (void) curl_easy_setopt(curl, CURLOPT_HTTPGET, 0L);
+  (void) curl_easy_setopt(curl, CURLOPT_NOBODY, 0L);
 
   curl_code = curl_easy_setopt(curl, CURLOPT_POST, 1L);
   if (curl_code != CURLE_OK) {

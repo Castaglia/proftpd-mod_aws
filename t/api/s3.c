@@ -310,6 +310,24 @@ START_TEST (s3_get_object_test) {
   fail_unless(res == 0, "Failed to get object %s from bucket %s: %s", key,
     bucket, strerror(errno));
 
+  /* Range requests: just offset */
+  res = aws_s3_get_object(p, s3, bucket, key, 1000, 0, metadata,
+    consume_s3_obj);
+  fail_unless(res == 0, "Failed to get object %s from bucket %s: %s", key,
+    bucket, strerror(errno));
+
+  /* Range requests: just len */
+  res = aws_s3_get_object(p, s3, bucket, key, 0, 1000, metadata,
+    consume_s3_obj);
+  fail_unless(res == 0, "Failed to get object %s from bucket %s: %s", key,
+    bucket, strerror(errno));
+
+  /* Range requests: offset+len */
+  res = aws_s3_get_object(p, s3, bucket, key, 1000, 1000, metadata,
+    consume_s3_obj);
+  fail_unless(res == 0, "Failed to get object %s from bucket %s: %s", key,
+    bucket, strerror(errno));
+
   (void) aws_s3_conn_destroy(p, s3);
 }
 END_TEST

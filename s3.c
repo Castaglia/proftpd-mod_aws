@@ -100,6 +100,22 @@ int aws_s3_conn_destroy(pool *p, struct s3_conn *s3) {
   return res;
 }
 
+static int s3_http_error(long resp_code) {
+  int res = TRUE;
+
+  switch (resp_code) {
+    case AWS_HTTP_RESPONSE_CODE_OK:
+    case AWS_HTTP_RESPONSE_CODE_PARTIAL_CONTENT:
+      res = FALSE;
+      break;
+
+    default:
+      res = TRUE;
+  }
+
+  return res;
+}
+
 static int s3_perform(pool *p, void *http, int http_method, const char *path,
     array_header *query_params, pr_table_t *req_headers, char *request_body,
     time_t request_time, pr_table_t *resp_headers,
@@ -228,9 +244,9 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
     return -1;
   }
 
-  if (resp_code != AWS_HTTP_RESPONSE_CODE_OK) {
+  if (s3_http_error(resp_code) == TRUE) {
     pr_trace_msg(trace_channel, 2,
-      "received %ld response code for '%s %s' request", resp_code, http_method,
+      "received %ld response code for '%s %s' request", resp_code, method_name,
       url);
 
     if (resp_code >= 400L) {
@@ -280,7 +296,8 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
     /* Note: If we receive a 200 OK, BUT the content type is HTML, then it's
      * an unexpected error.
      */
-    if (content_type != NULL &&
+    if (resp_code == AWS_HTTP_RESPONSE_CODE_OK &&
+        content_type != NULL &&
         strstr(content_type, AWS_HTTP_CONTENT_TYPE_HTML) != NULL) {
       (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
         "received unexpected HTML response for '%s'", url);
@@ -292,6 +309,7 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
   /* Note: should we handle other response codes? */
   switch (resp_code) {
     case AWS_HTTP_RESPONSE_CODE_OK:
+    case AWS_HTTP_RESPONSE_CODE_PARTIAL_CONTENT:
       break;
 
     case AWS_HTTP_RESPONSE_CODE_BAD_REQUEST:
@@ -332,8 +350,8 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
   return 0;
 }
 
-static int s3_get(pool *p, void *http, const char *path,
-    array_header *query_params, pr_table_t *resp_headers,
+static int s3_get(pool *p, void *http, pr_table_t *http_headers,
+    const char *path, array_header *query_params, pr_table_t *resp_headers,
     size_t (*resp_body_cb)(char *, size_t, size_t, void *), void *user_data,
     struct s3_conn *s3) {
   int res;
@@ -355,6 +373,26 @@ static int s3_get(pool *p, void *http, const char *path,
   }
 
   req_headers = aws_http_default_headers(p, gmt_tm);
+
+  if (http_headers != NULL) {
+    const void *k;
+
+    (void) pr_table_rewind(http_headers);
+    k = pr_table_next(http_headers);
+    while (k != NULL) {
+      const void *v;
+      size_t vlen;
+
+      pr_signals_handle();
+
+      v = pr_table_get(http_headers, k, &vlen);
+      if (v != NULL) {
+        pr_table_add(req_headers, pstrdup(p, k), pstrndup(p, v, vlen), 0);
+      }
+
+      k = pr_table_next(http_headers);
+    }
+  }
 
   res = s3_perform(p, http, AWS_HTTP_METHOD_GET, path, query_params,
     req_headers, NULL, request_time, resp_headers, resp_body_cb, user_data, s3);
@@ -587,8 +625,8 @@ array_header *aws_s3_get_buckets(pool *p, struct s3_conn *s3,
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
-  res = s3_get(p, s3->http, path, query_params, NULL, s3_resp_cb, (void *) s3,
-    s3);
+  res = s3_get(p, s3->http, NULL, path, query_params, NULL,
+    s3_resp_cb, (void *) s3, s3);
   if (res == 0) {
     pr_trace_msg(trace_channel, 19,
       "get bucket names response: '%.*s'", (int) s3->respsz, s3->resp);
@@ -814,8 +852,8 @@ array_header *aws_s3_get_bucket_keys(pool *p, struct s3_conn *s3,
       aws_http_urlencode(req_pool, s3->http, prefix, 0), NULL);
   }
 
-  res = s3_get(p, s3->http, path, query_params, NULL, s3_resp_cb, (void *) s3,
-    s3);
+  res = s3_get(p, s3->http, NULL, path, query_params, NULL,
+    s3_resp_cb, (void *) s3, s3);
   if (res == 0) {
     pr_trace_msg(trace_channel, 19,
       "get bucket contents response: '%.*s'", (int) s3->respsz, s3->resp);
@@ -886,7 +924,7 @@ int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
   const char *path;
   pool *req_pool;
   array_header *query_params;
-  pr_table_t *resp_headers = NULL;
+  pr_table_t *req_headers, *resp_headers = NULL;
 
   if (p == NULL ||
       s3 == NULL ||
@@ -901,27 +939,50 @@ int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
   pr_pool_tag(req_pool, "S3 Request Pool");
   s3->req_pool = req_pool;
 
+  req_headers = pr_table_alloc(s3->req_pool, 0);
+  if (object_offset > 0 ||
+      object_len > 0) {
+    char *range = NULL;
+
+    if (object_offset > 0) {
+      if (object_len > 0) {
+        /* Range: bytes=off-(off+len-1) */
+        range = pstrcat(s3->req_pool, "bytes=",
+          aws_utils_str_off2s(s3->req_pool, object_offset), "-",
+          aws_utils_str_off2s(s3->req_pool, object_offset + object_len - 1),
+          NULL);
+
+      } else {
+        /* Range: bytes=off- */
+        range = pstrcat(s3->req_pool, "bytes=",
+          aws_utils_str_off2s(s3->req_pool, object_offset), "-", NULL);
+      }
+
+    } else {
+      /* Range: bytes=0-(len-1) */
+      range = pstrcat(s3->req_pool, "bytes=0-",
+        aws_utils_str_off2s(s3->req_pool, object_len-1), NULL);
+    }
+
+    pr_table_add(req_headers, pstrdup(s3->req_pool, AWS_HTTP_HEADER_RANGE),
+      range, 0);
+  }
+
   path = pstrcat(req_pool,
     "/", aws_http_urlencode(req_pool, s3->http, bucket_name, 0),
     "/", aws_http_urlencode(req_pool, s3->http, object_key, 0), NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
-/* XXX We will need a different callback, other that s3_resp_cb, so that the
- * downloaded bytes are NOT buffered up, but instead are "piped" to the
- * provided consumer callback.
- */
-
   if (object_metadata != NULL) {
     resp_headers = pr_table_alloc(s3->req_pool, 0);
   }
 
-  res = s3_get(p, s3->http, path, query_params, resp_headers, s3_obj_cb, NULL,
-    s3);
+  res = s3_get(p, s3->http, req_headers, path, query_params, resp_headers,
+    s3_obj_cb, NULL, s3);
   xerrno = errno;
 
   if (res == 0) {
-/* XXX Include byte range in this log message? */
     pr_trace_msg(trace_channel, 19,
       "successfully downloaded object %s from bucket %s", object_key,
       bucket_name);
