@@ -101,8 +101,8 @@ int aws_s3_conn_destroy(pool *p, struct s3_conn *s3) {
 }
 
 static int s3_perform(pool *p, void *http, int http_method, const char *path,
-    array_header *query_params, pr_table_t *http_headers, char *request_body,
-    time_t request_time,
+    array_header *query_params, pr_table_t *req_headers, char *request_body,
+    time_t request_time, pr_table_t *resp_headers,
     size_t (*resp_body_cb)(char *, size_t, size_t, void *), void *user_data,
     struct s3_conn *s3) {
   int res;
@@ -135,7 +135,7 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
     host = pstrcat(p, aws_service, "-", s3->region, ".", s3->domain, NULL);
   }
 
-  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_HOST), host, 0);
+  (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_HOST), host, 0);
 
   /* And, since we are using signature version 4, we ALSO need to provide
    * the SHA256 digest of the payload/content.
@@ -163,7 +163,7 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
     }
   }
 
-  (void) pr_table_add(http_headers,
+  (void) pr_table_add(req_headers,
     pstrdup(p, AWS_HTTP_HEADER_X_AMZ_CONTENT_SHA256),
     pr_str_bin2hex(p, request_digest, sizeof(request_digest),
     PR_STR_FL_HEX_USE_LC), 0);
@@ -187,7 +187,7 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
 
   res = aws_sign_v4_generate(p, s3->access_key_id, s3->secret_access_key,
     s3->session_token, s3->region, aws_service, http, method_name, path,
-    query_params, http_headers, request_body, request_time);
+    query_params, req_headers, request_body, request_time);
   if (res < 0) {
     int xerrno = errno;
 
@@ -205,13 +205,13 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
 
   switch (http_method) {
     case AWS_HTTP_METHOD_GET:
-      res = aws_http_get(p, http, url, http_headers, resp_body_cb, user_data,
-        &resp_code, &content_type);
+      res = aws_http_get(p, http, url, req_headers, resp_body_cb, user_data,
+        &resp_code, &content_type, resp_headers);
       break;
 
     case AWS_HTTP_METHOD_POST:
-      res = aws_http_post(p, http, url, http_headers, resp_body_cb, user_data,
-        request_body, &resp_code, &content_type);
+      res = aws_http_post(p, http, url, req_headers, resp_body_cb, user_data,
+        request_body, &resp_code, &content_type, resp_headers);
       break;
   }
 
@@ -323,11 +323,11 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
 }
 
 static int s3_get(pool *p, void *http, const char *path,
-    array_header *query_params,
+    array_header *query_params, pr_table_t *resp_headers,
     size_t (*resp_body_cb)(char *, size_t, size_t, void *), void *user_data,
     struct s3_conn *s3) {
   int res;
-  pr_table_t *http_headers;
+  pr_table_t *req_headers;
   time_t request_time;
   struct tm *gmt_tm;
 
@@ -344,19 +344,19 @@ static int s3_get(pool *p, void *http, const char *path,
     return -1;
   }
 
-  http_headers = aws_http_default_headers(p, gmt_tm);
+  req_headers = aws_http_default_headers(p, gmt_tm);
 
   res = s3_perform(p, http, AWS_HTTP_METHOD_GET, path, query_params,
-    http_headers, NULL, request_time, resp_body_cb, user_data, s3);
+    req_headers, NULL, request_time, resp_headers, resp_body_cb, user_data, s3);
   return res;
 }
 
 static int s3_post(pool *p, void *http, const char *path,
-    array_header *query_params, char *request_body,
+    array_header *query_params, char *request_body, pr_table_t *resp_headers,
     size_t (*resp_body_cb)(char *, size_t, size_t, void *), void *user_data,
     struct s3_conn *s3) {
   int res;
-  pr_table_t *http_headers;
+  pr_table_t *req_headers;
   time_t request_time;
   struct tm *gmt_tm;
   char *content_len;
@@ -374,8 +374,8 @@ static int s3_post(pool *p, void *http, const char *path,
     return -1;
   }
 
-  http_headers = aws_http_default_headers(p, gmt_tm);
-  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_TYPE),
+  req_headers = aws_http_default_headers(p, gmt_tm);
+  (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_TYPE),
     pstrdup(p, "application/x-www-form-urlencoded; charset=utf-8"), 0);
 
   if (request_body == NULL) {
@@ -388,14 +388,14 @@ static int s3_post(pool *p, void *http, const char *path,
     content_len = aws_utils_str_ul2s(p, (unsigned long) request_bodysz);
   }
 
-  (void) pr_table_add(http_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_LEN),
+  (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_LEN),
     content_len, 0);
 
   res = s3_perform(p, http, AWS_HTTP_METHOD_POST, path, query_params,
-    http_headers, request_body, request_time, resp_body_cb, user_data, s3);
+    req_headers, request_body, request_time, resp_headers, resp_body_cb,
+    user_data, s3);
   return res;
 }
-
 
 static size_t s3_resp_cb(char *data, size_t item_sz, size_t item_count,
     void *user_data) {
@@ -550,7 +550,8 @@ array_header *aws_s3_get_buckets(pool *p, struct s3_conn *s3,
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
-  res = s3_get(p, s3->http, path, query_params, s3_resp_cb, (void *) s3, s3);
+  res = s3_get(p, s3->http, path, query_params, NULL, s3_resp_cb, (void *) s3,
+    s3);
   if (res == 0) {
     pr_trace_msg(trace_channel, 19,
       "get bucket names response: '%.*s'", (int) s3->respsz, s3->resp);
@@ -745,7 +746,8 @@ array_header *aws_s3_get_bucket_keys(pool *p, struct s3_conn *s3,
       aws_http_urlencode(req_pool, s3->http, prefix, 0), NULL);
   }
 
-  res = s3_get(p, s3->http, path, query_params, s3_resp_cb, (void *) s3, s3);
+  res = s3_get(p, s3->http, path, query_params, NULL, s3_resp_cb, (void *) s3,
+    s3);
   if (res == 0) {
     pr_trace_msg(trace_channel, 19,
       "get bucket contents response: '%.*s'", (int) s3->respsz, s3->resp);
@@ -810,13 +812,13 @@ static size_t s3_obj_cb(char *data, size_t item_sz, size_t item_count,
 
 int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
     const char *object_key, off_t object_offset, off_t object_len,
-    pr_table_t **object_metadata,
+    pr_table_t *object_metadata,
     int (*consumer)(pool *p, void *data, off_t data_offset, off_t data_len)) {
   int res, xerrno;
   const char *path;
   pool *req_pool;
   array_header *query_params;
-  pr_table_t *metadata;
+  pr_table_t *resp_headers = NULL;
 
   if (p == NULL ||
       s3 == NULL ||
@@ -840,11 +842,14 @@ int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
 /* XXX We will need a different callback, other that s3_resp_cb, so that the
  * downloaded bytes are NOT buffered up, but instead are "piped" to the
  * provided consumer callback.
- *
- * We'll need a way to get the other response headers, for populating the
- * object metadata table, too.  (This will require some HTTP API updates.)
  */
-  res = s3_get(p, s3->http, path, query_params, s3_obj_cb, NULL, s3);
+
+  if (object_metadata != NULL) {
+    resp_headers = pr_table_alloc(s3->req_pool, 0);
+  }
+
+  res = s3_get(p, s3->http, path, query_params, resp_headers, s3_obj_cb, NULL,
+    s3);
   xerrno = errno;
 
   if (res == 0) {
@@ -852,6 +857,13 @@ int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
     pr_trace_msg(trace_channel, 19,
       "successfully downloaded object %s from bucket %s", object_key,
       bucket_name);
+
+    if (object_metadata != NULL) {
+      /* XXX Need to scan through the response headers for the "x-amz-meta-"
+       * prefix (make a named constant), and populate them into the
+       * metadata table.
+       */
+    }
   }
 
   clear_response(s3);

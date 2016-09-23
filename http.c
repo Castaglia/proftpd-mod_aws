@@ -33,8 +33,8 @@
 static char curl_errorbuf[CURL_ERROR_SIZE];
 static CURLSH *curl_share = NULL;
 
-static char *http_resp_msg = NULL;
 static pool *http_resp_pool = NULL;
+static char *http_resp_msg = NULL;
 
 static const char *trace_channel = "aws.http";
 
@@ -140,8 +140,10 @@ static void clear_http_response(void) {
 }
 
 static int http_perform(pool *p, CURL *curl, const char *url,
-    pr_table_t *headers, size_t (*resp_body)(char *, size_t, size_t, void *),
-    void *user_data, long *resp_code, const char **content_type) {
+    pr_table_t *req_headers,
+    size_t (*resp_body)(char *, size_t, size_t, void *),
+    void *user_data, long *resp_code, const char **content_type,
+    pr_table_t *resp_headers) {
   CURLcode curl_code;
   struct curl_slist *slist = NULL;
   double content_len, rcvd_bytes, total_secs;
@@ -170,12 +172,12 @@ static int http_perform(pool *p, CURL *curl, const char *url,
     return -1;
   }
 
-  if (headers != NULL) {
+  if (req_headers != NULL) {
     register unsigned int i;
     array_header *http_headers;
     char **elts;
 
-    http_headers = aws_utils_table2array(p, headers);
+    http_headers = aws_utils_table2array(p, req_headers);
 
     elts = http_headers->elts;
     for (i = 0; i < http_headers->nelts; i++) {
@@ -186,6 +188,15 @@ static int http_perform(pool *p, CURL *curl, const char *url,
     if (curl_code != CURLE_OK) {
       pr_trace_msg(trace_channel, 1,
         "error setting CURLOPT_HTTPHEADER: %s",
+        curl_easy_strerror(curl_code));
+    }
+  }
+
+  if (resp_headers != NULL) {
+    curl_code = curl_easy_setopt(curl, CURLOPT_HEADERDATA, resp_headers);
+    if (curl_code != CURLE_OK) {
+      pr_trace_msg(trace_channel, 1,
+        "error setting CURLOPT_HEADERDATA: %s",
         curl_easy_strerror(curl_code));
     }
   }
@@ -322,9 +333,9 @@ static int http_perform(pool *p, CURL *curl, const char *url,
   return 0;
 }
 
-int aws_http_get(pool *p, void *http, const char *url, pr_table_t *headers,
+int aws_http_get(pool *p, void *http, const char *url, pr_table_t *req_headers,
     size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
-    long *resp_code, const char **content_type) {
+    long *resp_code, const char **content_type, pr_table_t *resp_headers) {
   int res;
   CURL *curl;
   CURLcode curl_code;
@@ -347,14 +358,15 @@ int aws_http_get(pool *p, void *http, const char *url, pr_table_t *headers,
       curl_easy_strerror(curl_code));
   }
 
-  res = http_perform(p, curl, url, headers, resp_body, user_data, resp_code,
-    content_type);
+  res = http_perform(p, curl, url, req_headers, resp_body, user_data, resp_code,
+    content_type, resp_headers);
   return res;
 }
 
-int aws_http_post(pool *p, void *http, const char *url, pr_table_t *headers,
+int aws_http_post(pool *p, void *http, const char *url, pr_table_t *req_headers,
     size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
-    char *req_body, long *resp_code, const char **content_type) {
+    char *req_body, long *resp_code, const char **content_type,
+    pr_table_t *resp_headers) {
   int res;
   CURL *curl;
   CURLcode curl_code;
@@ -386,18 +398,55 @@ int aws_http_post(pool *p, void *http, const char *url, pr_table_t *headers,
   }
 
   /* Disable curl's sending of the Expect request header for POSTs. */
-  (void) pr_table_add(headers, pstrdup(p, AWS_HTTP_HEADER_EXPECT),
+  (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_EXPECT),
     pstrdup(p, ""), 0);
 
-  res = http_perform(p, curl, url, headers, resp_body, user_data, resp_code,
-    content_type);
+  res = http_perform(p, curl, url, req_headers, resp_body, user_data, resp_code,
+    content_type, resp_headers);
   return res;
 }
 
-static size_t http_header_cb(char *data, size_t itemsz, size_t item_count,
+static void stash_resp_header(pool *p, pr_table_t *headers, char *data,
+    size_t datasz) {
+  char *ptr;
+
+  ptr = memchr(data, ':', datasz);
+  if (ptr != NULL) {
+    int res;
+    char *k, *v;
+    size_t klen, vlen;
+
+    klen = ptr - data;
+    k = pstrndup(p, data, klen);
+
+    vlen = datasz - klen - 2;
+    v = pstrndup(p, ptr + 2, vlen);
+
+    /* TODO: Handle header folding better (i.e. duplicated headers). */
+    res = pr_table_add(headers, k, v, vlen);
+    if (res < 0 &&
+        errno == EEXIST) {
+      res = pr_table_set(headers, k, v, vlen);
+    }
+
+    if (res < 0) {
+      pr_trace_msg(trace_channel, 4,
+        "error stashing response header '%.*s': %s", (int) datasz, data,
+        strerror(errno));
+    }
+
+  } else {
+    pr_trace_msg(trace_channel, 13,
+      "ignoring malformed response header: %.*s", (int) datasz, data);
+  }
+}
+
+static size_t http_resp_header_cb(char *data, size_t itemsz, size_t item_count,
     void *user_data) {
   size_t datasz;
+  pr_table_t *headers;
 
+  headers = user_data;
   datasz = itemsz * item_count;
 
   /* Fortunately, only COMPLETE headers are passed to us, so that we do not
@@ -419,6 +468,11 @@ static size_t http_header_cb(char *data, size_t itemsz, size_t item_count,
     resp_msglen = datasz - 13 - 2;
 
     http_resp_msg = pstrndup(http_resp_pool, resp_msg, resp_msglen);
+
+  } else {
+    if (headers != NULL) {
+      stash_resp_header(http_resp_pool, headers, data, datasz);
+    }
   }
 
   return datasz;
@@ -592,19 +646,15 @@ void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
      */
   }
 
-  curl_code = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, http_header_cb);
+  curl_code = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION,
+    http_resp_header_cb);
   if (curl_code != CURLE_OK) {
     pr_trace_msg(trace_channel, 1,
       "error setting CURLOPT_HEADERFUNCTION: %s",
       curl_easy_strerror(curl_code));
   }
 
-  curl_code = curl_easy_setopt(curl, CURLOPT_HEADERDATA, curl);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_HEADERDATA: %s",
-      curl_easy_strerror(curl_code));
-  }
+  (void) curl_easy_setopt(curl, CURLOPT_HEADERDATA, NULL);
 
   curl_code = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, http_trace_cb);
   if (curl_code != CURLE_OK) {

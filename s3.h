@@ -69,7 +69,7 @@ array_header *aws_s3_get_bucket_keys(pool *p, struct s3_conn *s3,
  */
 int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
   const char *object_key, off_t object_offset, off_t object_len,
-  pr_table_t **object_metadata,
+  pr_table_t *object_metadata,
   int (*consume)(pool *p, void *data, off_t data_offset, off_t data_len));
 
 #endif /* MOD_AWS_S3_H */

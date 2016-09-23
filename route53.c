@@ -175,7 +175,7 @@ static int route53_get(pool *p, void *http, const char *path,
  */
 
   res = aws_http_get(p, http, url, http_headers, resp_body, (void *) route53,
-    &resp_code, &content_type);
+    &resp_code, &content_type, NULL);
   if (res < 0) {
     return -1;
   }

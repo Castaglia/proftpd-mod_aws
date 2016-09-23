@@ -182,12 +182,12 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
   switch (http_method) {
     case AWS_HTTP_METHOD_GET:
       res = aws_http_get(p, http, url, http_headers, resp_body, (void *) ec2,
-        &resp_code, &content_type);
+        &resp_code, &content_type, NULL);
       break;
 
     case AWS_HTTP_METHOD_POST:
       res = aws_http_post(p, http, url, http_headers, resp_body, (void *) ec2,
-        request_body, &resp_code, &content_type);
+        request_body, &resp_code, &content_type, NULL);
       break;
   }
 

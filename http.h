@@ -91,13 +91,14 @@ const char *aws_http_urldecode(pool *p, void *http, const char *item,
 const char *aws_http_urlencode(pool *p, void *http, const char *item,
   size_t item_len);
 
-int aws_http_get(pool *p, void *http, const char *url, pr_table_t *headers,
+int aws_http_get(pool *p, void *http, const char *url, pr_table_t *req_headers,
   size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
-  long *resp_code, const char **content_type);
+  long *resp_code, const char **content_type, pr_table_t *resp_headers);
 
-int aws_http_post(pool *p, void *http, const char *url, pr_table_t *headers,
+int aws_http_post(pool *p, void *http, const char *url, pr_table_t *req_headers,
   size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
-  char *req_body, long *resp_code, const char **content_type);
+  char *req_body, long *resp_code, const char **content_type,
+  pr_table_t *resp_headers);
 
 /* API lifetime functions, for mod_aws use only. */
 int aws_http_init(pool *p, unsigned long *feature_flags,
