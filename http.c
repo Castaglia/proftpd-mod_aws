@@ -161,21 +161,33 @@ static int http_perform(pool *p, CURL *curl, const char *url,
     return -1;
   }
 
-  curl_code = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, resp_body);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_WRITEFUNCTION: %s", curl_easy_strerror(curl_code));
-    errno = EINVAL;
-    return -1;
+  if (resp_body != NULL) {
+    curl_code = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, resp_body);
+    if (curl_code != CURLE_OK) {
+      pr_trace_msg(trace_channel, 1,
+        "error setting CURLOPT_WRITEFUNCTION: %s",
+        curl_easy_strerror(curl_code));
+      errno = EINVAL;
+      return -1;
+    }
+
+    if (user_data != NULL) {
+      curl_code = curl_easy_setopt(curl, CURLOPT_WRITEDATA, user_data);
+      if (curl_code != CURLE_OK) {
+        pr_trace_msg(trace_channel, 1,
+          "error setting CURLOPT_WRITEDATA: %s", curl_easy_strerror(curl_code));
+        errno = EINVAL;
+        return -1;
+      }
+    } else {
+      (void) curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
+    }
+
+  } else {
+    (void) curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, NULL);
+    (void) curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
   }
 
-  curl_code = curl_easy_setopt(curl, CURLOPT_WRITEDATA, user_data);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_WRITEDATA: %s", curl_easy_strerror(curl_code));
-    errno = EINVAL;
-    return -1;
-  }
 
   if (req_headers != NULL) {
     register unsigned int i;
@@ -217,6 +229,9 @@ static int http_perform(pool *p, CURL *curl, const char *url,
         "error setting CURLOPT_HEADERDATA: %s",
         curl_easy_strerror(curl_code));
     }
+
+  } else {
+    (void) curl_easy_setopt(curl, CURLOPT_HEADERDATA, NULL);
   }
 
   curl_code = curl_easy_perform(curl);
@@ -370,6 +385,34 @@ int aws_http_get(pool *p, void *http, const char *url, pr_table_t *req_headers,
   }
 
   res = http_perform(p, curl, url, req_headers, resp_body, user_data, resp_code,
+    content_type, resp_headers);
+  return res;
+}
+
+int aws_http_head(pool *p, void *http, const char *url, pr_table_t *req_headers,
+    long *resp_code, const char **content_type, pr_table_t *resp_headers) {
+  int res;
+  CURL *curl;
+  CURLcode curl_code;
+
+  if (p == NULL ||
+      http == NULL ||
+      url == NULL ||
+      resp_code == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  curl = http;
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_NOBODY: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  res = http_perform(p, curl, url, req_headers, NULL, NULL, resp_code,
     content_type, resp_headers);
   return res;
 }

@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
   } else {
     requested = getenv("CK_DEFAULT_TIMEOUT");
     if (requested == NULL) {
-      setenv("CK_DEFAULT_TIMEOUT", "120", 1);
+      setenv("CK_DEFAULT_TIMEOUT", "180", 1);
     }
   }
 

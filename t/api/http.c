@@ -248,11 +248,13 @@ START_TEST (http_get_test) {
   long resp_code = 0;
   pr_table_t *resp_headers;
 
+  mark_point();
   res = aws_http_get(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   res = aws_http_get(p, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null handle");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
@@ -261,22 +263,27 @@ START_TEST (http_get_test) {
   http = aws_http_alloc(p, 3, 5, NULL);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
+  mark_point();
   res = aws_http_get(p, http, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null URL");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   url = "http://www.google.com";
+
+  mark_point();
   res = aws_http_get(p, http, url, NULL, NULL, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null response callback");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null response code");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL, NULL);
   fail_unless(res == 0, "Failed to handle GET request to '%s': %s", url,
     strerror(errno));
@@ -284,6 +291,7 @@ START_TEST (http_get_test) {
     "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
 
   /* Once more, with the Content-Type. */
+  mark_point();
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code,
     &content_type, NULL);
   fail_unless(res == 0, "Failed to handle GET request to '%s': %s", url,
@@ -296,6 +304,8 @@ START_TEST (http_get_test) {
 
   /* Once more, with the response headers. */
   resp_headers = pr_table_alloc(p, 0);
+
+  mark_point();
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code,
     &content_type, resp_headers);
   fail_unless(res == 0, "Failed to handle GET request to '%s': %s", url,
@@ -308,6 +318,8 @@ START_TEST (http_get_test) {
 
   /* Unknown/bad URL */
   url = "http://www.google.com/foo/bar/baz";
+
+  mark_point();
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL, NULL);
   fail_unless(res == 0, "Failed to handle GET request to '%s': %s", url,
     strerror(errno));
@@ -316,6 +328,8 @@ START_TEST (http_get_test) {
 
   /* Unresolvable DNS names. */
   url = "http://my.hostname.at.domain.example.com";
+
+  mark_point();
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL, NULL);
   fail_unless(res < 0, "Handled unresolvable DNS name unexpectedly");
   fail_unless(errno == ESRCH, "Expected ESRCH (%d), got %s (%d)", ESRCH,
@@ -323,6 +337,8 @@ START_TEST (http_get_test) {
 
   /* Unconnectable IP addresses */
   url = "http://1.2.3.4";
+
+  mark_point();
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL, NULL);
   fail_unless(res < 0, "Handled unreachable IP address unexpectedly");
   fail_unless(errno == ETIMEDOUT, "Expected ETIMEDOUT (%d), got %s (%d)",
@@ -330,7 +346,118 @@ START_TEST (http_get_test) {
 
   /* Unsupported URL syntax */
   url = "foo://bar:baz/42";
+
+  mark_point();
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL, NULL);
+  fail_unless(res < 0, "Handled unsupported URL syntax unexpectedly");
+  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+    strerror(errno), errno);
+
+  aws_http_destroy(p, http);
+}
+END_TEST
+
+START_TEST (http_head_test) {
+  int res;
+  void *http;
+  const char *url, *content_type = NULL;
+  long resp_code = 0;
+  pr_table_t *resp_headers;
+
+  mark_point();
+  res = aws_http_head(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_http_head(p, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null handle");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  http = aws_http_alloc(p, 3, 5, NULL);
+  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+
+  mark_point();
+  res = aws_http_head(p, http, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null URL");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  url = "http://www.google.com";
+
+  mark_point();
+  res = aws_http_head(p, http, url, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null response code");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_http_head(p, http, url, NULL, &resp_code, NULL, NULL);
+  fail_unless(res == 0, "Failed to handle HEAD request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code == AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  /* Once more, with the Content-Type. */
+  mark_point();
+  res = aws_http_head(p, http, url, NULL, &resp_code, &content_type, NULL);
+  fail_unless(res == 0, "Failed to handle HEAD request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code == AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+  fail_unless(content_type != NULL, "Failed to get Content-Type of response");
+  fail_unless(strstr(content_type, "text/html") != NULL,
+    "Expected 'text/html' in Content-Type, got '%s'", content_type);
+
+  /* Once more, with the response headers. */
+  resp_headers = pr_table_alloc(p, 0);
+
+  mark_point();
+  res = aws_http_head(p, http, url, NULL, &resp_code, &content_type,
+    resp_headers);
+  fail_unless(res == 0, "Failed to handle HEAD request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code == AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+  fail_unless(content_type != NULL, "Failed to get Content-Type of response");
+  fail_unless(strstr(content_type, "text/html") != NULL,
+    "Expected 'text/html' in Content-Type, got '%s'", content_type);
+
+  /* Unknown/bad URL */
+  url = "http://www.google.com/foo/bar/baz";
+
+  mark_point();
+  res = aws_http_head(p, http, url, NULL, &resp_code, NULL, NULL);
+  fail_unless(res == 0, "Failed to handle HEAD request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code == AWS_HTTP_RESPONSE_CODE_NOT_FOUND,
+    "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_NOT_FOUND, resp_code);
+
+  /* Unresolvable DNS names. */
+  url = "http://my.hostname.at.domain.example.com";
+
+  mark_point();
+  res = aws_http_head(p, http, url, NULL, &resp_code, NULL, NULL);
+  fail_unless(res < 0, "Handled unresolvable DNS name unexpectedly");
+  fail_unless(errno == ESRCH, "Expected ESRCH (%d), got %s (%d)", ESRCH,
+    strerror(errno), errno);
+
+  /* Unconnectable IP addresses */
+  url = "http://1.2.3.4";
+
+  mark_point();
+  res = aws_http_head(p, http, url, NULL, &resp_code, NULL, NULL);
+  fail_unless(res < 0, "Handled unreachable IP address unexpectedly");
+  fail_unless(errno == ETIMEDOUT, "Expected ETIMEDOUT (%d), got %s (%d)",
+    ETIMEDOUT, strerror(errno), errno);
+
+  /* Unsupported URL syntax */
+  url = "foo://bar:baz/42";
+
+  mark_point();
+  res = aws_http_head(p, http, url, NULL, &resp_code, NULL, NULL);
   fail_unless(res < 0, "Handled unsupported URL syntax unexpectedly");
   fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
@@ -347,12 +474,14 @@ START_TEST (http_post_test) {
   long resp_code = 0;
   pr_table_t *req_headers, *resp_headers;
 
+  mark_point();
   res = aws_http_post(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   res = aws_http_post(p, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null handle");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
@@ -361,17 +490,21 @@ START_TEST (http_post_test) {
   http = aws_http_alloc(p, 3, 5, NULL);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
+  mark_point();
   res = aws_http_post(p, http, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null URL");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   url = "http://www.google.com";
+
+  mark_point();
   res = aws_http_post(p, http, url, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null response callback");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   res = aws_http_post(p, http, url, NULL, resp_cb, NULL, NULL, NULL, NULL,
     NULL);
   fail_unless(res < 0, "Failed to handle null request body");
@@ -379,11 +512,14 @@ START_TEST (http_post_test) {
     strerror(errno), errno);
 
   req = "{ \"test\": true }\n";
+
+  mark_point();
   res = aws_http_post(p, http, url, NULL, resp_cb, NULL, req, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null response code");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  mark_point();
   res = aws_http_post(p, http, url, NULL, resp_cb, NULL, req, &resp_code,
     NULL, NULL);
   fail_unless(res == 0, "Failed to handle POST request to '%s': %s", url,
@@ -395,6 +531,7 @@ START_TEST (http_post_test) {
   pr_table_add_dup(req_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_TYPE),
     "application/json", 0);
 
+  mark_point();
   res = aws_http_post(p, http, url, req_headers, resp_cb, NULL, req, &resp_code,
     NULL, NULL);
   fail_unless(res == 0, "Failed to handle POST request to '%s': %s", url,
@@ -403,6 +540,8 @@ START_TEST (http_post_test) {
     "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
 
   resp_headers = pr_table_alloc(p, 0);
+
+  mark_point();
   res = aws_http_post(p, http, url, req_headers, resp_cb, NULL, req, &resp_code,
     NULL, resp_headers);
   fail_unless(res == 0, "Failed to handle POST request to '%s': %s", url,
@@ -429,6 +568,7 @@ Suite *tests_get_http_suite(void) {
   tcase_add_test(testcase, http_urldecode_test);
   tcase_add_test(testcase, http_urlencode_test);
   tcase_add_test(testcase, http_get_test);
+  tcase_add_test(testcase, http_head_test);
   tcase_add_test(testcase, http_post_test);
 
   suite_add_tcase(suite, testcase);

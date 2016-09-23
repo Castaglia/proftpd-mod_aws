@@ -29,7 +29,10 @@
 
 /* HTTP methods */
 #define AWS_HTTP_METHOD_GET				1
-#define AWS_HTTP_METHOD_POST				2
+#define AWS_HTTP_METHOD_HEAD				2
+#define AWS_HTTP_METHOD_POST				3
+#define AWS_HTTP_METHOD_PUT				4
+#define AWS_HTTP_METHOD_DELETE				5
 
 /* HTTP headers */
 #define AWS_HTTP_HEADER_ACCEPT				"Accept"
@@ -90,6 +93,9 @@ const char *aws_http_urldecode(pool *p, void *http, const char *item,
   size_t item_len, size_t *decoded_len);
 const char *aws_http_urlencode(pool *p, void *http, const char *item,
   size_t item_len);
+
+int aws_http_head(pool *p, void *http, const char *url, pr_table_t *req_headers,
+  long *resp_code, const char **content_type, pr_table_t *resp_headers);
 
 int aws_http_get(pool *p, void *http, const char *url, pr_table_t *req_headers,
   size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
