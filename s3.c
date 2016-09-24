@@ -1001,6 +1001,12 @@ int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
       while (k != NULL) {
         pr_signals_handle();
 
+        /* XXX TODO: We also need to copy the following system metadata:
+         *  Content-Length (size)
+         *  Last-Modified (mtime)
+         *  x-amz-storage-class
+         */
+
         if (strncasecmp(k, AWS_S3_OBJECT_METADATA_PREFIX,
             AWS_S3_OBJECT_METADATA_PREFIX_LEN) == 0) {
           const void *v;

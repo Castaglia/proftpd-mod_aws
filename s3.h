@@ -77,6 +77,16 @@ int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
   pr_table_t *object_metadata,
   int (*consume)(pool *p, void *data, off_t data_offset, off_t data_len));
 
+#if 0
+/* XXX TODO HEAD Object to get metadata */
+int aws_s3_stat_object(pool *p, struct s3_conn *s3, const char *bucket_name,
+  const char *object_key, pr_table_t *object_metadata);
+
+/* XXX TODO PUT Object; requires HTTP API support for PUT. */
+int aws_s3_put_object(pool *p, struct s3_conn *s3, const char *bucket_name,
+  const char *object_key, pr_table_t *object_metadata, ...);
+#endif
+
 #define AWS_S3_OBJECT_METADATA_PREFIX		"x-amz-meta-"
 #define AWS_S3_OBJECT_METADATA_PREFIX_LEN	11
 
