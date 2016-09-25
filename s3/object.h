@@ -40,7 +40,7 @@
 int aws_s3_object_get(pool *p, struct s3_conn *s3, const char *bucket_name,
   const char *object_key, off_t object_offset, off_t object_len,
   pr_table_t *object_metadata,
-  int (*consume)(pool *p, void *data, off_t data_offset, off_t data_len));
+  int (*consume_data)(pool *p, void *data, off_t data_offset, off_t data_len));
 
 #if 0
 /* XXX TODO HEAD Object to get metadata */
@@ -52,6 +52,12 @@ int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
   const char *object_key, pr_table_t *object_metadata, ...);
 #endif
 
+/* Names of system-defined object metadata. */
+#define AWS_S3_OBJECT_METADATA_SIZE		"Content-Length"
+#define AWS_S3_OBJECT_METADATA_MTIME		"Last-Modified"
+#define AWS_S3_OBJECT_METADATA_STORAGE_CLASS	"x-amz-storage-class"
+
+/* Prefix for user-defined object metadata. */
 #define AWS_S3_OBJECT_METADATA_PREFIX		"x-amz-meta-"
 #define AWS_S3_OBJECT_METADATA_PREFIX_LEN	11
 

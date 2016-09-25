@@ -1,5 +1,5 @@
 /*
- * ProFTPD - mod_aws S3 Errors
+ * ProFTPD - mod_aws S3 Error API
  * Copyright (c) 2016 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
