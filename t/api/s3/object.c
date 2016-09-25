@@ -210,6 +210,93 @@ START_TEST (s3_object_get_test) {
 }
 END_TEST
 
+START_TEST (s3_object_stat_test) {
+  int res, count;
+  struct s3_conn *s3;
+  const char *bucket, *key;
+  pr_table_t *metadata = NULL;
+
+  res = aws_s3_object_stat(NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_object_stat(NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null s3");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  s3 = (struct s3_conn *) 1;
+
+  mark_point();
+  res = aws_s3_object_stat(NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null bucket_name");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  bucket = "xfoo";
+
+  mark_point();
+  res = aws_s3_object_stat(NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null object_key");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  if (getenv("TRAVIS_CI") != NULL) {
+    return;
+  }
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
+
+  bucket = getenv("AWS_S3_BUCKET");
+  fail_unless(bucket != NULL,
+    "Failed to provide AWS_S3_BUCKET environment variable");
+  key = getenv("AWS_S3_OBJECT_KEY");
+  fail_unless(key != NULL,
+    "Failed to provide AWS_S3_OBJECT_KEY environment variable");
+
+  metadata = pr_table_alloc(p, 0);
+
+  /* No such bucket. */
+
+  mark_point();
+  res = aws_s3_object_stat(p, s3, "NO_SUCH_BUCKET", key, metadata);
+  fail_unless(res < 0, "Failed to handle invalid bucket NO_SUCH_BUCKET");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  /* No such key. */
+
+  mark_point();
+  res = aws_s3_object_stat(p, s3, bucket, "NO_SUCH_KEY", metadata);
+  fail_unless(res < 0, "Failed to handle invalid key NO_SUCH_KEY");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  /* Check for existence; don't care about metadata. */
+  pr_table_empty(metadata);
+
+  mark_point();
+  res = aws_s3_object_stat(p, s3, bucket, key, NULL);
+  fail_unless(res == 0, "Failed to stat object %s from bucket %s: %s", key,
+    bucket, strerror(errno));
+
+  /* Get the object metadata, too. */
+  pr_table_empty(metadata);
+
+  mark_point();
+  res = aws_s3_object_stat(p, s3, bucket, key, metadata);
+  fail_unless(res == 0, "Failed to stat object %s from bucket %s: %s", key,
+    bucket, strerror(errno));
+  count = pr_table_count(metadata);
+  fail_unless(count > 0, "Expected >0, got %d", count);
+
+  (void) aws_s3_conn_destroy(p, s3);
+}
+END_TEST
+
 Suite *tests_get_s3_object_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -220,6 +307,7 @@ Suite *tests_get_s3_object_suite(void) {
   tcase_add_checked_fixture(testcase, set_up, tear_down);
 
   tcase_add_test(testcase, s3_object_get_test);
+  tcase_add_test(testcase, s3_object_stat_test);
 
   suite_add_tcase(suite, testcase);
   return suite;

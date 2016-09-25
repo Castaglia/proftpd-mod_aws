@@ -42,11 +42,11 @@ int aws_s3_object_get(pool *p, struct s3_conn *s3, const char *bucket_name,
   pr_table_t *object_metadata,
   int (*consume_data)(pool *p, void *data, off_t data_offset, off_t data_len));
 
-#if 0
-/* XXX TODO HEAD Object to get metadata */
+/* Obtain the metadata for the given object in the specified bucket. */
 int aws_s3_object_stat(pool *p, struct s3_conn *s3, const char *bucket_name,
   const char *object_key, pr_table_t *object_metadata);
 
+#if 0
 /* XXX TODO PUT Object; requires HTTP API support for PUT. */
 int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
   const char *object_key, pr_table_t *object_metadata, ...);

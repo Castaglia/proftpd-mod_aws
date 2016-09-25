@@ -220,3 +220,56 @@ int aws_s3_object_get(pool *p, struct s3_conn *s3, const char *bucket_name,
   errno = xerrno;
   return res;
 }
+
+int aws_s3_object_stat(pool *p, struct s3_conn *s3, const char *bucket_name,
+    const char *object_key, pr_table_t *object_metadata) {
+  int res, xerrno;
+  const char *path;
+  pool *req_pool;
+  array_header *query_params;
+  pr_table_t *resp_headers = NULL;
+
+  if (p == NULL ||
+      s3 == NULL ||
+      bucket_name == NULL ||
+      object_key == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  req_pool = make_sub_pool(s3->pool);
+  pr_pool_tag(req_pool, "S3 Object Request Pool");
+  s3->req_pool = req_pool;
+
+  path = pstrcat(req_pool,
+    "/", aws_http_urlencode(req_pool, s3->http, bucket_name, 0),
+    "/", aws_http_urlencode(req_pool, s3->http, object_key, 0), NULL);
+
+  query_params = make_array(req_pool, 1, sizeof(char *));
+
+  if (object_metadata != NULL) {
+    resp_headers = pr_table_alloc(s3->req_pool, 0);
+  }
+
+  res = aws_s3_head(p, s3->http, NULL, path, query_params, resp_headers, s3);
+  xerrno = errno;
+
+  if (res == 0) {
+    pr_trace_msg(trace_channel, 19,
+      "successfully checked object %s in bucket %s", object_key, bucket_name);
+
+    if (resp_headers != NULL) {
+      if (pr_trace_get_level(trace_channel) >= 17) {
+        pr_trace_msg(trace_channel, 17, "object %s response header count: %d",
+          object_key, pr_table_count(resp_headers));
+      }
+    }
+
+    copy_object_metadata(p, object_key, object_metadata, resp_headers);
+  }
+
+  aws_s3_conn_clear_response(s3);
+
+  errno = xerrno;
+  return res;
+}
