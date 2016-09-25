@@ -1,0 +1,28 @@
+
+When handling file uploads, consider:
+
+  minimum size threshold of file (on local disk) BEFORE uploading to S3;
+  below this threshold, use single PUT to upload to S3.  Configurable?
+
+  Above 5GB, multipart uploads MUST be used.
+
+  SFTP uploads will have to use multipart uploads, right?  Will mod_aws
+  need to maintain a list of "initiated" multipart S3 uploads, such that on
+  session exit, they can be aborted, similar to what mod_sftp does?
+
+S3 FSIO:
+
+  use of struct stat, and mapping to/from object metadata, happens in
+  this API, *not* in the S3 object API.
+
+  xattr support, and S3 limits on request headers (when setting metadata).
+
+  How does s3fs encode/store its file metadata?  Have they encountered any
+  gotchas that I'll want to know about?  Should mod_aws_s3 maintain
+  interoperability with the other metadata headers that tools like s3fs,
+  s3cmd, s3sync, etc maintain?
+
+FTP/SFTP mapping:
+
+  Initially, have PRE_CMD handler for STOR, which blocks any resumed uploads;
+  it's not (easily) possible for FTP/SFTP.
