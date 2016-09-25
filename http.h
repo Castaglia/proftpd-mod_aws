@@ -62,6 +62,7 @@
 #define AWS_HTTP_RESPONSE_CODE_UNAUTHORIZED		401L
 #define AWS_HTTP_RESPONSE_CODE_FORBIDDEN		403L
 #define AWS_HTTP_RESPONSE_CODE_NOT_FOUND		404L
+#define AWS_HTTP_RESPONSE_CODE_METHOD_NOT_ALLOWED	405L
 #define AWS_HTTP_RESPONSE_CODE_PRECONDITION_FAILED	412L
 #define AWS_HTTP_RESPONSE_CODE_TOO_MANY_REQUESTS	429L
 
@@ -95,6 +96,9 @@ const char *aws_http_urldecode(pool *p, void *http, const char *item,
   size_t item_len, size_t *decoded_len);
 const char *aws_http_urlencode(pool *p, void *http, const char *item,
   size_t item_len);
+
+int aws_http_delete(pool *p, void *http, const char *url,
+  pr_table_t *req_headers, long *resp_code, pr_table_t *resp_headers);
 
 int aws_http_head(pool *p, void *http, const char *url, pr_table_t *req_headers,
   long *resp_code, const char **content_type, pr_table_t *resp_headers);

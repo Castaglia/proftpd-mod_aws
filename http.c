@@ -137,6 +137,7 @@ const char *aws_http_urlencode(pool *p, void *http, const char *item,
 }
 
 static void clear_http_method(CURL *curl) {
+  (void) curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, NULL);
   (void) curl_easy_setopt(curl, CURLOPT_NOBODY, 0L);
   (void) curl_easy_setopt(curl, CURLOPT_HTTPGET, 0L);
   (void) curl_easy_setopt(curl, CURLOPT_HTTPPOST, 0L);
@@ -145,7 +146,8 @@ static void clear_http_method(CURL *curl) {
   (void) curl_easy_setopt(curl, CURLOPT_UPLOAD, 0L);
 
   /* Reset the various IO callbacks/arguments, too. */
-
+  (void) curl_easy_setopt(curl, CURLOPT_HEADERDATA, NULL);
+  (void) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, NULL);
   (void) curl_easy_setopt(curl, CURLOPT_READDATA, NULL);
   (void) curl_easy_setopt(curl, CURLOPT_READFUNCTION, NULL);
   (void) curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
@@ -216,9 +218,6 @@ static int http_perform(pool *p, CURL *curl, const char *url,
         "error setting CURLOPT_HTTPHEADER: %s",
         curl_easy_strerror(curl_code));
     }
-
-  } else {
-    (void) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, NULL);
   }
 
   /* Clear error buffer, response message before performing request,
@@ -241,9 +240,6 @@ static int http_perform(pool *p, CURL *curl, const char *url,
         "error setting CURLOPT_HEADERDATA: %s",
         curl_easy_strerror(curl_code));
     }
-
-  } else {
-    (void) curl_easy_setopt(curl, CURLOPT_HEADERDATA, NULL);
   }
 
   curl_code = curl_easy_perform(curl);
@@ -369,6 +365,47 @@ static int http_perform(pool *p, CURL *curl, const char *url,
   }
 
   return 0;
+}
+
+static size_t delete_body_cb(char *data, size_t itemsz, size_t item_count,
+    void *user_data) {
+  size_t datasz;
+
+  (void) user_data;
+  datasz = itemsz * item_count;
+
+  return datasz;
+}
+
+int aws_http_delete(pool *p, void *http, const char *url,
+    pr_table_t *req_headers, long *resp_code, pr_table_t *resp_headers) {
+  int res;
+  CURL *curl;
+  CURLcode curl_code;
+
+  if (p == NULL ||
+      http == NULL ||
+      url == NULL ||
+      resp_code == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  curl = http;
+
+  clear_http_method(curl);
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST,
+    pstrdup(p, "DELETE"));
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_CUSTOMREQUEST: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  res = http_perform(p, curl, url, req_headers, delete_body_cb, NULL,
+    resp_code, NULL, resp_headers);
+  return res;
 }
 
 int aws_http_get(pool *p, void *http, const char *url, pr_table_t *req_headers,
@@ -717,6 +754,7 @@ static int http_trace_cb(CURL *curl, curl_infotype data_type, char *data,
 
     case CURLINFO_SSL_DATA_IN:
     case CURLINFO_SSL_DATA_OUT:
+      /* Ignore these. */
       break;
 
     default:

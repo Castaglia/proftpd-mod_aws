@@ -653,6 +653,73 @@ START_TEST (http_put_test) {
 }
 END_TEST
 
+START_TEST (http_delete_test) {
+  int res;
+  void *http;
+  const char *url;
+  long resp_code = 0;
+  pr_table_t *req_headers, *resp_headers;
+
+  mark_point();
+  res = aws_http_delete(NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_http_delete(p, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null handle");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  http = aws_http_alloc(p, 3, 5, NULL);
+  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+
+  mark_point();
+  res = aws_http_delete(p, http, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null URL");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  url = "http://www.google.com";
+
+  mark_point();
+  res = aws_http_delete(p, http, url, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null response code");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_http_delete(p, http, url, NULL, &resp_code, NULL);
+  fail_unless(res == 0, "Failed to handle DELETE request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  req_headers = aws_http_default_headers(p, NULL);
+  pr_table_add_dup(req_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_TYPE),
+    "application/json", 0);
+
+  mark_point();
+  res = aws_http_delete(p, http, url, req_headers, &resp_code, NULL);
+  fail_unless(res == 0, "Failed to handle DELETE request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  resp_headers = pr_table_alloc(p, 0);
+
+  mark_point();
+  res = aws_http_delete(p, http, url, req_headers, &resp_code, resp_headers);
+  fail_unless(res == 0, "Failed to handle DELETE request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  aws_http_destroy(p, http);
+}
+END_TEST
+
 Suite *tests_get_http_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -671,6 +738,7 @@ Suite *tests_get_http_suite(void) {
   tcase_add_test(testcase, http_head_test);
   tcase_add_test(testcase, http_post_test);
   tcase_add_test(testcase, http_put_test);
+  tcase_add_test(testcase, http_delete_test);
 
   suite_add_tcase(suite, testcase);
   return suite;
