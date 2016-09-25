@@ -136,6 +136,22 @@ const char *aws_http_urlencode(pool *p, void *http, const char *item,
   return encoded_item;
 }
 
+static void clear_http_method(CURL *curl) {
+  (void) curl_easy_setopt(curl, CURLOPT_NOBODY, 0L);
+  (void) curl_easy_setopt(curl, CURLOPT_HTTPGET, 0L);
+  (void) curl_easy_setopt(curl, CURLOPT_HTTPPOST, 0L);
+  (void) curl_easy_setopt(curl, CURLOPT_POSTFIELDS, NULL);
+  (void) curl_easy_setopt(curl, CURLOPT_PUT, 0L);
+  (void) curl_easy_setopt(curl, CURLOPT_UPLOAD, 0L);
+
+  /* Reset the various IO callbacks/arguments, too. */
+
+  (void) curl_easy_setopt(curl, CURLOPT_READDATA, NULL);
+  (void) curl_easy_setopt(curl, CURLOPT_READFUNCTION, NULL);
+  (void) curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
+  (void) curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, NULL);
+}
+
 static void clear_http_response(void) {
   if (http_resp_pool != NULL) {
     destroy_pool(http_resp_pool);
@@ -179,16 +195,8 @@ static int http_perform(pool *p, CURL *curl, const char *url,
         errno = EINVAL;
         return -1;
       }
-
-    } else {
-      (void) curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
     }
-
-  } else {
-    (void) curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, NULL);
-    (void) curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
   }
-
 
   if (req_headers != NULL) {
     register unsigned int i;
@@ -381,9 +389,7 @@ int aws_http_get(pool *p, void *http, const char *url, pr_table_t *req_headers,
 
   curl = http;
 
-  (void) curl_easy_setopt(curl, CURLOPT_NOBODY, 0L);
-  (void) curl_easy_setopt(curl, CURLOPT_HTTPPOST, 0L);
-  (void) curl_easy_setopt(curl, CURLOPT_POSTFIELDS, NULL);
+  clear_http_method(curl);
 
   curl_code = curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
   if (curl_code != CURLE_OK) {
@@ -413,9 +419,7 @@ int aws_http_head(pool *p, void *http, const char *url, pr_table_t *req_headers,
 
   curl = http;
 
-  (void) curl_easy_setopt(curl, CURLOPT_HTTPGET, 0L);
-  (void) curl_easy_setopt(curl, CURLOPT_HTTPPOST, 0L);
-  (void) curl_easy_setopt(curl, CURLOPT_POSTFIELDS, NULL);
+  clear_http_method(curl);
 
   curl_code = curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
   if (curl_code != CURLE_OK) {
@@ -449,8 +453,7 @@ int aws_http_post(pool *p, void *http, const char *url, pr_table_t *req_headers,
 
   curl = http;
 
-  (void) curl_easy_setopt(curl, CURLOPT_HTTPGET, 0L);
-  (void) curl_easy_setopt(curl, CURLOPT_NOBODY, 0L);
+  clear_http_method(curl);
 
   curl_code = curl_easy_setopt(curl, CURLOPT_POST, 1L);
   if (curl_code != CURLE_OK) {
@@ -458,6 +461,11 @@ int aws_http_post(pool *p, void *http, const char *url, pr_table_t *req_headers,
       "error setting CURLOPT_POST: %s",
       curl_easy_strerror(curl_code));
   }
+
+  /* Note: libcurl will determine the length of req_body itself when using
+   * CURLOPT_POSTFIELDS, thus we do not require the caller to explicitly
+   * provide us the length of req_body.
+   */
 
   curl_code = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, req_body);
   if (curl_code != CURLE_OK) {
@@ -467,6 +475,114 @@ int aws_http_post(pool *p, void *http, const char *url, pr_table_t *req_headers,
   }
 
   /* Disable curl's sending of the Expect request header for POSTs. */
+  (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_EXPECT),
+    pstrdup(p, ""), 0);
+
+  res = http_perform(p, curl, url, req_headers, resp_body, user_data, resp_code,
+    content_type, resp_headers);
+  return res;
+}
+
+struct http_uploader {
+  /* Pointer/length of the unread body to be uploaded. */
+  char *data;
+  off_t datasz;
+};
+
+static size_t http_put_cb(void *buf, size_t itemsz, size_t item_count,
+    void *user_data) {
+  size_t bufsz, len;
+  struct http_uploader *uploader;
+
+  bufsz = itemsz * item_count;
+  uploader = user_data;
+
+  /* Copy the smaller of the buffer size, or the data remaining.  If data
+   * remaining is zero, we're done.
+   */
+
+  len = uploader->datasz;
+  if (len == 0) {
+    pr_trace_msg(trace_channel, 17, "%s", "finished uploaded");
+    return 0;
+  }
+
+  if (len > bufsz) {
+    len = bufsz;
+  }
+
+  memcpy(buf, uploader->data, len);
+  uploader->data += len;
+  uploader->datasz -= len;
+
+  pr_trace_msg(trace_channel, 17, "uploaded %lu bytes", (unsigned long) len);
+  return len;
+}
+
+int aws_http_put(pool *p, void *http, const char *url, pr_table_t *req_headers,
+    size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
+    char *req_body, off_t req_bodylen, long *resp_code,
+    const char **content_type, pr_table_t *resp_headers) {
+  int res;
+  CURL *curl;
+  CURLcode curl_code;
+  struct http_uploader *uploader;
+
+  if (p == NULL ||
+      http == NULL ||
+      url == NULL ||
+      resp_body == NULL ||
+      req_body == NULL ||
+      resp_code == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  curl = http;
+
+  clear_http_method(curl);
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_PUT, 1L);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_PUT: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_UPLOAD: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  uploader = palloc(p, sizeof(struct http_uploader));
+  uploader->data = req_body;
+  uploader->datasz = req_bodylen;
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_READFUNCTION, http_put_cb);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_READFUNCTION: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_READDATA, (void *) uploader);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_READDATA: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  curl_code = curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE,
+    (curl_off_t) req_bodylen);
+  if (curl_code != CURLE_OK) {
+    pr_trace_msg(trace_channel, 1,
+      "error setting CURLOPT_INFILESIZE_LARGE: %s",
+      curl_easy_strerror(curl_code));
+  }
+
+  /* Disable curl's sending of the Expect request header for PUTs. */
   (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_EXPECT),
     pstrdup(p, ""), 0);
 
@@ -677,18 +793,6 @@ void *aws_http_alloc(pool *p, unsigned long max_connect_secs,
       "error setting CURLOPT_HTTP_VERSION: %s",
       curl_easy_strerror(curl_code));
   }
-
-#if 0
-  /* Note: adding this header here, without accounting for it during
-   * signature generation, causes issues.
-   */
-  curl_code = curl_easy_setopt(curl, CURLOPT_USERAGENT, MOD_AWS_VERSION);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_USERAGENT: %s",
-      curl_easy_strerror(curl_code));
-  }
-#endif
 
   /* SSL-isms. */
 

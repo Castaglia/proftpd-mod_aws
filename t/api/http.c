@@ -553,6 +553,106 @@ START_TEST (http_post_test) {
 }
 END_TEST
 
+START_TEST (http_put_test) {
+  int res;
+  void *http;
+  char *req;
+  off_t reqlen;
+  const char *url;
+  long resp_code = 0;
+  pr_table_t *req_headers, *resp_headers;
+
+  mark_point();
+  res = aws_http_put(NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL,
+    NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_http_put(p, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL,
+    NULL);
+  fail_unless(res < 0, "Failed to handle null handle");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  http = aws_http_alloc(p, 3, 5, NULL);
+  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+
+  mark_point();
+  res = aws_http_put(p, http, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL,
+    NULL);
+  fail_unless(res < 0, "Failed to handle null URL");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  url = "http://www.google.com";
+
+  mark_point();
+  res = aws_http_put(p, http, url, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null response callback");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_http_put(p, http, url, NULL, resp_cb, NULL, NULL, 0, NULL, NULL,
+    NULL);
+  fail_unless(res < 0, "Failed to handle null request body");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  req = "{ \"test\": true }\n";
+
+  mark_point();
+  res = aws_http_put(p, http, url, NULL, resp_cb, NULL, req, 0, NULL, NULL,
+    NULL);
+  fail_unless(res < 0, "Failed to handle null response code");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_http_put(p, http, url, NULL, resp_cb, NULL, req, 0, &resp_code,
+    NULL, NULL);
+  fail_unless(res == 0, "Failed to handle PUT request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  req_headers = aws_http_default_headers(p, NULL);
+  pr_table_add_dup(req_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_TYPE),
+    "application/json", 0);
+
+  mark_point();
+  res = aws_http_put(p, http, url, req_headers, resp_cb, NULL, req, 0,
+    &resp_code, NULL, NULL);
+  fail_unless(res == 0, "Failed to handle PUT request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  mark_point();
+  reqlen = strlen(req);
+  res = aws_http_put(p, http, url, req_headers, resp_cb, NULL, req, reqlen,
+    &resp_code, NULL, NULL);
+  fail_unless(res == 0, "Failed to handle PUT request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  resp_headers = pr_table_alloc(p, 0);
+
+  mark_point();
+  res = aws_http_put(p, http, url, req_headers, resp_cb, NULL, req, reqlen,
+    &resp_code, NULL, resp_headers);
+  fail_unless(res == 0, "Failed to handle PUT request to '%s': %s", url,
+    strerror(errno));
+  fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
+    "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
+
+  aws_http_destroy(p, http);
+}
+END_TEST
+
 Suite *tests_get_http_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -570,6 +670,7 @@ Suite *tests_get_http_suite(void) {
   tcase_add_test(testcase, http_get_test);
   tcase_add_test(testcase, http_head_test);
   tcase_add_test(testcase, http_post_test);
+  tcase_add_test(testcase, http_put_test);
 
   suite_add_tcase(suite, testcase);
   return suite;
