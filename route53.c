@@ -246,6 +246,7 @@ static int route53_get(pool *p, void *http, const char *path,
       return -1;
 
     case AWS_HTTP_RESPONSE_CODE_FORBIDDEN:
+    case AWS_HTTP_RESPONSE_CODE_METHOD_NOT_ALLOWED:
       errno = EPERM;
       return -1;
 

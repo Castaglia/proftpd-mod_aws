@@ -351,6 +351,7 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
       return -1;
 
     case AWS_HTTP_RESPONSE_CODE_FORBIDDEN:
+    case AWS_HTTP_RESPONSE_CODE_METHOD_NOT_ALLOWED:
     case AWS_HTTP_RESPONSE_CODE_PRECONDITION_FAILED:
       errno = EPERM;
       return -1;
