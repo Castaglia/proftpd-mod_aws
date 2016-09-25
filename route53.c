@@ -154,7 +154,7 @@ static int route53_get(pool *p, void *http, const char *path,
   res = aws_sign_v4_generate(p,
     route53->iam_info->access_key_id, route53->iam_info->secret_access_key,
     route53->iam_info->token, aws_region, aws_service, http, "GET", path,
-    query_params, http_headers, "", request_time);
+    query_params, http_headers, "", 0, request_time);
   if (res < 0) {
     int xerrno = errno;
 

@@ -55,6 +55,10 @@ int aws_s3_conn_destroy(pool *p, struct s3_conn *s3);
 
 void aws_s3_conn_clear_response(struct s3_conn *s3);
 
+int aws_s3_delete(pool *p, void *http, pr_table_t *http_headers,
+  const char *path, array_header *query_params, pr_table_t *resp_headers,
+  struct s3_conn *s3);
+
 int aws_s3_get(pool *p, void *http, pr_table_t *http_headers, const char *path,
   array_header *query_params, pr_table_t *resp_headers,
   size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
@@ -64,7 +68,14 @@ int aws_s3_head(pool *p, void *http, pr_table_t *http_headers, const char *path,
   array_header *query_params, pr_table_t *resp_headers, struct s3_conn *s3);
 
 int aws_s3_post(pool *p, void *http, pr_table_t *http_headers, const char *path,
-  array_header *query_params, char *req_body, pr_table_t *resp_headers,
+  array_header *query_params, char *req_body, off_t req_bodysz,
+  pr_table_t *resp_headers,
+  size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
+  struct s3_conn *s3);
+
+int aws_s3_put(pool *p, void *http, pr_table_t *http_headers, const char *path,
+  array_header *query_params, char *req_body, off_t req_bodylen,
+  pr_table_t *resp_headers,
   size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
   struct s3_conn *s3);
 

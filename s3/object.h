@@ -46,11 +46,12 @@ int aws_s3_object_get(pool *p, struct s3_conn *s3, const char *bucket_name,
 int aws_s3_object_stat(pool *p, struct s3_conn *s3, const char *bucket_name,
   const char *object_key, pr_table_t *object_metadata);
 
-#if 0
-/* XXX TODO PUT Object; requires HTTP API support for PUT. */
+/* Store an object in the specified bucket in a single request. */
 int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
-  const char *object_key, pr_table_t *object_metadata, ...);
-#endif
+  const char *object_key, pr_table_t *object_metadata, char *req_body,
+  off_t req_bodylen);
+
+/* XXX TODO: Functions for multipart object uploads. */
 
 /* Names of system-defined object metadata. */
 #define AWS_S3_OBJECT_METADATA_SIZE		"Content-Length"

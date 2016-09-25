@@ -163,7 +163,7 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
   res = aws_sign_v4_generate(p,
     ec2->iam_info->access_key_id, ec2->iam_info->secret_access_key,
     ec2->iam_info->token, ec2->region, aws_service, http, method_name, path,
-    query_params, http_headers, request_body, request_time);
+    query_params, http_headers, request_body, 0, request_time);
   if (res < 0) {
     int xerrno = errno;
 

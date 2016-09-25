@@ -149,7 +149,7 @@ static int s3_http_error(long resp_code) {
 
 static int s3_perform(pool *p, void *http, int http_method, const char *path,
     array_header *query_params, pr_table_t *req_headers, char *request_body,
-    time_t request_time, pr_table_t *resp_headers,
+    off_t request_bodysz, time_t request_time, pr_table_t *resp_headers,
     size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
     struct s3_conn *s3) {
   int res;
@@ -169,6 +169,14 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
 
     case AWS_HTTP_METHOD_POST:
       method_name = "POST";
+      break;
+
+    case AWS_HTTP_METHOD_PUT:
+      method_name = "PUT";
+      break;
+
+    case AWS_HTTP_METHOD_DELETE:
+      method_name = "DELETE";
       break;
 
     default:
@@ -193,14 +201,12 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
    */
 
   if (request_body != NULL) {
-    size_t request_bodylen;
-
-    request_bodylen = strlen(request_body);
-    if (SHA256((unsigned char *) request_body, request_bodylen,
+    request_bodysz = (off_t) strlen(request_body);
+    if (SHA256((unsigned char *) request_body, (size_t) request_bodysz,
         request_digest) == NULL) {
       pr_trace_msg(trace_channel, 2,
         "error calculating SHA256 digest of request payload (%lu bytes)",
-        (unsigned long) request_bodylen);
+        (unsigned long) request_bodysz);
       errno = EINVAL;
       return -1;
     }
@@ -238,7 +244,7 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
 
   res = aws_sign_v4_generate(p, s3->access_key_id, s3->secret_access_key,
     s3->session_token, s3->region, aws_service, http, method_name, path,
-    query_params, req_headers, request_body, request_time);
+    query_params, req_headers, request_body, request_bodysz, request_time);
   if (res < 0) {
     int xerrno = errno;
 
@@ -268,6 +274,16 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
     case AWS_HTTP_METHOD_POST:
       res = aws_http_post(p, http, url, req_headers, resp_body, user_data,
         request_body, &resp_code, &content_type, resp_headers);
+      break;
+
+    case AWS_HTTP_METHOD_PUT:
+      res = aws_http_put(p, http, url, req_headers, resp_body, user_data,
+        request_body, request_bodysz, &resp_code, &content_type, resp_headers);
+      break;
+
+    case AWS_HTTP_METHOD_DELETE:
+      res = aws_http_delete(p, http, url, req_headers, &resp_code,
+        resp_headers);
       break;
   }
 
@@ -415,7 +431,7 @@ int aws_s3_get(pool *p, void *http, pr_table_t *http_headers, const char *path,
 
   req_headers = s3_http_headers(p, gmt_tm, http_headers);
   res = s3_perform(p, http, AWS_HTTP_METHOD_GET, path, query_params,
-    req_headers, NULL, request_time, resp_headers, resp_body, user_data, s3);
+    req_headers, NULL, 0, request_time, resp_headers, resp_body, user_data, s3);
   return res;
 }
 
@@ -450,12 +466,13 @@ int aws_s3_head(pool *p, void *http, pr_table_t *http_headers, const char *path,
 
   req_headers = s3_http_headers(p, gmt_tm, http_headers);
   res = s3_perform(p, http, AWS_HTTP_METHOD_HEAD, path, query_params,
-    req_headers, NULL, request_time, resp_headers, NULL, NULL, s3);
+    req_headers, NULL, 0, request_time, resp_headers, NULL, NULL, s3);
   return res;
 }
 
 int aws_s3_post(pool *p, void *http, pr_table_t *http_headers, const char *path,
-    array_header *query_params, char *req_body, pr_table_t *resp_headers,
+    array_header *query_params, char *req_body, off_t req_bodysz,
+    pr_table_t *resp_headers,
     size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
     struct s3_conn *s3) {
   int res;
@@ -493,19 +510,21 @@ int aws_s3_post(pool *p, void *http, pr_table_t *http_headers, const char *path,
 
   if (req_body == NULL) {
     content_len = pstrdup(p, "0");
+     req_bodysz = 0;
 
   } else {
-    size_t req_bodysz;
+    if (req_bodysz == 0) {
+      req_bodysz = (off_t) strlen(req_body);
+    }
 
-    req_bodysz = strlen(req_body);
-    content_len = aws_utils_str_ul2s(p, (unsigned long) req_bodysz);
+    content_len = aws_utils_str_off2s(p, req_bodysz);
   }
 
   (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_LEN),
     content_len, 0);
 
   res = s3_perform(p, http, AWS_HTTP_METHOD_POST, path, query_params,
-    req_headers, req_body, request_time, resp_headers, resp_body, user_data,
-    s3);
+    req_headers, req_body, req_bodysz, request_time, resp_headers, resp_body,
+    user_data, s3);
   return res;
 }

@@ -31,6 +31,6 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
   const char *secret_access_key, const char *token, const char *region,
   const char *service, void *http, const char *http_method,
   const char *http_path, array_header *query_params, pr_table_t *http_headers,
-  const char *http_body, time_t request_time);
+  const char *http_body, off_t http_bodysz, time_t request_time);
 
 #endif /* MOD_AWS_SIGN_H */

@@ -64,14 +64,14 @@ START_TEST (sign_v4_generate_invalid_params_test) {
 
   mark_point();
   res = aws_sign_v4_generate(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL, 0);
+    NULL, NULL, NULL, NULL, 0, 0);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = aws_sign_v4_generate(p, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL, 0);
+    NULL, NULL, NULL, NULL, 0, 0);
   fail_unless(res < 0, "Failed to handle null access key ID");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -79,7 +79,7 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   access_key_id = "ACCESS_KEY_ID";
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, NULL, NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL, NULL, 0);
+    NULL, NULL, NULL, NULL, NULL, 0, 0);
   fail_unless(res < 0, "Failed to handle null secret access key");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -87,7 +87,7 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   secret_access_key = "SECRET_ACCESS_KEY";
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, NULL, NULL,
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0);
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0);
   fail_unless(res < 0, "Failed to handle null region");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -96,7 +96,7 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   region = "us-west-2";
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0);
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0);
   fail_unless(res < 0, "Failed to handle null service");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -104,7 +104,7 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   service = "ec2";
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
-    service, NULL, NULL, NULL, NULL, NULL, NULL, 0);
+    service, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0);
   fail_unless(res < 0, "Failed to handle null HTTP handle");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -114,7 +114,7 @@ START_TEST (sign_v4_generate_invalid_params_test) {
 
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
-    service, http, NULL, NULL, NULL, NULL, NULL, 0);
+    service, http, NULL, NULL, NULL, NULL, NULL, 0, 0);
   fail_unless(res < 0, "Failed to handle null HTTP method");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -122,7 +122,7 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   http_method = "GET";
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
-    service, http, http_method, NULL, NULL, NULL, NULL, 0);
+    service, http, http_method, NULL, NULL, NULL, NULL, 0, 0);
   fail_unless(res < 0, "Failed to handle null HTTP path");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -130,7 +130,7 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   http_path = "/";
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
-    service, http, http_method, http_path, NULL, NULL, NULL, 0);
+    service, http, http_method, http_path, NULL, NULL, NULL, 0, 0);
   fail_unless(res < 0, "Failed to handle null query params");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -138,7 +138,7 @@ START_TEST (sign_v4_generate_invalid_params_test) {
   query_params = make_array(p, 0, sizeof(char *));
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
-    service, http, http_method, http_path, query_params, NULL, NULL, 0);
+    service, http, http_method, http_path, query_params, NULL, NULL, 0, 0);
   fail_unless(res < 0, "Failed to handle null headers");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -169,7 +169,8 @@ START_TEST (sign_v4_generate_valid_params_test) {
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
-    service, http, http_method, http_path, query_params, http_headers, NULL, 0);
+    service, http, http_method, http_path, query_params, http_headers, NULL,
+    0, 0);
   fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
 
   mark_point();
@@ -185,7 +186,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
     service, http, http_method, http_path, query_params, http_headers,
-    http_body, 0);
+    http_body, strlen(http_body), 0);
   fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
 
   signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
@@ -201,7 +202,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
     service, http, http_method, http_path, query_params, http_headers,
-    http_body, 0);
+    http_body, 0, 0);
   fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
 
   signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
@@ -224,7 +225,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
     service, http, http_method, http_path, query_params, http_headers,
-    http_body, 0);
+    http_body, 0, 0);
   fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
 
   signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
@@ -241,7 +242,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
     service, http, http_method, http_path, query_params, http_headers,
-    http_body, 0);
+    http_body, strlen(http_body), 0);
   fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
 
   signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
@@ -260,7 +261,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
     service, http, http_method, http_path, query_params, http_headers,
-    http_body, 0);
+    http_body, 0, 0);
   fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
 
   signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
