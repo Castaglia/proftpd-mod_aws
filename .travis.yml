@@ -22,6 +22,8 @@ install:
   - gem install coveralls-lcov
   # for reference
   - curl --version
+  - gcc --version
+  - make --version
   - xml2-config --cflags --libs
 
 before_script:
