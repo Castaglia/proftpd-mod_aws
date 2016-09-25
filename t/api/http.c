@@ -233,6 +233,40 @@ START_TEST (http_urlencode_test) {
 }
 END_TEST
 
+START_TEST (http_date_test) {
+  time_t res, expected;
+  const char *http_date;
+
+  mark_point();
+  res = aws_http_date(NULL, NULL);
+  fail_unless(res == 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_http_date(p, NULL);
+  fail_unless(res == 0, "Failed to handle null http_date");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  http_date = "foo";
+
+  mark_point();
+  res = aws_http_date(p, http_date);
+  fail_unless(res == 0, "Failed to handle invalid date '%s'", http_date);
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  http_date = "Fri, 23 Oct 2015 22:18:22 GMT";
+  expected = 1445638702;
+
+  mark_point();
+  res = aws_http_date(p, http_date);
+  fail_unless(res == expected, "Expected %lu, got %lu",
+    (unsigned long) expected, (unsigned long) res);
+}
+END_TEST
+
 static size_t resp_cb(char *item, size_t item_len, size_t item_count,
     void *user_data) {
   size_t data_len;
@@ -734,6 +768,7 @@ Suite *tests_get_http_suite(void) {
   tcase_add_test(testcase, http_default_headers_test);
   tcase_add_test(testcase, http_urldecode_test);
   tcase_add_test(testcase, http_urlencode_test);
+  tcase_add_test(testcase, http_date_test);
   tcase_add_test(testcase, http_get_test);
   tcase_add_test(testcase, http_head_test);
   tcase_add_test(testcase, http_post_test);

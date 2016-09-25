@@ -136,6 +136,40 @@ const char *aws_http_urlencode(pool *p, void *http, const char *item,
   return encoded_item;
 }
 
+time_t aws_http_date(pool *p, const char *http_date) {
+  struct tm *tm;
+  time_t date;
+  char *ptr;
+
+  if (p == NULL ||
+      http_date == NULL) {
+    errno = EINVAL;
+    return 0;
+  }
+
+  tm = pcalloc(p, sizeof(struct tm));
+  ptr = strptime(http_date, "%a, %d %b %Y %H:%M:%S %Z", tm);
+  if (ptr == NULL) {
+    int xerrno = errno;
+
+    pr_trace_msg(trace_channel, 3, "unable to parse HTTP date '%s': %s",
+      http_date, strerror(xerrno));
+
+    errno = xerrno;
+    return 0;
+  }
+
+  /* XXX Beware that mktime(3) has the same TZ-sensitive as other time-related
+   * library functions.  If we ASSUME that this function will only EVER be
+   * called after authentication, e.g. post-chroot, then it SHOULD be safe.
+   */
+  date = mktime(tm);
+
+  pr_trace_msg(trace_channel, 17, "parsed HTTP date '%s' as Unix epoch %lu",
+    http_date, (unsigned long) date);
+  return date;
+}
+
 static void clear_http_method(CURL *curl) {
   (void) curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, NULL);
   (void) curl_easy_setopt(curl, CURLOPT_NOBODY, 0L);
