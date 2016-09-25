@@ -154,6 +154,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
   void *http;
   pr_table_t *http_headers;
   array_header *query_params;
+  size_t http_bodysz;
 
   access_key_id = "ACCESS_KEY_ID";
   secret_access_key = "SECRET_ACCESS_KEY";
@@ -236,13 +237,14 @@ START_TEST (sign_v4_generate_valid_params_test) {
 
   http_headers = pr_table_alloc(p, 0);
   http_path = "/";
+  http_bodysz = 0;
   query_params = make_array(p, 0, sizeof(char *));
   token = NULL;
 
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
     service, http, http_method, http_path, query_params, http_headers,
-    http_body, strlen(http_body), 0);
+    http_body, http_bodysz, 0);
   fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
 
   signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
@@ -261,7 +263,7 @@ START_TEST (sign_v4_generate_valid_params_test) {
   mark_point();
   res = aws_sign_v4_generate(p, access_key_id, secret_access_key, token, region,
     service, http, http_method, http_path, query_params, http_headers,
-    http_body, 0, 0);
+    http_body, http_bodysz, 0);
   fail_unless(res == 0, "Failed to generate V4 signature: %s", strerror(errno));
 
   signature = pr_table_get(http_headers, AWS_HTTP_HEADER_AUTHZ, NULL);
