@@ -10,6 +10,16 @@ SHARED_CFLAGS=-DPR_SHARED_MODULE
 SHARED_LDFLAGS=-avoid-version -export-dynamic -module
 VPATH=@srcdir@
 
+S3_OBJS=s3/conn.o \
+  s3/error.o \
+  s3/bucket.o \
+  s3/object.o
+
+SHARED_S3_OBJS=s3/conn.lo \
+  s3/error.lo \
+  s3/bucket.lo \
+  s3/object.lo
+
 MODULE_NAME=mod_aws
 MODULE_OBJS=mod_aws.o \
   utils.o \
@@ -21,7 +31,7 @@ MODULE_OBJS=mod_aws.o \
   error.o \
   sign.o \
   ec2.o \
-  s3.o \
+  $(S3_OBJS) \
   route53.o
 
 SHARED_MODULE_OBJS=mod_aws.lo \
@@ -34,11 +44,11 @@ SHARED_MODULE_OBJS=mod_aws.lo \
   error.lo \
   sign.lo \
   ec2.lo \
-  s3.lo \
+  $(SHARED_S3_OBJS) \
   route53.lo
 
 # Necessary redefinitions
-INCLUDES=-I. -I./include -I../.. -I../../include @INCLUDES@
+INCLUDES=-I. -I../.. -I../../include @INCLUDES@
 CPPFLAGS= $(ADDL_CPPFLAGS) -DHAVE_CONFIG_H $(DEFAULT_PATHS) $(PLATFORM) $(INCLUDES)
 LDFLAGS=-L../../lib @LIBDIRS@
 
@@ -64,7 +74,7 @@ install-misc:
 	$(INSTALL) -o $(INSTALL_USER) -g $(INSTALL_GROUP) -m 0644 aws-cacerts.pem $(DESTDIR)$(sysconfdir)/aws-cacerts.pem
 
 clean:
-	$(LIBTOOL) --mode=clean $(RM) $(MODULE_NAME).a $(MODULE_NAME).la *.o *.gcno *.lo .libs/*.o
+	$(LIBTOOL) --mode=clean $(RM) $(MODULE_NAME).a $(MODULE_NAME).la *.o *.gcno *.lo .libs/*.o s3/*.o s3/*.lo
 
 dist: clean
 	$(RM) Makefile $(MODULE_NAME).h config.status config.cache config.log *.gcda *.gcno

@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_aws API testsuite
- * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+ * ProFTPD - mod_aws S3 Bucket API
+ * Copyright (c) 2016 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,48 +22,23 @@
  * source distribution.
  */
 
-/* Testsuite management */
-
-#ifndef MOD_AWS_TESTS_H
-#define MOD_AWS_TESTS_H
-
 #include "mod_aws.h"
-
-#include "xml.h"
-#include "error.h"
-#include "http.h"
-#include "instance.h"
-#include "creds.h"
-#include "sign.h"
-#include "utils.h"
-
-/* S3 API tests */
 #include "s3/conn.h"
-#include "s3/error.h"
-#include "s3/bucket.h"
-#include "s3/object.h"
 
-#ifdef HAVE_CHECK_H
-# include <check.h>
-#else
-# error "Missing Check installation; necessary for ProFTPD testsuite"
-#endif
+#ifndef MOD_AWS_S3_BUCKET_H
+#define MOD_AWS_S3_BUCKET_H
 
-Suite *tests_get_xml_suite(void);
-Suite *tests_get_error_suite(void);
-Suite *tests_get_http_suite(void);
-Suite *tests_get_instance_suite(void);
-Suite *tests_get_creds_suite(void);
-Suite *tests_get_sign_suite(void);
-Suite *tests_get_utils_suite(void);
+/* Returns a list of the bucket names for the account. */
+array_header *aws_s3_bucket_get_names(pool *p, struct s3_conn *s3,
+  const char **owner_id, const char **owner_name);
 
-Suite *tests_get_s3_conn_suite(void);
-Suite *tests_get_s3_error_suite(void);
-Suite *tests_get_s3_bucket_suite(void);
-Suite *tests_get_s3_object_suite(void);
+/* Returns a list of the object keys in the given bucket. */
+array_header *aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
+  const char *bucket_name, const char *prefix);
 
-unsigned int recvd_signal_flags;
-extern pid_t mpid;
-extern server_rec *main_server;
+/* Returns zero if the given bucket can be accessed, otherwise -1, with
+ * errno set appropriately.
+ */
+int aws_s3_bucket_access(pool *p, struct s3_conn *s3, const char *bucket_name);
 
-#endif /* MOD_AWS_TESTS_H */
+#endif /* MOD_AWS_S3_BUCKET_H */

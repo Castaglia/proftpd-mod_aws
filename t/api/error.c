@@ -59,15 +59,15 @@ START_TEST (error_get_code_test) {
   unsigned int res, expected;
 
   expected = AWS_ERROR_CODE_UNKNOWN;
-  res = aws_error_get_code(p, NULL, 0);
+  res = aws_error_get_code(p, NULL);
   fail_unless(res == expected, "Expected %u, got %u", expected, res);
 
   expected = AWS_ERROR_CODE_AUTH_FAILURE;
-  res = aws_error_get_code(p, "AuthFailure", 0);
+  res = aws_error_get_code(p, "AuthFailure");
   fail_unless(res == expected, "Expected %u, got %u", expected, res);
 
   expected = AWS_ERROR_CODE_UNKNOWN;
-  res = aws_error_get_code(p, "fooBarBaz", 0);
+  res = aws_error_get_code(p, "fooBarBaz");
   fail_unless(res == expected, "Expected %u, got %u", expected, res);
 }
 END_TEST
@@ -76,19 +76,19 @@ START_TEST (error_get_name_test) {
   const char *res, *expected;
 
   expected = "<unknown>";
-  res = aws_error_get_name(0, 0);
+  res = aws_error_get_name(0);
   fail_unless(res != NULL, "Failed to handle zero");
   fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
     expected, res);
 
   expected = "AuthFailure";
-  res = aws_error_get_name(AWS_ERROR_CODE_AUTH_FAILURE, 0);
+  res = aws_error_get_name(AWS_ERROR_CODE_AUTH_FAILURE);
   fail_unless(res != NULL, "Failed to handle zero");
   fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
     expected, res);
 
   expected = "<unknown>";
-  res = aws_error_get_name(UINT_MAX, 0);
+  res = aws_error_get_name(UINT_MAX);
   fail_unless(res != NULL, "Failed to handle UINT_MAX");
   fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
     expected, res);
@@ -100,13 +100,13 @@ START_TEST (error_parse_xml_test) {
   const char *data;
   size_t datasz;
 
-  err = aws_error_parse_xml(p, NULL, 0, 0);
+  err = aws_error_parse_xml(p, NULL, 0);
   fail_unless(err == NULL, "Failed to handle null data");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   data = "foo";
-  err = aws_error_parse_xml(p, data, 0, 0);
+  err = aws_error_parse_xml(p, data, 0);
   fail_unless(err == NULL, "Failed to handle empty data");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -115,7 +115,7 @@ START_TEST (error_parse_xml_test) {
 
   data = pstrdup(p, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
   datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, 0);
+  err = aws_error_parse_xml(p, data, datasz);
   fail_unless(err == NULL, "Failed to handle XML with no root element");
 
   /* Malformed XML: no <Response> element */
@@ -124,7 +124,7 @@ START_TEST (error_parse_xml_test) {
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
     "<FooBar/>\n");
   datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, 0);
+  err = aws_error_parse_xml(p, data, datasz);
   fail_unless(err == NULL, "Failed to handle XML with no <Response> element");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -137,7 +137,7 @@ START_TEST (error_parse_xml_test) {
     "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
     "</Response>\n");
   datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, 0);
+  err = aws_error_parse_xml(p, data, datasz);
   fail_unless(err == NULL, "Failed to handle XML with bad <Response> element");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -151,7 +151,7 @@ START_TEST (error_parse_xml_test) {
     "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
     "</Response>\n");
   datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, 0);
+  err = aws_error_parse_xml(p, data, datasz);
   fail_unless(err == NULL, "Failed to handle XML with no <Errors> element");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -167,7 +167,7 @@ START_TEST (error_parse_xml_test) {
     "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
     "</Response>\n");
   datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, 0);
+  err = aws_error_parse_xml(p, data, datasz);
   fail_unless(err == NULL, "Failed to handle XML with no <Error> element");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -185,7 +185,7 @@ START_TEST (error_parse_xml_test) {
     "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
     "</Response>\n");
   datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, 0);
+  err = aws_error_parse_xml(p, data, datasz);
   fail_unless(err == NULL, "Failed to handle XML with no <Code> element");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -203,7 +203,7 @@ START_TEST (error_parse_xml_test) {
     "  <RequestID>ea966190-f9aa-478e-9ede-example</RequestID>\n"
     "</Response>\n");
   datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, 0);
+  err = aws_error_parse_xml(p, data, datasz);
   fail_unless(err == NULL, "Failed to handle XML with no <Message> element");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -222,7 +222,7 @@ START_TEST (error_parse_xml_test) {
     "  <Random>ea966190-f9aa-478e-9ede-example</Random>\n"
     "</Response>\n");
   datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, 0);
+  err = aws_error_parse_xml(p, data, datasz);
   fail_unless(err == NULL, "Failed to handle XML with no <RequestID> element");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -245,124 +245,7 @@ START_TEST (error_parse_xml_test) {
     "</Response>\n");
 
   datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, 0);
-  fail_unless(err != NULL, "Failed to parse error XML: %s", strerror(errno));
-  fail_unless(err->err_code == AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND,
-    "Expected error code %u, got %u",
-    AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND, err->err_code);
-  fail_unless(err->err_msg != NULL, "Expected error message, got null");
-  fail_unless(strcmp(err->err_msg,
-    "The security group ID 'sg-1a2b3c4d' does not exist") == 0,
-    "Failed to get expected error message");
-  fail_unless(err->req_id != NULL, "Expected request ID, got null");
-  fail_unless(strcmp(err->req_id, "ea966190-f9aa-478e-9ede-example") == 0,
-    "Failed to get expected request ID");
-}
-END_TEST
-
-START_TEST (error_parse_xml_fmt_s3_test) {
-  struct aws_error *err;
-  const char *data;
-  size_t datasz;
-  int fmt = AWS_ERROR_XML_FORMAT_S3;
-
-  err = aws_error_parse_xml(p, NULL, 0, fmt);
-  fail_unless(err == NULL, "Failed to handle null data");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
-
-  data = "foo";
-  err = aws_error_parse_xml(p, data, 0, fmt);
-  fail_unless(err == NULL, "Failed to handle empty data");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
-
-  /* Malformed XML: no root element */
-
-  data = pstrdup(p, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-  datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, fmt);
-  fail_unless(err == NULL, "Failed to handle XML with no root element");
-
-  /* Malformed XML: no <Error> element */
-
-  data = pstrdup(p,
-    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-    "<FooBar/>\n");
-  datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, fmt);
-  fail_unless(err == NULL, "Failed to handle XML with no <Error> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
-
-  /* Malformed XML: <Error> element with wrong child count (1) */
-
-  data = pstrdup(p,
-    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-    "<Error>\n"
-    "  <RequestId>ea966190-f9aa-478e-9ede-example</RequestId>\n"
-    "</Error>\n");
-  datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, fmt);
-  fail_unless(err == NULL, "Failed to handle XML with bad <Error> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
-
-  /* Malformed XML: no <Code> element */
-
-  data = pstrdup(p,
-    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-    "<Error>\n"
-    "  <Number>7</Number>\n"
-    "  <RequestId>ea966190-f9aa-478e-9ede-example</RequestId>\n"
-    "</Error>\n");
-  datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, fmt);
-  fail_unless(err == NULL, "Failed to handle XML with no <Code> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
-
-  /* Malformed XML: no <Message> element */
-
-  data = pstrdup(p,
-    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-    "<Error>\n"
-    "  <Code>InvalidGroup.NotFound</Code>\n"
-    "  <RequestId>ea966190-f9aa-478e-9ede-example</RequestId>\n"
-    "</Error>\n");
-  datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, fmt);
-  fail_unless(err == NULL, "Failed to handle XML with no <Message> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
-
-  /* Malformed XML: no <RequestId> element */
-
-  data = pstrdup(p,
-    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-    "<Error>\n"
-    "  <Code>InvalidGroup.NotFound</Code>\n"
-    "  <Message>The security group ID 'sg-1a2b3c4d' does not exist</Message>\n"
-    "  <Random>ea966190-f9aa-478e-9ede-example</Random>\n"
-    "</Error>\n");
-  datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, fmt);
-  fail_unless(err == NULL, "Failed to handle XML with no <RequestId> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
-
-/* XXX Need to populate S3-specific error codes, handle <Resource> element, etc. */
-
-  data = pstrdup(p,
-    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-    "<Error>\n"
-    "  <Code>InvalidGroup.NotFound</Code>\n"
-    "  <Message>The security group ID 'sg-1a2b3c4d' does not exist</Message>\n"
-    "  <RequestId>ea966190-f9aa-478e-9ede-example</RequestId>\n"
-    "</Error>\n");
-
-  datasz = strlen(data);
-  err = aws_error_parse_xml(p, data, datasz, fmt);
+  err = aws_error_parse_xml(p, data, datasz);
   fail_unless(err != NULL, "Failed to parse error XML: %s", strerror(errno));
   fail_unless(err->err_code == AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND,
     "Expected error code %u, got %u",
@@ -389,7 +272,6 @@ Suite *tests_get_error_suite(void) {
   tcase_add_test(testcase, error_get_code_test);
   tcase_add_test(testcase, error_get_name_test);
   tcase_add_test(testcase, error_parse_xml_test);
-  tcase_add_test(testcase, error_parse_xml_fmt_s3_test);
 
   suite_add_tcase(suite, testcase);
   return suite;

@@ -1,5 +1,5 @@
 /*
- * ProFTPD - mod_aws S3 API
+ * ProFTPD - mod_aws S3 Connection API
  * Copyright (c) 2016 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,8 +24,8 @@
 
 #include "mod_aws.h"
 
-#ifndef MOD_AWS_S3_H
-#define MOD_AWS_S3_H
+#ifndef MOD_AWS_S3_CONN_H
+#define MOD_AWS_S3_CONN_H
 
 /* S3 Connections */
 struct s3_conn {
@@ -50,44 +50,22 @@ struct s3_conn *aws_s3_conn_alloc(pool *p, unsigned long max_connect_secs,
   unsigned long max_request_secs, const char *cacerts, const char *region,
   const char *domain, const char *access_key_id, const char *secret_access_key,
   const char *session_token);
+
 int aws_s3_conn_destroy(pool *p, struct s3_conn *s3);
 
-/* Returns a list of the bucket names. */
-array_header *aws_s3_get_buckets(pool *p, struct s3_conn *s3,
-  const char **owner_id, const char **owner_name);
+void aws_s3_conn_clear_response(struct s3_conn *s3);
 
-/* Returns zero if the given bucket can be accessed, otherwise -1, with
- * errno set appropriately.
- */
-int aws_s3_access_bucket(pool *p, struct s3_conn *s3, const char *bucket_name);
+int aws_s3_get(pool *p, void *http, pr_table_t *http_headers, const char *path,
+  array_header *query_params, pr_table_t *resp_headers,
+  size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
+  struct s3_conn *s3);
 
-/* Returns a list of the object keys in the given bucket. */
-array_header *aws_s3_get_bucket_keys(pool *p, struct s3_conn *s3,
-  const char *bucket_name, const char *prefix);
+int aws_s3_head(pool *p, void *http, pr_table_t *http_headers, const char *path,
+  array_header *query_params, pr_table_t *resp_headers, struct s3_conn *s3);
 
-/* Get an object from the specified bucket, using a byte range specified by the
- * given offset and length.
- *
- * The caller will provide a callback for consuming the retrieved data.  Any
- * metadata for the retrieved object will be returned in a table, if desired
- * by the caller.
- */
-int aws_s3_get_object(pool *p, struct s3_conn *s3, const char *bucket_name,
-  const char *object_key, off_t object_offset, off_t object_len,
-  pr_table_t *object_metadata,
-  int (*consume)(pool *p, void *data, off_t data_offset, off_t data_len));
+int aws_s3_post(pool *p, void *http, pr_table_t *http_headers, const char *path,
+  array_header *query_params, char *req_body, pr_table_t *resp_headers,
+  size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
+  struct s3_conn *s3);
 
-#if 0
-/* XXX TODO HEAD Object to get metadata */
-int aws_s3_stat_object(pool *p, struct s3_conn *s3, const char *bucket_name,
-  const char *object_key, pr_table_t *object_metadata);
-
-/* XXX TODO PUT Object; requires HTTP API support for PUT. */
-int aws_s3_put_object(pool *p, struct s3_conn *s3, const char *bucket_name,
-  const char *object_key, pr_table_t *object_metadata, ...);
-#endif
-
-#define AWS_S3_OBJECT_METADATA_PREFIX		"x-amz-meta-"
-#define AWS_S3_OBJECT_METADATA_PREFIX_LEN	11
-
-#endif /* MOD_AWS_S3_H */
+#endif /* MOD_AWS_S3_CONN_H */

@@ -559,7 +559,7 @@ END_TEST
 
 START_TEST (creds_from_chain_test) {
   int res;
-  char *access_key_id, *secret_access_key;
+  char *access_key_id;
 
   res = aws_creds_from_chain(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");

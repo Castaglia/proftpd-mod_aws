@@ -206,9 +206,11 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
       if (content_type == NULL ||
           strstr(content_type, AWS_HTTP_CONTENT_TYPE_XML) != NULL) {
         struct aws_error *err;
-        int fmt = AWS_ERROR_XML_FORMAT_DEFAULT;
 
-        err = aws_error_parse_xml(p, ec2->resp, ec2->respsz, fmt);
+        /* TODO: Make and use an aws_ec2_error_parse_xml() here, as was done
+         * for S3.
+         */
+        err = aws_error_parse_xml(p, ec2->resp, ec2->respsz);
         if (err == NULL) {
           if (errno == EINVAL) {
             pr_trace_msg(trace_channel, 3,
@@ -228,7 +230,7 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
 
           (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
             "received error: code = %s (%u), msg = %s, request_id = %s",
-            aws_error_get_name(err->err_code, fmt), err->err_code, err->err_msg,
+            aws_error_get_name(err->err_code), err->err_code, err->err_msg,
             err->req_id);
         }
       }
