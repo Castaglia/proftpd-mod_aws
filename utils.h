@@ -22,10 +22,10 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-
 #ifndef MOD_AWS_UTILS_H
 #define MOD_AWS_UTILS_H
+
+#include "mod_aws.h"
 
 /* Converts a table whose keys/values are both strings into a single array
  * of strings.

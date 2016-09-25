@@ -22,11 +22,11 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-#include "../error.h"
-
 #ifndef MOD_AWS_S3_ERROR_H
 #define MOD_AWS_S3_ERROR_H
+
+#include "mod_aws.h"
+#include "../error.h"
 
 /* S3 Errors */
 

@@ -22,10 +22,10 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-
 #ifndef MOD_AWS_INSTANCE_H
 #define MOD_AWS_INSTANCE_H
+
+#include "mod_aws.h"
 
 struct aws_info {
   pool *pool;

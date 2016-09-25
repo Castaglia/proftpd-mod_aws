@@ -22,11 +22,11 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-#include "instance.h"
-
 #ifndef MOD_AWS_ROUTE53_H
 #define MOD_AWS_ROUTE53_H
+
+#include "mod_aws.h"
+#include "instance.h"
 
 /* Route53 Connections */
 struct route53_conn {

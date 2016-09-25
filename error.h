@@ -22,10 +22,10 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-
 #ifndef MOD_AWS_ERROR_H
 #define MOD_AWS_ERROR_H
+
+#include "mod_aws.h"
 
 /* For more on these error code, see:
  *   http://docs.aws.amazon.com/AWSEC2/latest/APIReference/errors-overview.html

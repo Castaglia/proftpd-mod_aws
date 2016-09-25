@@ -22,10 +22,10 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-
 #ifndef MOD_AWS_XML_H
 #define MOD_AWS_XML_H
+
+#include "mod_aws.h"
 
 int aws_xml_elt_get_child_count(pool *p, void *elt, unsigned long *count);
 void *aws_xml_elt_get_child(pool *p, void *elt, const char *name,

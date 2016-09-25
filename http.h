@@ -22,10 +22,10 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-
 #ifndef MOD_AWS_HTTP_H
 #define MOD_AWS_HTTP_H
+
+#include "mod_aws.h"
 
 /* HTTP methods */
 #define AWS_HTTP_METHOD_GET				1

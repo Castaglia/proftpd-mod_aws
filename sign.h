@@ -22,10 +22,10 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-
 #ifndef MOD_AWS_SIGN_H
 #define MOD_AWS_SIGN_H
+
+#include "mod_aws.h"
 
 int aws_sign_v4_generate(pool *p, const char *access_key_id,
   const char *secret_access_key, const char *token, const char *region,

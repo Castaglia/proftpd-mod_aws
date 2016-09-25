@@ -22,10 +22,10 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-
 #ifndef MOD_AWS_S3_CONN_H
 #define MOD_AWS_S3_CONN_H
+
+#include "mod_aws.h"
 
 /* S3 Connections */
 struct s3_conn {

@@ -22,11 +22,11 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-#include "s3/conn.h"
-
 #ifndef MOD_AWS_S3_OBJECT_H
 #define MOD_AWS_S3_OBJECT_H
+
+#include "mod_aws.h"
+#include "s3/conn.h"
 
 /* S3 Objects */
 

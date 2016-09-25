@@ -22,11 +22,11 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-#include "instance.h"
-
 #ifndef MOD_AWS_CREDS_H
 #define MOD_AWS_CREDS_H
+
+#include "mod_aws.h"
+#include "instance.h"
 
 /* Default profile name. */
 #define AWS_CREDS_DEFAULT_PROFILE	"default"

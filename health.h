@@ -22,10 +22,10 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-
 #ifndef MOD_AWS_HEALTH_H
 #define MOD_AWS_HEALTH_H
+
+#include "mod_aws.h"
 
 struct health {
   pool *pool;

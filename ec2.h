@@ -22,11 +22,11 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-#include "instance.h"
-
 #ifndef MOD_AWS_EC2_H
 #define MOD_AWS_EC2_H
+
+#include "mod_aws.h"
+#include "instance.h"
 
 /* EC2 Connections */
 struct ec2_conn {

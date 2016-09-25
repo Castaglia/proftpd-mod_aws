@@ -22,11 +22,11 @@
  * source distribution.
  */
 
-#include "mod_aws.h"
-#include "s3/conn.h"
-
 #ifndef MOD_AWS_S3_BUCKET_H
 #define MOD_AWS_S3_BUCKET_H
+
+#include "mod_aws.h"
+#include "s3/conn.h"
 
 /* Returns a list of the bucket names for the account. */
 array_header *aws_s3_bucket_get_names(pool *p, struct s3_conn *s3,
