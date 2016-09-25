@@ -74,7 +74,7 @@ int aws_s3_post(pool *p, void *http, pr_table_t *http_headers, const char *path,
   struct s3_conn *s3);
 
 int aws_s3_put(pool *p, void *http, pr_table_t *http_headers, const char *path,
-  array_header *query_params, char *req_body, off_t req_bodylen,
+  array_header *query_params, char *req_body, off_t req_bodysz,
   pr_table_t *resp_headers,
   size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
   struct s3_conn *s3);

@@ -273,3 +273,42 @@ int aws_s3_object_stat(pool *p, struct s3_conn *s3, const char *bucket_name,
   errno = xerrno;
   return res;
 }
+
+int aws_s3_object_delete(pool *p, struct s3_conn *s3, const char *bucket_name,
+    const char *object_key) {
+  int res, xerrno;
+  const char *path;
+  pool *req_pool;
+  array_header *query_params;
+
+  if (p == NULL ||
+      s3 == NULL ||
+      bucket_name == NULL ||
+      object_key == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  req_pool = make_sub_pool(s3->pool);
+  pr_pool_tag(req_pool, "S3 Object Request Pool");
+  s3->req_pool = req_pool;
+
+  path = pstrcat(req_pool,
+    "/", aws_http_urlencode(req_pool, s3->http, bucket_name, 0),
+    "/", aws_http_urlencode(req_pool, s3->http, object_key, 0), NULL);
+
+  query_params = make_array(req_pool, 1, sizeof(char *));
+
+  res = aws_s3_delete(p, s3->http, NULL, path, query_params, NULL, s3);
+  xerrno = errno;
+
+  if (res == 0) {
+    pr_trace_msg(trace_channel, 19,
+      "successfully deleted object %s from bucket %s", object_key, bucket_name);
+  }
+
+  aws_s3_conn_clear_response(s3);
+
+  errno = xerrno;
+  return res;
+}

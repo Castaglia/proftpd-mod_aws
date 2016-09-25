@@ -136,6 +136,7 @@ static int s3_http_error(long resp_code) {
 
   switch (resp_code) {
     case AWS_HTTP_RESPONSE_CODE_OK:
+    case AWS_HTTP_RESPONSE_CODE_NO_CONTENT:
     case AWS_HTTP_RESPONSE_CODE_PARTIAL_CONTENT:
       res = FALSE;
       break;
@@ -358,6 +359,16 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
     case AWS_HTTP_RESPONSE_CODE_PARTIAL_CONTENT:
       break;
 
+    case AWS_HTTP_RESPONSE_CODE_NO_CONTENT:
+      /* In some cases, a 204 No Content may be success, OR we may want to
+       * treat it as a different error.
+       *
+       * In the case of an S3 object delete, 204 No Content is returned when
+       * the named bucket or object do not exist.
+       */
+      errno = ENOENT;
+      return -1;
+
     case AWS_HTTP_RESPONSE_CODE_BAD_REQUEST:
       errno = EINVAL;
       return -1;
@@ -395,6 +406,42 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
   }
 
   return 0;
+}
+
+int aws_s3_delete(pool *p, void *http, pr_table_t *http_headers,
+    const char *path, array_header *query_params, pr_table_t *resp_headers,
+    struct s3_conn *s3) {
+  int res;
+  pr_table_t *req_headers;
+  time_t request_time;
+  struct tm *gmt_tm;
+
+  if (p == NULL ||
+      http == NULL ||
+      path == NULL ||
+      query_params == NULL ||
+      s3 == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  time(&request_time);
+
+  gmt_tm = pr_gmtime(p, &request_time);
+  if (gmt_tm == NULL) {
+    int xerrno = errno;
+
+    pr_trace_msg(trace_channel, 1,
+      "error obtaining gmtime: %s", strerror(xerrno));
+
+    errno = xerrno;
+    return -1;
+  }
+
+  req_headers = s3_http_headers(p, gmt_tm, http_headers);
+  res = s3_perform(p, http, AWS_HTTP_METHOD_DELETE, path, query_params,
+    req_headers, NULL, 0, request_time, resp_headers, NULL, NULL, s3);
+  return res;
 }
 
 int aws_s3_get(pool *p, void *http, pr_table_t *http_headers, const char *path,
@@ -510,7 +557,7 @@ int aws_s3_post(pool *p, void *http, pr_table_t *http_headers, const char *path,
 
   if (req_body == NULL) {
     content_len = pstrdup(p, "0");
-     req_bodysz = 0;
+    req_bodysz = 0;
 
   } else {
     if (req_bodysz == 0) {
@@ -524,6 +571,63 @@ int aws_s3_post(pool *p, void *http, pr_table_t *http_headers, const char *path,
     content_len, 0);
 
   res = s3_perform(p, http, AWS_HTTP_METHOD_POST, path, query_params,
+    req_headers, req_body, req_bodysz, request_time, resp_headers, resp_body,
+    user_data, s3);
+  return res;
+}
+
+int aws_s3_put(pool *p, void *http, pr_table_t *http_headers, const char *path,
+    array_header *query_params, char *req_body, off_t req_bodysz,
+    pr_table_t *resp_headers,
+    size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
+    struct s3_conn *s3) {
+  int res;
+  pr_table_t *req_headers;
+  time_t request_time;
+  struct tm *gmt_tm;
+  char *content_len;
+
+  if (p == NULL ||
+      http == NULL ||
+      path == NULL ||
+      query_params == NULL ||
+      resp_body == NULL ||
+      s3 == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  time(&request_time);
+
+  gmt_tm = pr_gmtime(p, &request_time);
+  if (gmt_tm == NULL) {
+    int xerrno = errno;
+
+    pr_trace_msg(trace_channel, 1,
+      "error obtaining gmtime: %s", strerror(xerrno));
+
+    errno = xerrno;
+    return -1;
+  }
+
+  req_headers = s3_http_headers(p, gmt_tm, http_headers);
+
+  if (req_body == NULL) {
+    content_len = pstrdup(p, "0");
+    req_bodysz = 0;
+
+  } else {
+    if (req_bodysz == 0) {
+      req_bodysz = (off_t) strlen(req_body);
+    }
+
+    content_len = aws_utils_str_off2s(p, req_bodysz);
+  }
+
+  (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_LEN),
+    content_len, 0);
+
+  res = s3_perform(p, http, AWS_HTTP_METHOD_PUT, path, query_params,
     req_headers, req_body, req_bodysz, request_time, resp_headers, resp_body,
     user_data, s3);
   return res;

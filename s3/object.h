@@ -30,6 +30,15 @@
 
 /* S3 Objects */
 
+/* Names of system-defined object metadata. */
+#define AWS_S3_OBJECT_METADATA_SIZE		"Content-Length"
+#define AWS_S3_OBJECT_METADATA_MTIME		"Last-Modified"
+#define AWS_S3_OBJECT_METADATA_STORAGE_CLASS	"x-amz-storage-class"
+
+/* Prefix for user-defined object metadata. */
+#define AWS_S3_OBJECT_METADATA_PREFIX		"x-amz-meta-"
+#define AWS_S3_OBJECT_METADATA_PREFIX_LEN	11
+
 /* Get an object from the specified bucket, using a byte range specified by the
  * given offset and length.
  *
@@ -53,13 +62,8 @@ int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
 
 /* XXX TODO: Functions for multipart object uploads. */
 
-/* Names of system-defined object metadata. */
-#define AWS_S3_OBJECT_METADATA_SIZE		"Content-Length"
-#define AWS_S3_OBJECT_METADATA_MTIME		"Last-Modified"
-#define AWS_S3_OBJECT_METADATA_STORAGE_CLASS	"x-amz-storage-class"
-
-/* Prefix for user-defined object metadata. */
-#define AWS_S3_OBJECT_METADATA_PREFIX		"x-amz-meta-"
-#define AWS_S3_OBJECT_METADATA_PREFIX_LEN	11
+/* Delete an object from the specified bucket. */
+int aws_s3_object_delete(pool *p, struct s3_conn *s3, const char *bucket_name,
+  const char *object_key);
 
 #endif /* MOD_AWS_S3_OBJECT_H */
