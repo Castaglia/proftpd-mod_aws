@@ -677,10 +677,11 @@ int aws_http_put(pool *p, void *http, const char *url, pr_table_t *req_headers,
     }
   }
 
+#if 0
   /* Disable curl's sending of the Expect request header for PUTs. */
-  /* XXX Is this desirable? */
   (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_EXPECT),
     pstrdup(p, ""), 0);
+#endif
 
   res = http_perform(p, curl, url, req_headers, resp_body, user_data, resp_code,
     content_type, resp_headers);
