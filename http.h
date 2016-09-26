@@ -101,7 +101,7 @@ const char *aws_http_urlencode(pool *p, void *http, const char *item,
 time_t aws_http_date2unix(pool *p, const char *http_date);
 
 /* Convert a GMT Unix epoch time into an HTTP datetime string. */
-const char *aws_http_unix2date(pool *p, time_t unix);
+const char *aws_http_unix2date(pool *p, time_t t);
 
 int aws_http_delete(pool *p, void *http, const char *url,
   pr_table_t *req_headers, long *resp_code, pr_table_t *resp_headers);

@@ -170,7 +170,7 @@ time_t aws_http_date2unix(pool *p, const char *http_date) {
   return date;
 }
 
-const char *aws_http_unix2date(pool *p, time_t unix) {
+const char *aws_http_unix2date(pool *p, time_t t) {
   struct tm *tm;
   const char *http_date;
   char buf[1024];
@@ -180,7 +180,7 @@ const char *aws_http_unix2date(pool *p, time_t unix) {
     return NULL;
   }
 
-  tm = pr_gmtime(p, &unix);
+  tm = pr_gmtime(p, &t);
   if (tm == NULL) {
     return NULL;
   }
