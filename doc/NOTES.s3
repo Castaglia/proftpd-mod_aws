@@ -63,7 +63,11 @@ S3:
    Consider adding/using Content-MD5 request/response header, for additional
    end-to-end integrity/corruption checking.  The TLS part only covers the
    content from mod_aws to S3's frontend servers; who knows what happens to
-   that content behind those frontend servers, or during storage.
+   that content behind those frontend servers, or during storage.  Thus
+   aws_s3_content_md5(), or aws_s3_conn_content_md5(), or even
+   aws_s3_object_content_md5()?  Given streamy downloads of S3 objects, we
+   should always calculate the md5 (e.g. via MD5Update()).
+
 
 S3 FSIO:
 
@@ -71,6 +75,8 @@ S3 FSIO:
   this API, *not* in the S3 object API.
 
   xattr support, and S3 limits on request headers (when setting metadata).
+  Consider a pr_table_size() function, which calculates/totals the number
+  of bytes of keys and values in a table, for calculating things like this?
 
   How does s3fs encode/store its file metadata?  Have they encountered any
   gotchas that I'll want to know about?  Should mod_aws_s3 maintain
@@ -140,7 +146,12 @@ FTP/SFTP mapping:
 
   And, for performance, this "directory index" object does not have to cover
   ALL of the objects; it too can be partitioned into multiple indexes, based
-  on e.g. key ranges.  (Could be a SQLite database index, for example!)
+  on e.g. key ranges.  (Could be a SQLite database index, for example!)  One
+  gotcha with this "directory index" approach is that of multiple servers
+  uploading files to the same directory/bucket at the same time -- how to
+  synchronize access to thta "directory index" object, and prevent clobbering.
+  Maybe using the if-not-modified-since/if-none-match approach for an
+  object copy?
 
 
 Performance Tuning:
