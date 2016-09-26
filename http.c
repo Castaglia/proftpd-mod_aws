@@ -675,13 +675,14 @@ int aws_http_put(pool *p, void *http, const char *url, pr_table_t *req_headers,
         "error setting CURLOPT_INFILESIZE_LARGE: %s",
         curl_easy_strerror(curl_code));
     }
-  }
 
-#if 0
-  /* Disable curl's sending of the Expect request header for PUTs. */
-  (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_EXPECT),
-    pstrdup(p, ""), 0);
-#endif
+  } else {
+    /* Disable curl's sending of the Transfer-Encoding request header if
+     * we have no content.
+     */
+    (void) pr_table_add(req_headers,
+      pstrdup(p, AWS_HTTP_HEADER_TRANSFER_ENCODING), pstrdup(p, ""), 0);
+  }
 
   res = http_perform(p, curl, url, req_headers, resp_body, user_data, resp_code,
     content_type, resp_headers);

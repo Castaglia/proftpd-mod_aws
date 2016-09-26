@@ -47,6 +47,7 @@
 #define AWS_HTTP_HEADER_HOST				"Host"
 #define AWS_HTTP_HEADER_LAST_MODIFIED			"Last-Modified"
 #define AWS_HTTP_HEADER_RANGE				"Range"
+#define AWS_HTTP_HEADER_TRANSFER_ENCODING		"Transfer-Encoding"
 #define AWS_HTTP_HEADER_USER_AGENT			"User-Agent"
 #define AWS_HTTP_HEADER_X_AMZ_DATE			"X-Amz-Date"
 #define AWS_HTTP_HEADER_X_AMZ_REQUEST_ID		"x-amz-request-id"
