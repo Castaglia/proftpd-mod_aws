@@ -245,6 +245,9 @@ Suite *tests_get_s3_bucket_suite(void) {
   tcase_add_test(testcase, s3_bucket_get_keys_test);
   tcase_add_test(testcase, s3_bucket_access_test);
 
+  /* HTTP calls may need longer timeouts. */
+  tcase_set_timeout(testcase, max_connect_secs + max_request_secs);
+
   suite_add_tcase(suite, testcase);
   return suite;
 }

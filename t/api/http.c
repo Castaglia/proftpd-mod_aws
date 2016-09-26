@@ -821,6 +821,9 @@ Suite *tests_get_http_suite(void) {
   tcase_add_test(testcase, http_put_test);
   tcase_add_test(testcase, http_delete_test);
 
+  /* HTTP calls may need longer timeouts. */
+  tcase_set_timeout(testcase, max_connect_secs + max_request_secs);
+
   suite_add_tcase(suite, testcase);
   return suite;
 }
