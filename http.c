@@ -582,12 +582,12 @@ struct http_uploader {
   off_t datasz;
 };
 
-static size_t http_put_cb(void *buf, size_t itemsz, size_t item_count,
+static size_t http_put_cb(void *buf, size_t item_sz, size_t item_count,
     void *user_data) {
   size_t bufsz, len;
   struct http_uploader *uploader;
 
-  bufsz = itemsz * item_count;
+  bufsz = item_sz * item_count;
   uploader = user_data;
 
   /* Copy the smaller of the buffer size, or the data remaining.  If data
@@ -667,15 +667,18 @@ int aws_http_put(pool *p, void *http, const char *url, pr_table_t *req_headers,
       curl_easy_strerror(curl_code));
   }
 
-  curl_code = curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE,
-    (curl_off_t) req_bodylen);
-  if (curl_code != CURLE_OK) {
-    pr_trace_msg(trace_channel, 1,
-      "error setting CURLOPT_INFILESIZE_LARGE: %s",
-      curl_easy_strerror(curl_code));
+  if (req_bodylen > 0) {
+    curl_code = curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE,
+      (curl_off_t) req_bodylen);
+    if (curl_code != CURLE_OK) {
+      pr_trace_msg(trace_channel, 1,
+        "error setting CURLOPT_INFILESIZE_LARGE: %s",
+        curl_easy_strerror(curl_code));
+    }
   }
 
   /* Disable curl's sending of the Expect request header for PUTs. */
+  /* XXX Is this desirable? */
   (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_EXPECT),
     pstrdup(p, ""), 0);
 
