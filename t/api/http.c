@@ -233,18 +233,18 @@ START_TEST (http_urlencode_test) {
 }
 END_TEST
 
-START_TEST (http_date_test) {
+START_TEST (http_date2unix_test) {
   time_t res, expected;
   const char *http_date;
 
   mark_point();
-  res = aws_http_date(NULL, NULL);
+  res = aws_http_date2unix(NULL, NULL);
   fail_unless(res == 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
-  res = aws_http_date(p, NULL);
+  res = aws_http_date2unix(p, NULL);
   fail_unless(res == 0, "Failed to handle null http_date");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -252,7 +252,7 @@ START_TEST (http_date_test) {
   http_date = "foo";
 
   mark_point();
-  res = aws_http_date(p, http_date);
+  res = aws_http_date2unix(p, http_date);
   fail_unless(res == 0, "Failed to handle invalid date '%s'", http_date);
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -261,9 +261,51 @@ START_TEST (http_date_test) {
   expected = 1445638702;
 
   mark_point();
-  res = aws_http_date(p, http_date);
+  res = aws_http_date2unix(p, http_date);
   fail_unless(res == expected, "Expected %lu, got %lu",
     (unsigned long) expected, (unsigned long) res);
+}
+END_TEST
+
+START_TEST (http_unix2date_test) {
+  time_t unix;
+  const char *res, *expected;
+
+  mark_point();
+  res = aws_http_unix2date(NULL, 0);
+  fail_unless(res == 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  unix = 0;
+  expected = "Thu, 01 Jan 1970 00:00:00 UTC";
+
+  mark_point();
+  res = aws_http_unix2date(p, unix);
+  fail_unless(res != NULL, "Failed to handle epoch %lu: %s",
+    (unsigned long) unix, strerror(errno));
+
+  if (strcmp(res, expected) != 0) {
+    expected = "Thu, 01 Jan 1970 00:00:00 GMT";
+  }
+
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
+    expected, res);
+
+  unix = 1445638702;
+  expected = "Fri, 23 Oct 2015 22:18:22 GMT";
+
+  mark_point();
+  res = aws_http_unix2date(p, unix);
+  fail_unless(res != NULL, "Failed to handle epoch %lu: %s",
+    (unsigned long) unix, strerror(errno));
+
+  if (strcmp(res, expected) != 0) {
+    expected = "Fri, 23 Oct 2015 22:18:22 UTC";
+  }
+
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
+    expected, res);
 }
 END_TEST
 
@@ -768,7 +810,8 @@ Suite *tests_get_http_suite(void) {
   tcase_add_test(testcase, http_default_headers_test);
   tcase_add_test(testcase, http_urldecode_test);
   tcase_add_test(testcase, http_urlencode_test);
-  tcase_add_test(testcase, http_date_test);
+  tcase_add_test(testcase, http_date2unix_test);
+  tcase_add_test(testcase, http_unix2date_test);
   tcase_add_test(testcase, http_get_test);
   tcase_add_test(testcase, http_head_test);
   tcase_add_test(testcase, http_post_test);

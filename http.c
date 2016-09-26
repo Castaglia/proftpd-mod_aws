@@ -136,7 +136,7 @@ const char *aws_http_urlencode(pool *p, void *http, const char *item,
   return encoded_item;
 }
 
-time_t aws_http_date(pool *p, const char *http_date) {
+time_t aws_http_date2unix(pool *p, const char *http_date) {
   struct tm *tm;
   time_t date;
   char *ptr;
@@ -168,6 +168,28 @@ time_t aws_http_date(pool *p, const char *http_date) {
   pr_trace_msg(trace_channel, 17, "parsed HTTP date '%s' as Unix epoch %lu",
     http_date, (unsigned long) date);
   return date;
+}
+
+const char *aws_http_unix2date(pool *p, time_t unix) {
+  struct tm *tm;
+  const char *http_date;
+  char buf[1024];
+
+  if (p == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  tm = pr_gmtime(p, &unix);
+  if (tm == NULL) {
+    return NULL;
+  }
+
+  memset(buf, '\0', sizeof(buf));
+  strftime(buf, sizeof(buf)-1, "%a, %d %b %Y %H:%M:%S %Z", tm);
+
+  http_date = pstrdup(p, buf);
+  return http_date;
 }
 
 static void clear_http_method(CURL *curl) {
