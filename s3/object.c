@@ -82,6 +82,7 @@ static size_t object_body(char *data, size_t item_sz, size_t item_count,
 
 /* Tells the metadata copying function to skip any S3 system attributes. */
 #define AWS_S3_OBJECT_COPY_METADATA_FL_IGNORE_SYSTEM_ATTRS	0x001
+#define AWS_S3_OBJECT_COPY_METADATA_FL_KEEP_PREFIX		0x002
 
 static int copy_object_metadata(pool *p, const char *object_key,
     pr_table_t *dst_object_metadata, pr_table_t *src_object_metadata,
@@ -117,11 +118,22 @@ static int copy_object_metadata(pool *p, const char *object_key,
         AWS_S3_OBJECT_METADATA_PREFIX_LEN) == 0) {
       v = pr_table_get(src_object_metadata, k, &vlen);
       if (v != NULL) {
-        /* Skip past the key prefix, for legibility. */
-        k = ((char *) k) + AWS_S3_OBJECT_METADATA_PREFIX_LEN;
+        const char *dup_key, *log_key;
+
+        if (flags & AWS_S3_OBJECT_COPY_METADATA_FL_KEEP_PREFIX) {
+          dup_key = k;
+          log_key = ((char *) k) + AWS_S3_OBJECT_METADATA_PREFIX_LEN;
+
+        } else {
+          /* Skip past the key prefix, for legibility. */
+          dup_key = ((char *) k) + AWS_S3_OBJECT_METADATA_PREFIX_LEN;
+          log_key = dup_key;
+        }
+
         pr_trace_msg(trace_channel, 9, "object %s metadata: %s = %.*s",
-          object_key, (char *) k, (int) vlen, (char *) v);
-        pr_table_add(dst_object_metadata, pstrdup(p, k),
+          object_key, (char *) log_key, (int) vlen, (char *) v);
+
+        pr_table_add(dst_object_metadata, pstrdup(p, dup_key),
           pstrndup(p, v, vlen), 0);
       }
     }
@@ -349,6 +361,46 @@ static size_t copy_object_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
+/* The timestamp format used for the <Last-Modified> element in these
+ * responses is NOT an HTTP date, thus we cannot use aws_http_date2unix().
+ */
+static time_t lastmodified2unix(pool *p, const char *last_modified) {
+  struct tm *tm;
+  time_t date;
+  char *ptr;
+
+  if (p == NULL ||
+      last_modified == NULL) {
+    errno = EINVAL;
+    return 0;
+  }
+
+  tm = pcalloc(p, sizeof(struct tm));
+
+  ptr = strptime(last_modified, "%Y-%m-%dT%H:%M:%SZ", tm);
+  if (ptr == NULL) {
+    int xerrno = errno;
+
+    pr_trace_msg(trace_channel, 3,
+      "unable to parse CopyObjectResult date '%s': %s",
+      last_modified, strerror(xerrno));
+
+    errno = xerrno;
+    return 0;
+  }
+
+  /* XXX Beware that mktime(3) has the same TZ-sensitive as other time-related
+   * library functions.  If we ASSUME that this function will only EVER be
+   * called after authentication, e.g. post-chroot, then it SHOULD be safe.
+   */
+  date = mktime(tm);
+
+  pr_trace_msg(trace_channel, 17,
+    "parsed CopyObjectResult date '%s' as Unix epoch %lu",
+    last_modified, (unsigned long) date);
+  return date;
+}
+
 static int parse_copy_object(pool *p, const char *data, size_t datasz,
     time_t *last_modified, const char **etag) {
   void *doc, *root, *elt;
@@ -383,7 +435,7 @@ static int parse_copy_object(pool *p, const char *data, size_t datasz,
 
   elt = aws_xml_elt_get_child(p, root, "LastModified", 12);
   if (elt != NULL) {
-    *last_modified = aws_http_date2unix(p, aws_xml_elt_get_text(p, elt));
+    *last_modified = lastmodified2unix(p, aws_xml_elt_get_text(p, elt));
   }
 
   elt = aws_xml_elt_get_child(p, root, "ETag", 4);
@@ -399,7 +451,7 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
     const char *dst_bucket_name, const char *dst_object_key,
     pr_table_t *dst_object_metadata) {
   int res, xerrno;
-  const char *src_path, *dst_path, *metadata_directive;
+  const char *src_path, *dst_path;
   pool *req_pool;
   array_header *query_params;
   pr_table_t *req_headers;
@@ -428,27 +480,30 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
 
   if (dst_object_metadata != NULL) {
     pr_table_t *src_object_metadata;
-    int metadata_flags = AWS_S3_OBJECT_COPY_METADATA_FL_IGNORE_SYSTEM_ATTRS;
+    const char *metadata_directive;
+    int metadata_flags = AWS_S3_OBJECT_COPY_METADATA_FL_IGNORE_SYSTEM_ATTRS|
+      AWS_S3_OBJECT_COPY_METADATA_FL_KEEP_PREFIX;
 
     /* If the caller provided metadata for the destination/copy object, we
      * need to get the existing metadata for the source object, so that we
      * preserve its existing metadata.
      */
     src_object_metadata = pr_table_alloc(req_pool, 0);
+
     if (aws_s3_object_stat(p, s3, src_bucket_name, src_object_key,
         src_object_metadata) == 0) {
       (void) copy_object_metadata(req_pool, src_object_key,
         dst_object_metadata, src_object_metadata, metadata_flags);
     }
 
+    (void) copy_object_metadata(req_pool, dst_object_key,
+      req_headers, dst_object_metadata, metadata_flags);
+
     metadata_directive = pstrdup(req_pool, "REPLACE");
 
     pr_table_add(req_headers,
       pstrdup(s3->req_pool, AWS_S3_OBJECT_COPY_SOURCE_METADATA),
       metadata_directive, 0);
-
-    (void) copy_object_metadata(req_pool, dst_object_key,
-      req_headers, dst_object_metadata, metadata_flags);
   }
 
   dst_path = pstrcat(req_pool,

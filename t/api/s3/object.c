@@ -356,13 +356,14 @@ START_TEST (s3_object_delete_test) {
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
     strerror(errno), errno);
 
-  /* No such key. */
+  /* No such key. In this case, it is treated as success, even for the
+   * noexisting case.  Sigh.
+   */
 
   mark_point();
   res = aws_s3_object_delete(p, s3, bucket, "NO_SUCH_KEY");
-  fail_unless(res < 0, "Failed to handle invalid key NO_SUCH_KEY");
-  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
-    strerror(errno), errno);
+  fail_unless(res == 0, "Failed to handle invalid key NO_SUCH_KEY: %s",
+    strerror(errno));
 
 #if 0
   mark_point();
@@ -452,12 +453,39 @@ START_TEST (s3_object_copy_test) {
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
     strerror(errno), errno);
 
-#if 0
+  src_bucket = getenv("AWS_S3_BUCKET");
+  fail_unless(src_bucket != NULL,
+    "Failed to provide AWS_S3_BUCKET environment variable");
+  src_key = getenv("AWS_S3_OBJECT_KEY");
+  fail_unless(src_key != NULL,
+    "Failed to provide AWS_S3_OBJECT_KEY environment variable");
+
+  dst_bucket = src_bucket;
+  dst_key = pstrcat(p, src_key, ".copy", NULL);
+
   mark_point();
-  res = aws_s3_object_copy(p, s3, bucket, key, ...);
-  fail_unless(res == 0, "Failed to copy object %s from bucket %s: %s", key,
-    bucket, strerror(errno));
-#endif
+  res = aws_s3_object_copy(p, s3, src_bucket, src_key, dst_bucket, dst_key,
+    NULL);
+  fail_unless(res == 0, "Failed to copy object: %s", strerror(errno));
+
+  mark_point();
+  res = aws_s3_object_delete(p, s3, dst_bucket, dst_key);
+  fail_unless(res == 0, "Failed to delete object %s from bucket %s: %s",
+    dst_key, dst_bucket, strerror(errno));
+
+  dst_metadata = pr_table_alloc(p, 0);
+  (void) pr_table_add(dst_metadata, pstrdup(p, "x-amz-meta-foo"),
+    pstrdup(p, "bar"), 0);
+
+  mark_point();
+  res = aws_s3_object_copy(p, s3, src_bucket, src_key, dst_bucket, dst_key,
+    dst_metadata);
+  fail_unless(res == 0, "Failed to copy object: %s", strerror(errno));
+
+  mark_point();
+  res = aws_s3_object_delete(p, s3, dst_bucket, dst_key);
+  fail_unless(res == 0, "Failed to delete object %s from bucket %s: %s",
+    dst_key, dst_bucket, strerror(errno));
 
   (void) aws_s3_conn_destroy(p, s3);
 }

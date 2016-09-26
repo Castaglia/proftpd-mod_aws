@@ -370,10 +370,11 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
        * treat it as a different error.
        *
        * In the case of an S3 object delete, 204 No Content is returned when
-       * the named bucket or object do not exist.
+       * the named bucket or object do not exist.  Unfortunately, the same
+       * response is issued for a delete of an S3 object which DOES exist.
+       * Sigh.
        */
-      errno = ENOENT;
-      return -1;
+      break;
 
     case AWS_HTTP_RESPONSE_CODE_BAD_REQUEST:
       errno = EINVAL;
