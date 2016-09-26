@@ -28,6 +28,9 @@
 
 static pool *p = NULL;
 
+static unsigned long max_connect_secs = 5;
+static unsigned long max_request_secs = 10;
+
 static void set_up(void) {
   unsigned long feature_flags = 0UL;
 
@@ -91,8 +94,8 @@ static struct s3_conn *get_s3(pool *p) {
   domain = "amazonaws.com";
 
   mark_point();
-  s3 = aws_s3_conn_alloc(p, 5, 5, cacerts, region, domain, access_key_id,
-    secret_access_key, session_token);
+  s3 = aws_s3_conn_alloc(p, max_connect_secs, max_request_secs, cacerts,
+    region, domain, access_key_id, secret_access_key, session_token);
   return s3;
 }
 

@@ -28,6 +28,9 @@
 
 static pool *p = NULL;
 
+static unsigned long max_connect_secs = 5;
+static unsigned long max_request_secs = 10;
+
 static void set_up(void) {
   unsigned long feature_flags = 0UL;
 
@@ -61,13 +64,13 @@ START_TEST (http_alloc_test) {
 
   /* Note: We don't use the pool for allocating HTTP handles. */
 
-  http = aws_http_alloc(p, 3, 5, NULL);
+  http = aws_http_alloc(p, max_connect_secs, max_request_secs, NULL);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
   aws_http_destroy(p, http);
 
   /* Assume that the tests are being run from the top-level of the project. */
   cacerts = "./aws-cacerts.pem";
-  http = aws_http_alloc(p, 3, 5, cacerts);
+  http = aws_http_alloc(p, max_connect_secs, max_request_secs, cacerts);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
   aws_http_destroy(p, http);
 }
@@ -159,7 +162,7 @@ START_TEST (http_urldecode_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  http = aws_http_alloc(p, 3, 5, NULL);
+  http = aws_http_alloc(p, max_connect_secs, max_request_secs, NULL);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   res = aws_http_urldecode(p, http, NULL, 0, NULL);
@@ -206,7 +209,7 @@ START_TEST (http_urlencode_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  http = aws_http_alloc(p, 3, 5, NULL);
+  http = aws_http_alloc(p, max_connect_secs, max_request_secs, NULL);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   res = aws_http_urlencode(p, http, NULL, 0);
@@ -336,7 +339,7 @@ START_TEST (http_get_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  http = aws_http_alloc(p, 3, 5, NULL);
+  http = aws_http_alloc(p, max_connect_secs, max_request_secs, NULL);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   mark_point();
@@ -452,7 +455,7 @@ START_TEST (http_head_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  http = aws_http_alloc(p, 3, 5, NULL);
+  http = aws_http_alloc(p, max_connect_secs, max_request_secs, NULL);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   mark_point();
@@ -563,7 +566,7 @@ START_TEST (http_post_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  http = aws_http_alloc(p, 3, 5, NULL);
+  http = aws_http_alloc(p, max_connect_secs, max_request_secs, NULL);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   mark_point();
@@ -652,7 +655,7 @@ START_TEST (http_put_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  http = aws_http_alloc(p, 3, 5, NULL);
+  http = aws_http_alloc(p, max_connect_secs, max_request_secs, NULL);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   mark_point();
@@ -748,7 +751,7 @@ START_TEST (http_delete_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  http = aws_http_alloc(p, 3, 5, NULL);
+  http = aws_http_alloc(p, max_connect_secs, max_request_secs, NULL);
   fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   mark_point();
