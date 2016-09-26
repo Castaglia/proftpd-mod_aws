@@ -13,6 +13,57 @@ S3:
   Need to extend aws_s3_bucket_keys() to work for buckets with more than 100
   objects!
 
+  Also make it possible for aws_s3_bucket_keys() to provide the other
+  attributes of the objects (size, storage class, etc); see:
+    https://github.com/aws/aws-sdk-ruby/issues/588
+
+  Maybe the above is done via on optional table, to be keyed by S3 object
+  key, whose values are themselves a table of those attributes (last-modified,
+  size, etag, storage class).  Or, rather than a table (since each object
+  will always have the same attribute), just use a struct designed for this
+  purpose.
+
+  Fun with proxies:
+    https://github.com/s3fs-fuse/s3fs-fuse/issues/324
+
+  Will mod_aws need to be able configure libcurl to work through a forward
+  proxy?  (Probably not; wait until someone requests it.)
+
+  Reasons for supporting SSE:
+    https://github.com/s3fs-fuse/s3fs-fuse/issues/49
+
+  i.e. admin might configure S3 bucket policy to REQUIRE SSE.
+
+  API for multipart upload:
+
+    aws_s3_object_open(...)
+
+    aws_s3_object_append(...)
+
+    aws_s3_object_close(int flags)
+      flags value indicates success (complete multipart) or
+      error (abort multipart)
+
+  Uses a struct for tracking state (mostly offset, part number, etc).  Spool
+  incoming data to temp file on disk, to buffer up for optimal upload size
+  (e.g. 10-50 MB)?
+
+  Retries:
+    HTTP 500, 503
+    HTTP 400, but ONLY if AWS_S3_ERROR_CODE_REQUEST_TIMEOUT
+    presence of Location response header?
+    What about AWS_S3_ERROR_CODE_SERVICE_UNAVAILABLE, SLOW_DOWN?
+
+    Exponential backoff, with jittering:
+      https://www.awsarchitectureblog.com/2015/03/backoff.html
+      http://stackoverflow.com/questions/19657361/how-to-implement-exponential-backoff-in-this-simple-mutex-implementation
+      http://docs.aws.amazon.com/general/latest/gr/api-retries.html
+      https://news.ycombinator.com/item?id=9206090
+
+   Consider adding/using Content-MD5 request/response header, for additional
+   end-to-end integrity/corruption checking.  The TLS part only covers the
+   content from mod_aws to S3's frontend servers; who knows what happens to
+   that content behind those frontend servers, or during storage.
 
 S3 FSIO:
 
@@ -36,6 +87,8 @@ S3 FSIO:
       x-amz-meta-owner
       x-amz-meta-group
       x-amz-meta-permissions
+      x-amz-meta-xattr
+        https://github.com/s3fs-fuse/s3fs-fuse/blob/master/src/common.h#L113
 
     This requests that s3cmd be compatible with s3fs-fuse in this regard:
 
@@ -44,6 +97,8 @@ S3 FSIO:
     What will mod_aws do for existing x-amz-meta values for an object, e.g.
     when copying?  Maybe always do aws_s3_object_stat() to get metadata
     inside of aws_s3_object_copy(), so that it always Does The Right Thing(tm)?
+
+    What if two objects have the same UID, but different owner names?
 
   chown(2), chmod(2), chgrp(2), utimes(2) operations on a file require
   changing its metadata.  And changing the metadata for an S3 object MUST
@@ -83,7 +138,59 @@ FTP/SFTP mapping:
 
     http://stackoverflow.com/questions/10989880/efficient-way-to-extract-files-and-meta-data-from-amazon-s3
 
+  And, for performance, this "directory index" object does not have to cover
+  ALL of the objects; it too can be partitioned into multiple indexes, based
+  on e.g. key ranges.  (Could be a SQLite database index, for example!)
+
+
+Performance Tuning:
+
+  https://cloudnative.io/blog/2015/01/aws-s3-performance-tuning/
+  http://blog.zachbjornson.com/2015/12/29/cloud-storage-performance.html
+  https://aws.amazon.com/blogs/aws/amazon-s3-performance-tips-tricks-seattle-hiring-event/
+
+  https://wblinks.com/notes/aws-tips-i-wish-id-known-before-i-started/
+    Particularly this tip:
+
+      Use '-' instead of '.' in bucket names for SSL.
+        If you ever want to use your bucket over SSL, using a "." will cause
+        you to get certificate mismatch errors. You can't change bucket names
+        once you've created them, so you'd have to copy everything to a new
+        bucket.
+
+    https://wblinks.com/notes/aws-tips-i-wish-id-known-before-i-started/#s3
+
 Future features:
 
+  Support for HTTP compression, specifically requesting compressed responses
+  from AWS?  mod_aws may need to the compression itself, i.e. compress
+  the data on upload, sent the Content-Encoding: gzip header, and decompress
+  on download from S3.  Might save on number of bytes transferred (thus costs).
+    http://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/ServingCompressedFiles.html#CompressedS3
+    https://github.com/s3tools/s3cmd/issues/396
+    https://curl.haxx.se/libcurl/c/CURLOPT_ACCEPT_ENCODING.html
+    https://curl.haxx.se/libcurl/c/CURLOPT_HTTP_CONTENT_DECODING.html
+    https://curl.haxx.se/dev/readme-encoding.html
+
   Support for different storage classes (per-directory?)
+
   Support for server-side encryption (per-directory?)
+    https://github.com/s3fs-fuse/s3fs-fuse/issues/49
+
+  Support for CloudFront, for read-only/read-heavy directories?
+
+  Performance improvements via better object naming:
+    https://cloudnative.io/blog/2015/01/aws-s3-performance-tuning/
+
+  Note that this could introduce backward compatibility hacks.  Consider the
+  possibility of uploading each S3 object, getting its Content-MD5, then
+  using COPY to rename that object, with the Content-MD5 as the object
+  name prefix.  How expensive is an object copy, where just the name is
+  changed (and the old object deleted)?
+
+  Support for TTL via object expiration?
+    https://launchbylunch.com/posts/2014/Jan/29/aws-tips/#s3
+
+  This is best done on a per-bucket basis, via lifecycle policies:
+    https://aws.amazon.com/blogs/aws/amazon-s3-object-expiration/
+
