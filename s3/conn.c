@@ -226,6 +226,12 @@ static int s3_perform(pool *p, void *http, int http_method, const char *path,
     pr_str_bin2hex(p, request_digest, sizeof(request_digest),
     PR_STR_FL_HEX_USE_LC), 0);
 
+  if (s3->session_token != NULL) {
+    (void) pr_table_add(req_headers,
+      pstrdup(p, AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN),
+      pstrdup(p, s3->session_token), 0);
+  }
+
   base_url = pstrcat(p, "https://", host, NULL);
 
   if (query_params->nelts > 0) {

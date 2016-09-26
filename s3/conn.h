@@ -46,6 +46,10 @@ struct s3_conn {
   size_t respsz;
 };
 
+/* S3-specific HTTP headers. */
+#define AWS_HTTP_HEADER_X_AMZ_CONTENT_SHA256		"x-amz-content-sha256"
+#define AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN		"x-amz-security-token"
+
 struct s3_conn *aws_s3_conn_alloc(pool *p, unsigned long max_connect_secs,
   unsigned long max_request_secs, const char *cacerts, const char *region,
   const char *domain, const char *access_key_id, const char *secret_access_key,
