@@ -268,7 +268,7 @@ START_TEST (http_date2unix_test) {
 END_TEST
 
 START_TEST (http_unix2date_test) {
-  time_t unix;
+  time_t t;
   const char *res, *expected;
 
   mark_point();
@@ -277,13 +277,13 @@ START_TEST (http_unix2date_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  unix = 0;
+  t = 0;
   expected = "Thu, 01 Jan 1970 00:00:00 UTC";
 
   mark_point();
-  res = aws_http_unix2date(p, unix);
+  res = aws_http_unix2date(p, t);
   fail_unless(res != NULL, "Failed to handle epoch %lu: %s",
-    (unsigned long) unix, strerror(errno));
+    (unsigned long) t, strerror(errno));
 
   if (strcmp(res, expected) != 0) {
     expected = "Thu, 01 Jan 1970 00:00:00 GMT";
@@ -292,13 +292,13 @@ START_TEST (http_unix2date_test) {
   fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
     expected, res);
 
-  unix = 1445638702;
+  t = 1445638702;
   expected = "Fri, 23 Oct 2015 22:18:22 GMT";
 
   mark_point();
-  res = aws_http_unix2date(p, unix);
+  res = aws_http_unix2date(p, t);
   fail_unless(res != NULL, "Failed to handle epoch %lu: %s",
-    (unsigned long) unix, strerror(errno));
+    (unsigned long) t, strerror(errno));
 
   if (strcmp(res, expected) != 0) {
     expected = "Fri, 23 Oct 2015 22:18:22 UTC";
