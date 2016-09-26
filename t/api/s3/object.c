@@ -222,7 +222,7 @@ START_TEST (s3_object_stat_test) {
     strerror(errno), errno);
 
   mark_point();
-  res = aws_s3_object_stat(NULL, NULL, NULL, NULL, NULL);
+  res = aws_s3_object_stat(p, NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null s3");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -230,7 +230,7 @@ START_TEST (s3_object_stat_test) {
   s3 = (struct s3_conn *) 1;
 
   mark_point();
-  res = aws_s3_object_stat(NULL, NULL, NULL, NULL, NULL);
+  res = aws_s3_object_stat(p, s3, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null bucket_name");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -238,7 +238,7 @@ START_TEST (s3_object_stat_test) {
   bucket = "xfoo";
 
   mark_point();
-  res = aws_s3_object_stat(NULL, NULL, NULL, NULL, NULL);
+  res = aws_s3_object_stat(p, s3, bucket, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null object_key");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -298,7 +298,7 @@ START_TEST (s3_object_stat_test) {
 END_TEST
 
 START_TEST (s3_object_delete_test) {
-  int res, count;
+  int res;
   struct s3_conn *s3;
   const char *bucket, *key;
 
@@ -308,7 +308,7 @@ START_TEST (s3_object_delete_test) {
     strerror(errno), errno);
 
   mark_point();
-  res = aws_s3_object_delete(NULL, NULL, NULL, NULL);
+  res = aws_s3_object_delete(p, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null s3");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -316,7 +316,7 @@ START_TEST (s3_object_delete_test) {
   s3 = (struct s3_conn *) 1;
 
   mark_point();
-  res = aws_s3_object_delete(NULL, NULL, NULL, NULL);
+  res = aws_s3_object_delete(p, s3, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null bucket_name");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -324,7 +324,7 @@ START_TEST (s3_object_delete_test) {
   bucket = "xfoo";
 
   mark_point();
-  res = aws_s3_object_delete(NULL, NULL, NULL, NULL);
+  res = aws_s3_object_delete(p, s3, bucket, NULL);
   fail_unless(res < 0, "Failed to handle null object_key");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -372,6 +372,94 @@ START_TEST (s3_object_delete_test) {
 }
 END_TEST
 
+START_TEST (s3_object_copy_test) {
+  int res;
+  struct s3_conn *s3;
+  const char *src_bucket, *src_key, *dst_bucket, *dst_key;
+  pr_table_t *dst_metadata;
+
+  res = aws_s3_object_copy(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_object_copy(p, NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null s3");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  s3 = (struct s3_conn *) 1;
+
+  mark_point();
+  res = aws_s3_object_copy(p, s3, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null src_bucket_name");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  src_bucket = "xfoo";
+
+  mark_point();
+  res = aws_s3_object_copy(p, s3, src_bucket, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null src_object_key");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  src_key = "xbar";
+
+  mark_point();
+  res = aws_s3_object_copy(p, s3, src_bucket, src_key, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null dst_bucket_name");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  dst_bucket = "yfoo";
+
+  mark_point();
+  res = aws_s3_object_copy(p, s3, src_bucket, src_key, dst_bucket, NULL,
+    NULL);
+  fail_unless(res < 0, "Failed to handle null dst_object_key");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  if (getenv("TRAVIS_CI") != NULL) {
+    return;
+  }
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
+
+  /* No such source bucket. */
+
+  dst_key = "ybar";
+
+  mark_point();
+  res = aws_s3_object_copy(p, s3, "NO_SUCH_SRC_BUCKET", src_key, dst_bucket,
+    dst_key, NULL);
+  fail_unless(res < 0, "Failed to handle invalid bucket NO_SUCH_SRC_BUCKET");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  /* No such source key. */
+
+  mark_point();
+  res = aws_s3_object_copy(p, s3, src_bucket, "NO_SUCH_SRC_KEY", dst_bucket,
+    dst_key, NULL);
+  fail_unless(res < 0, "Failed to handle invalid key NO_SUCH_SRC_KEY");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+#if 0
+  mark_point();
+  res = aws_s3_object_copy(p, s3, bucket, key, ...);
+  fail_unless(res == 0, "Failed to copy object %s from bucket %s: %s", key,
+    bucket, strerror(errno));
+#endif
+
+  (void) aws_s3_conn_destroy(p, s3);
+}
+END_TEST
+
 Suite *tests_get_s3_object_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -384,6 +472,7 @@ Suite *tests_get_s3_object_suite(void) {
   tcase_add_test(testcase, s3_object_get_test);
   tcase_add_test(testcase, s3_object_stat_test);
   tcase_add_test(testcase, s3_object_delete_test);
+  tcase_add_test(testcase, s3_object_copy_test);
 
   suite_add_tcase(suite, testcase);
   return suite;

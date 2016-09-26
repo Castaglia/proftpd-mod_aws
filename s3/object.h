@@ -39,6 +39,10 @@
 #define AWS_S3_OBJECT_METADATA_PREFIX		"x-amz-meta-"
 #define AWS_S3_OBJECT_METADATA_PREFIX_LEN	11
 
+/* For object copying. */
+#define AWS_S3_OBJECT_COPY_SOURCE_KEY		"x-amz-copy-source"
+#define AWS_S3_OBJECT_COPY_SOURCE_METADATA	"x-amz-metadata-directive"
+
 /* Get an object from the specified bucket, using a byte range specified by the
  * given offset and length.
  *
@@ -65,5 +69,13 @@ int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
 /* Delete an object from the specified bucket. */
 int aws_s3_object_delete(pool *p, struct s3_conn *s3, const char *bucket_name,
   const char *object_key);
+
+/* Copy an object from the specified bucket, to a new bucket/key, with
+ * the provided metadata.
+ */
+int aws_s3_object_copy(pool *p, struct s3_conn *s3,
+  const char *src_bucket_name, const char *src_object_key,
+  const char *dst_bucket_name, const char *dst_object_key,
+  pr_table_t *dst_object_metadata);
 
 #endif /* MOD_AWS_S3_OBJECT_H */
