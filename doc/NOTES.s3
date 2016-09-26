@@ -1,5 +1,5 @@
 
-When handling file uploads, consider:
+S3:
 
   minimum size threshold of file (on local disk) BEFORE uploading to S3;
   below this threshold, use single PUT to upload to S3.  Configurable?
@@ -9,6 +9,10 @@ When handling file uploads, consider:
   SFTP uploads will have to use multipart uploads, right?  Will mod_aws
   need to maintain a list of "initiated" multipart S3 uploads, such that on
   session exit, they can be aborted, similar to what mod_sftp does?
+
+  Need to extend aws_s3_bucket_keys() to work for buckets with more than 100
+  objects!
+
 
 S3 FSIO:
 
@@ -22,7 +26,64 @@ S3 FSIO:
   interoperability with the other metadata headers that tools like s3fs,
   s3cmd, s3sync, etc maintain?
 
+    In https://github.com/s3fs-fuse/.../s3fs_util.cpp#is_need_check_obj_detail()
+    was seen the following:
+
+      x-amz-meta-mode
+      x-amz-meta-mtime
+      x-amz-meta-uid
+      x-amz-meta-gid
+      x-amz-meta-owner
+      x-amz-meta-group
+      x-amz-meta-permissions
+
+    This requests that s3cmd be compatible with s3fs-fuse in this regard:
+
+      https://github.com/bloomreach/s4cmd/issues/19
+
+    What will mod_aws do for existing x-amz-meta values for an object, e.g.
+    when copying?  Maybe always do aws_s3_object_stat() to get metadata
+    inside of aws_s3_object_copy(), so that it always Does The Right Thing(tm)?
+
+  chown(2), chmod(2), chgrp(2), utimes(2) operations on a file require
+  changing its metadata.  And changing the metadata for an S3 object MUST
+  be done via an object copy, as object metadata is immutable once an object
+  has been created.  However, keep in mind THIS caveat, for the
+  x-amz-metadata-directive, from the Copy Object docs:
+
+    Default: COPY
+
+    Valid values: COPY | REPLACE
+
+    Constraints: Values other than COPY or REPLACE result in an immediate
+    400-based error response. You cannot copy an object to itself unless the
+    MetadataDirective header is specified and its value set to REPLACE.
+
+  SO, for the above ch*() FSIO operations, we use copy WITH new object
+  metadata, and make sure that the aws_s3_object_copy() function Does The
+  Right Thing(tm).
+
+  See:
+    http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectCOPY.html
+
+
 FTP/SFTP mapping:
 
   Initially, have PRE_CMD handler for STOR, which blocks any resumed uploads;
   it's not (easily) possible for FTP/SFTP.
+
+  For the directory listing case, WHAT IF mod_aws maintained a
+  "directory listing" object for a given bucket prefix, such that ONLY that
+  S3 object needed to be downloaded, rather than the brute-force HTTP request
+  heavy approach?  Doing so might speed up directory listings, but would also
+  require a download/upload of that object, each time an s3 object was
+  added/removed.  A potential trick to keep in mind; I suspect that something
+  similar may be done by tools like s3fs (which uses its own FUSE cache).
+  See:
+
+    http://stackoverflow.com/questions/10989880/efficient-way-to-extract-files-and-meta-data-from-amazon-s3
+
+Future features:
+
+  Support for different storage classes (per-directory?)
+  Support for server-side encryption (per-directory?)
