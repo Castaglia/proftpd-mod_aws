@@ -37,6 +37,9 @@ char *aws_utils_str_n2s(pool *p, int n);
 char *aws_utils_str_ul2s(pool *p, unsigned long n);
 char *aws_utils_str_off2s(pool *p, off_t n);
 
+/* Converts the given strings to numbers. */
+int aws_utils_str_s2off(pool *p, const char *s, off_t *n);
+
 /* Trim any leading/trailing whitespace from the given string.
  *
  * A copy of the given string is made from the pool, and that copy is

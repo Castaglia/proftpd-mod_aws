@@ -173,6 +173,59 @@ START_TEST (utils_str_off2s_test) {
 }
 END_TEST
 
+START_TEST (utils_str_s2off_test) {
+  int res;
+  const char *s;
+  off_t n, expected;
+
+  mark_point();
+  res = aws_utils_str_s2off(NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_utils_str_s2off(p, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null s");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  s = "0";
+
+  mark_point();
+  res = aws_utils_str_s2off(p, s, NULL);
+  fail_unless(res < 0, "Failed to handle null n");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  expected = 0;
+
+  mark_point();
+  res = aws_utils_str_s2off(p, s, &n);
+  fail_unless(res == 0, "Failed to handle %s: %s", s, strerror(errno));
+  fail_unless(n == expected, "Expected '%lu', got '%lu'",
+    (unsigned long) expected, (unsigned long) res);
+
+  s = "7";
+  expected = 7;
+
+  mark_point();
+  res = aws_utils_str_s2off(p, s, &n);
+  fail_unless(res == 0, "Failed to handle %s: %s", s, strerror(errno));
+  fail_unless(n == expected, "Expected '%lu', got '%lu'",
+    (unsigned long) expected, (unsigned long) res);
+
+  s = "18446744073709551615";
+  expected = (off_t) -1;
+
+  mark_point();
+  res = aws_utils_str_s2off(p, s, &n);
+  fail_unless(res == 0, "Failed to handle %s: %s", s, strerror(errno));
+  fail_unless(n == expected, "Expected '%lu', got '%lu'",
+    (unsigned long) expected, (unsigned long) res);
+}
+END_TEST
+
 START_TEST (utils_str_trim_test) {
   char *res, *expected;
   const char *str;
@@ -290,6 +343,7 @@ Suite *tests_get_utils_suite(void) {
   tcase_add_test(testcase, utils_str_n2s_test);
   tcase_add_test(testcase, utils_str_ul2s_test);
   tcase_add_test(testcase, utils_str_off2s_test);
+  tcase_add_test(testcase, utils_str_s2off_test);
   tcase_add_test(testcase, utils_str_trim_test);
   tcase_add_test(testcase, utils_strn_trim_test);
 

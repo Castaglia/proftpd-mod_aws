@@ -107,6 +107,30 @@ char *aws_utils_str_off2s(pool *p, off_t n) {
   return num;
 }
 
+int aws_utils_str_s2off(pool *p, const char *s, off_t *n) {
+  char *ptr = NULL;
+
+  if (p == NULL ||
+      s == NULL ||
+      n == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+#ifdef HAVE_STROTOULL
+  *n = strtoull(s, &ptr, 10);
+#else
+  *n = strtoul(s, &ptr, 10);
+#endif /* HAVE_STRTOULL */
+
+  if (ptr && *ptr) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  return 0;
+}
+
 char *aws_utils_strn_trim(pool *p, const char *str, size_t len) {
   const char *start, *end;
   char *trimmed = NULL;
