@@ -13,16 +13,6 @@ S3:
   Need to extend aws_s3_bucket_keys() to work for buckets with more than 100
   objects!
 
-  Also make it possible for aws_s3_bucket_keys() to provide the other
-  attributes of the objects (size, storage class, etc); see:
-    https://github.com/aws/aws-sdk-ruby/issues/588
-
-  Maybe the above is done via on optional table, to be keyed by S3 object
-  key, whose values are themselves a table of those attributes (last-modified,
-  size, etag, storage class).  Or, rather than a table (since each object
-  will always have the same attribute), just use a struct designed for this
-  purpose.
-
   Fun with proxies:
     https://github.com/s3fs-fuse/s3fs-fuse/issues/324
 
