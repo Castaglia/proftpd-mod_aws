@@ -28,12 +28,23 @@
 #include "mod_aws.h"
 #include "s3/conn.h"
 
+struct s3_object_attrs {
+  off_t size;
+  time_t last_modified;
+  const char *etag;
+
+  /* Note: Maybe move these to an enum in the future? */
+  const char *storage_class;
+};
+
 /* Returns a list of the bucket names for the account. */
 array_header *aws_s3_bucket_get_names(pool *p, struct s3_conn *s3,
   const char **owner_id, const char **owner_name);
 
-/* Returns a list of the object keys in the given bucket. */
-array_header *aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
+/* Returns table containing the object keys in the given bucket; the values
+ * are struct s3_object_attrs for each object.
+ */
+pr_table_t *aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
   const char *bucket_name, const char *prefix);
 
 /* Returns zero if the given bucket can be accessed, otherwise -1, with

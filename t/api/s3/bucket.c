@@ -131,7 +131,7 @@ START_TEST (s3_bucket_get_names_test) {
 END_TEST
 
 START_TEST (s3_bucket_get_keys_test) {
-  array_header *keys;
+  pr_table_t *keys;
   struct s3_conn *s3;
   const char *bucket, *prefix;
 

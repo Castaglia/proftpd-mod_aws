@@ -25,6 +25,8 @@
 #include "mod_aws.h"
 #include "http.h"
 #include "xml.h"
+#include "utils.h"
+#include "../utils.h"
 #include "s3/error.h"
 #include "s3/bucket.h"
 
@@ -250,7 +252,8 @@ int aws_s3_bucket_access(pool *p, struct s3_conn *s3, const char *bucket_name) {
   return res;
 }
 
-static const char *parse_bucket_content(pool *p, void *content) {
+static const char *parse_bucket_content(pool *p, void *content,
+    struct s3_object_attrs **object_attrs) {
   void *elt;
   const char *key = NULL;
 
@@ -262,39 +265,50 @@ static const char *parse_bucket_content(pool *p, void *content) {
 
   key = aws_xml_elt_get_text(p, elt);
 
-  if (pr_trace_get_level(trace_channel) >= 12) {
-    elt = aws_xml_elt_get_child(p, content, "Size", 4);
-    if (elt != NULL) {
-      pr_trace_msg(trace_channel, 12, " object %s size = %s", key,
-        aws_xml_elt_get_text(p, elt));
-    }
+  *object_attrs = pcalloc(p, sizeof(struct s3_object_attrs));
 
-    elt = aws_xml_elt_get_child(p, content, "StorageClass", 12);
-    if (elt != NULL) {
-      pr_trace_msg(trace_channel, 12, " object %s storage class = %s", key,
-        aws_xml_elt_get_text(p, elt));
-    }
+  elt = aws_xml_elt_get_child(p, content, "Size", 4);
+  if (elt != NULL) {
+    int res;
+    off_t sz;
 
-    elt = aws_xml_elt_get_child(p, content, "LastModified", 12);
-    if (elt != NULL) {
-      pr_trace_msg(trace_channel, 12, " object %s last-modified = %s", key,
-        aws_xml_elt_get_text(p, elt));
+    res = aws_utils_str_s2off(p, aws_xml_elt_get_text(p, elt), &sz);
+    if (res == 0) {
+      (*object_attrs)->size = sz;
+      pr_trace_msg(trace_channel, 12, " object %s size = %" PR_LU, key,
+        (pr_off_t) sz);
     }
+  }
 
-    elt = aws_xml_elt_get_child(p, content, "ETag", 4);
-    if (elt != NULL) {
-      pr_trace_msg(trace_channel, 12, " object %s etag = %s", key,
-        aws_xml_elt_get_text(p, elt));
-    }
+  elt = aws_xml_elt_get_child(p, content, "StorageClass", 12);
+  if (elt != NULL) {
+    (*object_attrs)->storage_class = aws_xml_elt_get_text(p, elt);
+    pr_trace_msg(trace_channel, 12, " object %s storage class = %s", key,
+      (*object_attrs)->storage_class);
+  }
+
+  elt = aws_xml_elt_get_child(p, content, "LastModified", 12);
+  if (elt != NULL) {
+    (*object_attrs)->last_modified = aws_s3_utils_lastmod2unix(p,
+      aws_xml_elt_get_text(p, elt));
+    pr_trace_msg(trace_channel, 12, " object %s last-modified = %lu", key,
+      (unsigned long) (*object_attrs)->last_modified);
+  }
+
+  elt = aws_xml_elt_get_child(p, content, "ETag", 4);
+  if (elt != NULL) {
+    (*object_attrs)->etag = aws_xml_elt_get_text(p, elt);
+    pr_trace_msg(trace_channel, 12, " object %s etag = %s", key,
+      (*object_attrs)->etag);
   }
 
   return key;
 }
 
-static array_header *parse_bucket_contents(pool *p, const char *data,
+static pr_table_t *parse_bucket_contents(pool *p, const char *data,
     size_t datasz) {
   void *doc, *root, *kid, *elt;
-  array_header *keys = NULL;
+  pr_table_t *keys = NULL;
   const char *elt_name;
   size_t elt_namelen;
 
@@ -341,10 +355,12 @@ static array_header *parse_bucket_contents(pool *p, const char *data,
     if (elt != NULL) {
       pr_trace_msg(trace_channel, 12, "bucket keys are truncated: %s",
         aws_xml_elt_get_text(p, elt));
+
+/* XXX Need to handle IsTruncated=true! */
     }
   }
 
-  keys = make_array(p, 1, sizeof(const char *));
+  keys = pr_table_alloc(p, 0);
 
   /* Contrary to the AWS S3 documentation for List Objects (v2), the
    * actual response does NOT contain a <Contents> element which contains
@@ -360,12 +376,16 @@ static array_header *parse_bucket_contents(pool *p, const char *data,
 
   while (kid != NULL) {
     const char *key;
+    struct s3_object_attrs *object_attrs = NULL;
 
     pr_signals_handle();
 
-    key = parse_bucket_content(p, kid);
+    key = parse_bucket_content(p, kid, &object_attrs);
     if (key != NULL) {
-      *((const char **) push_array(keys)) = key;
+      size_t keysz;
+
+      keysz = strlen(key) + 1;
+      (void) pr_table_kadd(keys, key, keysz, object_attrs, sizeof(void *));
     }
 
     kid = aws_xml_elt_get_next(p, kid);
@@ -375,12 +395,13 @@ static array_header *parse_bucket_contents(pool *p, const char *data,
   return keys;
 }
 
-array_header *aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
+pr_table_t *aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
     const char *bucket_name, const char *prefix) {
   int res;
   const char *path;
   pool *req_pool;
-  array_header *keys = NULL, *query_params;
+  array_header *query_params;
+  pr_table_t *keys = NULL;
 
   if (p == NULL ||
       s3 == NULL ||
@@ -426,16 +447,23 @@ array_header *aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
   aws_s3_conn_clear_response(s3);
 
   if (keys != NULL) {
-    register unsigned int i;
+    const void *key;
 
-    pr_trace_msg(trace_channel, 15, "received keys for bucket %s:",
-      bucket_name);
-    for (i = 0; i < keys->nelts; i++) {
-      const char *key;
+    pr_trace_msg(trace_channel, 15, "received %d keys for bucket %s:",
+      pr_table_count(keys), bucket_name);
 
-      key = ((char **) keys->elts)[i];
-      pr_trace_msg(trace_channel, 15, "  received object key = %s", key);
+    (void) pr_table_rewind(keys);
+
+    key = pr_table_next(keys);
+    while (key != NULL) {
+      pr_signals_handle();
+
+      pr_trace_msg(trace_channel, 15, "  received object key = %s",
+        (char *) key);
+      key = pr_table_next(keys);
     }
+
+    (void) pr_table_rewind(keys);
   }
 
   return keys;

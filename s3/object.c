@@ -26,6 +26,7 @@
 #include "utils.h"
 #include "http.h"
 #include "xml.h"
+#include "../utils.h"
 #include "s3/conn.h"
 #include "s3/error.h"
 #include "s3/object.h"
@@ -361,46 +362,6 @@ static size_t copy_object_cb(char *data, size_t item_sz, size_t item_count,
   return datasz;
 }
 
-/* The timestamp format used for the <Last-Modified> element in these
- * responses is NOT an HTTP date, thus we cannot use aws_http_date2unix().
- */
-static time_t lastmodified2unix(pool *p, const char *last_modified) {
-  struct tm *tm;
-  time_t date;
-  char *ptr;
-
-  if (p == NULL ||
-      last_modified == NULL) {
-    errno = EINVAL;
-    return 0;
-  }
-
-  tm = pcalloc(p, sizeof(struct tm));
-
-  ptr = strptime(last_modified, "%Y-%m-%dT%H:%M:%SZ", tm);
-  if (ptr == NULL) {
-    int xerrno = errno;
-
-    pr_trace_msg(trace_channel, 3,
-      "unable to parse CopyObjectResult date '%s': %s",
-      last_modified, strerror(xerrno));
-
-    errno = xerrno;
-    return 0;
-  }
-
-  /* XXX Beware that mktime(3) has the same TZ-sensitive as other time-related
-   * library functions.  If we ASSUME that this function will only EVER be
-   * called after authentication, e.g. post-chroot, then it SHOULD be safe.
-   */
-  date = mktime(tm);
-
-  pr_trace_msg(trace_channel, 17,
-    "parsed CopyObjectResult date '%s' as Unix epoch %lu",
-    last_modified, (unsigned long) date);
-  return date;
-}
-
 static int parse_copy_object(pool *p, const char *data, size_t datasz,
     time_t *last_modified, const char **etag) {
   void *doc, *root, *elt;
@@ -435,7 +396,7 @@ static int parse_copy_object(pool *p, const char *data, size_t datasz,
 
   elt = aws_xml_elt_get_child(p, root, "LastModified", 12);
   if (elt != NULL) {
-    *last_modified = lastmodified2unix(p, aws_xml_elt_get_text(p, elt));
+    *last_modified = aws_s3_utils_lastmod2unix(p, aws_xml_elt_get_text(p, elt));
   }
 
   elt = aws_xml_elt_get_child(p, root, "ETag", 4);
