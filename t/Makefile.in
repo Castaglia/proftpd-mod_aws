@@ -18,6 +18,7 @@ EXEEXT=@EXEEXT@
 
 TEST_S3_DEPS=$(module_srcdir)/s3/conn.o \
   $(module_srcdir)/s3/error.o \
+  $(module_srcdir)/s3/utils.o \
   $(module_srcdir)/s3/bucket.o \
   $(module_srcdir)/s3/object.o
 
@@ -57,6 +58,7 @@ TEST_API_LIBS=-lcheck
 
 TEST_S3_OBJS=api/s3/conn.o \
   api/s3/error.o \
+  api/s3/utils.o \
   api/s3/bucket.o \
   api/s3/object.o
 

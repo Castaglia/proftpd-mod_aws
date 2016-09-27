@@ -12,11 +12,13 @@ VPATH=@srcdir@
 
 S3_OBJS=s3/conn.o \
   s3/error.o \
+  s3/utils.o \
   s3/bucket.o \
   s3/object.o
 
 SHARED_S3_OBJS=s3/conn.lo \
   s3/error.lo \
+  s3/utils.lo \
   s3/bucket.lo \
   s3/object.lo
 

@@ -40,6 +40,7 @@ static struct testsuite_info suites[] = {
 
   { "s3.conn",		tests_get_s3_conn_suite },
   { "s3.error",		tests_get_s3_error_suite },
+  { "s3.utils",		tests_get_s3_utils_suite },
   { "s3.bucket",	tests_get_s3_bucket_suite },
   { "s3.object",	tests_get_s3_object_suite },
 

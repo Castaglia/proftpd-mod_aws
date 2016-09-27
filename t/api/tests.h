@@ -40,6 +40,7 @@
 /* S3 API tests */
 #include "s3/conn.h"
 #include "s3/error.h"
+#include "s3/utils.h"
 #include "s3/bucket.h"
 #include "s3/object.h"
 
@@ -59,6 +60,7 @@ Suite *tests_get_utils_suite(void);
 
 Suite *tests_get_s3_conn_suite(void);
 Suite *tests_get_s3_error_suite(void);
+Suite *tests_get_s3_utils_suite(void);
 Suite *tests_get_s3_bucket_suite(void);
 Suite *tests_get_s3_object_suite(void);
 
