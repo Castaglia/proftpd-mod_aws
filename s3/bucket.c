@@ -454,9 +454,6 @@ int aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
         strerror(errno));
 
     } else {
-        pr_trace_msg(trace_channel, 1,
-          "using continuation token %s to get next page of keys for bucket %s",
-          next_token ? next_token : "(NONE)", bucket_name);
       if (next_token != NULL) {
         pr_trace_msg(trace_channel, 17,
           "using continuation token %s to get next page of keys for bucket %s",
