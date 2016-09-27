@@ -58,6 +58,8 @@ int aws_s3_conn_destroy(pool *p, struct s3_conn *s3);
 
 void aws_s3_conn_clear_response(struct s3_conn *s3);
 
+void aws_s3_conn_reset_response(struct s3_conn *s3);
+
 int aws_s3_delete(pool *p, void *http, pr_table_t *http_headers,
   const char *path, array_header *query_params, pr_table_t *resp_headers,
   struct s3_conn *s3);

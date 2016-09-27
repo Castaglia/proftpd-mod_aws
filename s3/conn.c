@@ -23,11 +23,11 @@
  */
 
 #include "mod_aws.h"
-#include "utils.h"
 #include "http.h"
 #include "error.h"
 #include "sign.h"
 #include "xml.h"
+#include "../utils.h"
 #include "s3/conn.h"
 #include "s3/error.h"
 
@@ -96,6 +96,15 @@ void aws_s3_conn_clear_response(struct s3_conn *s3) {
   if (s3->req_pool != NULL) {
     destroy_pool(s3->req_pool);
     s3->req_pool = NULL;
+  }
+
+  s3->resp = NULL;
+  s3->respsz = 0;
+}
+
+void aws_s3_conn_reset_response(struct s3_conn *s3) {
+  if (s3 == NULL) {
+    return;
   }
 
   s3->resp = NULL;

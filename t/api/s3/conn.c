@@ -83,6 +83,12 @@ START_TEST (s3_conn_clear_response_test) {
 }
 END_TEST
 
+START_TEST (s3_conn_reset_response_test) {
+  mark_point();
+  aws_s3_conn_reset_response(NULL);
+}
+END_TEST
+
 Suite *tests_get_s3_conn_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -95,6 +101,7 @@ Suite *tests_get_s3_conn_suite(void) {
   tcase_add_test(testcase, s3_conn_destroy_test);
   tcase_add_test(testcase, s3_conn_alloc_test);
   tcase_add_test(testcase, s3_conn_clear_response_test);
+  tcase_add_test(testcase, s3_conn_reset_response_test);
 
 /* XXX TODO:
  *  s3_get_test
