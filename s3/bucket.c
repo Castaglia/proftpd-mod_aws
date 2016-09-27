@@ -306,7 +306,7 @@ static const char *parse_bucket_content(pool *p, void *content,
 }
 
 static int parse_bucket_contents(pool *p, const char *data, size_t datasz,
-    pr_table_t *keys, char **continuation_token) {
+    pr_table_t *keys, const char **continuation_token) {
   void *doc, *root, *kid, *elt;
   const char *elt_name;
   size_t elt_namelen;
@@ -443,7 +443,7 @@ int aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
   res = aws_s3_get(p, s3->http, NULL, path, query_params, NULL,
     bucket_resp_cb, (void *) s3, s3);
   if (res == 0) {
-    char *next_token = NULL;
+    const char *next_token = NULL;
 
     pr_trace_msg(trace_channel, 19,
       "get bucket contents response: '%.*s'", (int) s3->respsz, s3->resp);
@@ -455,13 +455,26 @@ int aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
 
     } else {
       if (next_token != NULL) {
-        pr_trace_msg(trace_channel, 17,
-          "using continuation token %s to get next page of keys for bucket %s",
-          next_token, bucket_name);
+        int key_count;
 
-        aws_s3_conn_reset_response(s3);
-        return aws_s3_bucket_get_keys(p, s3, bucket_name, prefix, keys,
-          next_token);
+        /* Even though there may be more keys in this bucket, we set an
+         * upper limit, to prevent undue memory consumption and recursion
+         * that might result from a pathologically large S3 bucket.
+         */
+        key_count = pr_table_count(keys);
+        if (key_count < AWS_S3_BUCKET_MAX_KEYS) {
+          pr_trace_msg(trace_channel, 17,
+            "using continuation token %s to get next page of keys for "
+            "bucket %s", next_token, bucket_name);
+
+          aws_s3_conn_reset_response(s3);
+          return aws_s3_bucket_get_keys(p, s3, bucket_name, prefix, keys,
+            next_token);
+        }
+
+        pr_log_pri(PR_LOG_INFO, MOD_AWS_VERSION
+          ": reached/exceeded maximum number of keys (%d) for bucket %s, "
+          "skipping remaining keys", key_count, bucket_name);
       }
     }
   }

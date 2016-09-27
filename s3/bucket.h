@@ -28,6 +28,11 @@
 #include "mod_aws.h"
 #include "s3/conn.h"
 
+/* Maximum number of keys that we will retrieve from an S3 bucket at one
+ * time.
+ */
+#define AWS_S3_BUCKET_MAX_KEYS		10000
+
 struct s3_object_attrs {
   off_t size;
   time_t last_modified;
