@@ -305,17 +305,16 @@ static const char *parse_bucket_content(pool *p, void *content,
   return key;
 }
 
-static pr_table_t *parse_bucket_contents(pool *p, const char *data,
-    size_t datasz) {
+static int parse_bucket_contents(pool *p, const char *data, size_t datasz,
+    pr_table_t *keys, char **continuation_token) {
   void *doc, *root, *kid, *elt;
-  pr_table_t *keys = NULL;
   const char *elt_name;
   size_t elt_namelen;
 
   doc = aws_xml_doc_parse(p, data, (int) datasz);
   if (doc == NULL) {
     errno = EINVAL;
-    return NULL;
+    return -1;
   }
 
   root = aws_xml_doc_get_root_elt(p, doc);
@@ -324,7 +323,7 @@ static pr_table_t *parse_bucket_contents(pool *p, const char *data,
     aws_xml_doc_free(p, doc);
 
     errno = EINVAL;
-    return NULL;
+    return -1;
   }
 
   elt_name = aws_xml_elt_get_name(p, root, &elt_namelen);
@@ -335,7 +334,7 @@ static pr_table_t *parse_bucket_contents(pool *p, const char *data,
     aws_xml_doc_free(p, doc);
 
     errno = EINVAL;
-    return NULL;
+    return -1;
   }
 
   if (pr_trace_get_level(trace_channel) >= 12) {
@@ -353,14 +352,22 @@ static pr_table_t *parse_bucket_contents(pool *p, const char *data,
 
     elt = aws_xml_elt_get_child(p, root, "IsTruncated", 11);
     if (elt != NULL) {
-      pr_trace_msg(trace_channel, 12, "bucket keys are truncated: %s",
-        aws_xml_elt_get_text(p, elt));
+      int truncated = FALSE;
 
-/* XXX Need to handle IsTruncated=true! */
+      truncated = pr_str_is_boolean(aws_xml_elt_get_text(p, elt));
+      pr_trace_msg(trace_channel, 12, "bucket keys are truncated: %s",
+        truncated ? "true" : "false");
+
+      if (truncated == TRUE) {
+        elt = aws_xml_elt_get_child(p, root, "NextContinuationToken", 21);
+        if (elt != NULL) {
+          *continuation_token = aws_xml_elt_get_text(p, elt);
+          pr_trace_msg(trace_channel, 12, "bucket keys continuation token: %s",
+            *continuation_token);
+        }
+      }
     }
   }
-
-  keys = pr_table_alloc(p, 0);
 
   /* Contrary to the AWS S3 documentation for List Objects (v2), the
    * actual response does NOT contain a <Contents> element which contains
@@ -371,7 +378,7 @@ static pr_table_t *parse_bucket_contents(pool *p, const char *data,
   if (kid == NULL) {
     /* No objects found in the bucket. */
     aws_xml_doc_free(p, doc);
-    return keys;
+    return 0;
   }
 
   while (kid != NULL) {
@@ -392,32 +399,28 @@ static pr_table_t *parse_bucket_contents(pool *p, const char *data,
   }
 
   aws_xml_doc_free(p, doc);
-  return keys;
+  return 0;
 }
 
-pr_table_t *aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
-    const char *bucket_name, const char *prefix) {
+int aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
+    const char *bucket_name, const char *prefix, pr_table_t *keys,
+    const char *continuation_token) {
   int res;
   const char *path;
   pool *req_pool;
   array_header *query_params;
-  pr_table_t *keys = NULL;
 
   if (p == NULL ||
       s3 == NULL ||
-      bucket_name == NULL) {
+      bucket_name == NULL ||
+      keys == NULL) {
     errno = EINVAL;
-    return NULL;
+    return -1;
   }
 
   req_pool = make_sub_pool(s3->pool);
   pr_pool_tag(req_pool, "S3 Request Pool");
   s3->req_pool = req_pool;
-
-  /* TODO: We'll need to handle the case where the bucket in question has
-   * more than 1000 objects in the future.  This function will need to
-   * handle the continuation token itself.
-   */
 
   path = pstrcat(req_pool, "/",
     aws_http_urlencode(req_pool, s3->http, bucket_name, 0), NULL);
@@ -431,16 +434,38 @@ pr_table_t *aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
       aws_http_urlencode(req_pool, s3->http, prefix, 0), NULL);
   }
 
+  if (continuation_token != NULL) {
+    *((char **) push_array(query_params)) = pstrcat(req_pool,
+      "continuation-token=",
+      aws_http_urlencode(req_pool, s3->http, continuation_token, 0), NULL);
+  }
+
   res = aws_s3_get(p, s3->http, NULL, path, query_params, NULL,
     bucket_resp_cb, (void *) s3, s3);
   if (res == 0) {
+    char *next_token = NULL;
+
     pr_trace_msg(trace_channel, 19,
       "get bucket contents response: '%.*s'", (int) s3->respsz, s3->resp);
-    keys = parse_bucket_contents(p, s3->resp, s3->respsz);
-    if (keys == NULL) {
+    if (parse_bucket_contents(p, s3->resp, s3->respsz, keys,
+        &next_token) < 0) {
       (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
         "error parsing S3 bucket contents list XML response: %s",
         strerror(errno));
+
+    } else {
+        pr_trace_msg(trace_channel, 1,
+          "using continuation token %s to get next page of keys for bucket %s",
+          next_token ? next_token : "(NONE)", bucket_name);
+      if (next_token != NULL) {
+        pr_trace_msg(trace_channel, 17,
+          "using continuation token %s to get next page of keys for bucket %s",
+          next_token, bucket_name);
+
+        aws_s3_conn_reset_response(s3);
+        return aws_s3_bucket_get_keys(p, s3, bucket_name, prefix, keys,
+          next_token);
+      }
     }
   }
 
@@ -466,5 +491,5 @@ pr_table_t *aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
     (void) pr_table_rewind(keys);
   }
 
-  return keys;
+  return 0;
 }

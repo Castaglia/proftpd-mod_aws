@@ -131,27 +131,36 @@ START_TEST (s3_bucket_get_names_test) {
 END_TEST
 
 START_TEST (s3_bucket_get_keys_test) {
+  int res;
   pr_table_t *keys;
   struct s3_conn *s3;
   const char *bucket, *prefix;
 
   mark_point();
-  keys = aws_s3_bucket_get_keys(NULL, NULL, NULL, NULL);
-  fail_unless(keys == NULL, "Failed to handle null pool");
+  res = aws_s3_bucket_get_keys(NULL, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
-  keys = aws_s3_bucket_get_keys(p, NULL, NULL, NULL);
-  fail_unless(keys == NULL, "Failed to handle null s3");
+  res = aws_s3_bucket_get_keys(p, NULL, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null s3");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   s3 = (struct s3_conn *) 1;
 
   mark_point();
-  keys = aws_s3_bucket_get_keys(p, s3, NULL, NULL);
-  fail_unless(keys == NULL, "Failed to handle null bucket_name");
+  res = aws_s3_bucket_get_keys(p, s3, NULL, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null bucket_name");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  bucket = "foo";
+
+  mark_point();
+  res = aws_s3_bucket_get_keys(p, s3, bucket, NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null keys");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
@@ -166,9 +175,11 @@ START_TEST (s3_bucket_get_keys_test) {
   fail_unless(bucket != NULL,
     "Failed to provide AWS_S3_BUCKET environment variable");
 
+  keys = pr_table_alloc(p, 0);
+
   mark_point();
-  keys = aws_s3_bucket_get_keys(p, s3, bucket, NULL);
-  fail_unless(keys != NULL, "Failed to get all keys for bucket '%s': %s",
+  res = aws_s3_bucket_get_keys(p, s3, bucket, NULL, keys, NULL);
+  fail_unless(res == 0, "Failed to get all keys for bucket '%s': %s",
     bucket, strerror(errno));
 
   /* Using a prefix of ".../" leads to an object key of ".../" being among
@@ -178,9 +189,11 @@ START_TEST (s3_bucket_get_keys_test) {
   fail_unless(prefix != NULL,
     "Failed to provide AWS_S3_BUCKET_PREFIX environment variable");
 
+  pr_table_empty(keys);
+
   mark_point();
-  keys = aws_s3_bucket_get_keys(p, s3, bucket, prefix);
-  fail_unless(keys != NULL, "Failed to get '%s' keys for bucket '%s': %s",
+  res = aws_s3_bucket_get_keys(p, s3, bucket, prefix, keys, NULL);
+  fail_unless(res == 0, "Failed to get '%s' keys for bucket '%s': %s",
     prefix, bucket, strerror(errno));
 
   (void) aws_s3_conn_destroy(p, s3);

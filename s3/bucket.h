@@ -44,8 +44,9 @@ array_header *aws_s3_bucket_get_names(pool *p, struct s3_conn *s3,
 /* Returns table containing the object keys in the given bucket; the values
  * are struct s3_object_attrs for each object.
  */
-pr_table_t *aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
-  const char *bucket_name, const char *prefix);
+int aws_s3_bucket_get_keys(pool *p, struct s3_conn *s3,
+  const char *bucket_name, const char *prefix, pr_table_t *keys,
+  const char *continuation_token);
 
 /* Returns zero if the given bucket can be accessed, otherwise -1, with
  * errno set appropriately.
