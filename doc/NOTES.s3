@@ -10,11 +10,16 @@ S3:
   need to maintain a list of "initiated" multipart S3 uploads, such that on
   session exit, they can be aborted, similar to what mod_sftp does?
 
-  Need to extend aws_s3_bucket_keys() to work for buckets with more than 100
-  objects!
-
   Fun with proxies:
     https://github.com/s3fs-fuse/s3fs-fuse/issues/324
+
+  FYI, document that to use mod_aws+S3 via HTTP proxy, set the http_proxy
+  environment variable, e.g.:
+
+    SetEnv http_proxy ...
+
+  as libcurl will, per its documentation, honor it.
+
 
   Will mod_aws need to be able configure libcurl to work through a forward
   proxy?  (Probably not; wait until someone requests it.)
@@ -57,6 +62,26 @@ S3:
    aws_s3_content_md5(), or aws_s3_conn_content_md5(), or even
    aws_s3_object_content_md5()?  Given streamy downloads of S3 objects, we
    should always calculate the md5 (e.g. via MD5Update()).
+
+  Maximum key size?  1024?  This has an impact on the max path length in
+  an S3-backed directory!
+
+  Can the request timeout be tweaked, on a curl handle, on a per-request
+  basis?  Consider long-lasting PUTs/uploads!  What about any AWS-enforced
+  idle timeouts, max request times, etc?  I am thinking of a PUT which
+  leads a pause in the curl READFUNCTION callback, while proftpd reads more
+  data from the front-end client, and then (somehow) feeds that back to
+  the ongoing/open connection (with a resume).
+
+  When mod_mime is available/present, use it to determine a Content-Type
+  to set for the uploaded objects?
+
+  Interoperability with s3fs, S3Fox, AWS Console S3 objects:
+
+    AWS Console shows as "folders" any S3 object whose key ends in "/"
+    (preferably of size == 0).
+
+    s3fs stores/caches its file info via x-amz-meta-mode
 
 
 S3 FSIO:
@@ -118,6 +143,14 @@ S3 FSIO:
     http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectCOPY.html
 
 
+  Caching: Consider a read-many file stored in S3.  Serving that file from
+  local disk is definitely faster (and cheaper) than proxying it from S3 to
+  the requesting client.  Thus mod_aws SHOULD offer the option of caching
+  the file on local disk.  This would entail the normal TTL considers,
+  max number of files to cache, etc etc.  In effect, though, this would be
+  similar to the "caching" of directory entries that I'm considering.
+
+
 FTP/SFTP mapping:
 
   Initially, have PRE_CMD handler for STOR, which blocks any resumed uploads;
@@ -142,6 +175,37 @@ FTP/SFTP mapping:
   synchronize access to thta "directory index" object, and prevent clobbering.
   Maybe using the if-not-modified-since/if-none-match approach for an
   object copy?
+
+  ALTERNATIVELY, mod_aws could simply maintain the directory entries on
+  local disk.  That way, we get all of the struct stat data (except for size),
+  and it makes directory listings MUCH faster/easier.  Doing so would also
+  help support symlinks, AND local debugging.  (It might look odd, via the
+  shell, seeing a bunch of zero-length files, though.)
+
+
+    Q: What data consistency model does Amazon S3 employ?
+
+    Amazon S3 buckets in all Regions provide read-after-write consistency
+    for PUTS of new objects and eventual consistency for overwrite PUTS and
+    DELETES. 
+
+  From:
+
+    https://aws.amazon.com/s3/faqs/
+
+  This means that we ONLY want to show directory listings from the on-disk
+  files, NOT from the S3 bucket key listening.
+
+
+  What if mod_aws installed its own RETR, STOR handles entirely?  That way,
+  mod_aws would be in complete control of the IO on the data connection...
+
+
+Core API:
+
+  Need pr_table_knext(), if you want to get the size of the key that is
+  returned.  pr_table_next() does not do this.  (Needed, e.g., for implementing
+  pr_table_size() for calculating size of keys/values in table.)
 
 
 Performance Tuning:
@@ -195,3 +259,10 @@ Future features:
   This is best done on a per-bucket basis, via lifecycle policies:
     https://aws.amazon.com/blogs/aws/amazon-s3-object-expiration/
 
+
+Related:
+
+  https://objectivefs.com/userguide#memory-cache
+  https://github.com/ceph/libs3
+  https://github.com/s3fs-fuse/s3fs-fuse 
+  http://serverfault.com/questions/554086/move-files-from-ftp-server-to-s3
