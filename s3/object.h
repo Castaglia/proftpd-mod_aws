@@ -43,6 +43,9 @@
 #define AWS_S3_OBJECT_COPY_SOURCE_KEY		"x-amz-copy-source"
 #define AWS_S3_OBJECT_COPY_SOURCE_METADATA	"x-amz-metadata-directive"
 
+/* Maximum size of object for single PUT. */
+#define AWS_S3_OBJECT_PUT_MAX_SIZE		(off_t) (5 * 1024 * 1024 * 1024)
+
 /* Get an object from the specified bucket, using a byte range specified by the
  * given offset and length.
  *

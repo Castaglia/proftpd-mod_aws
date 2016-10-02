@@ -573,6 +573,11 @@ int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
     return -1;
   }
 
+  if (object_datasz > AWS_S3_OBJECT_PUT_MAX_SIZE) {
+    errno = E2BIG;
+    return -1;
+  }
+
   req_pool = make_sub_pool(s3->pool);
   pr_pool_tag(req_pool, "S3 Object Request Pool");
   s3->req_pool = req_pool;

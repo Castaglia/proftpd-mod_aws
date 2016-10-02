@@ -529,6 +529,16 @@ START_TEST (s3_object_put_test) {
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
+  data = "Hello, World!\n";
+  datasz = strlen(data);
+
+  mark_point();
+  res = aws_s3_object_put(p, s3, bucket, key, NULL, data,
+    AWS_S3_OBJECT_PUT_MAX_SIZE * 2);
+  fail_unless(res < 0, "Failed to handle too-large data");
+  fail_unless(errno == E2BIG, "Expected E2BIG (%d), got %s (%d)", E2BIG,
+    strerror(errno), errno);
+
   if (getenv("TRAVIS_CI") != NULL) {
     return;
   }
@@ -537,8 +547,6 @@ START_TEST (s3_object_put_test) {
   fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
 
   /* No such bucket/key. */
-  data = "Hello, World!\n";
-  datasz = strlen(data);
 
   mark_point();
   res = aws_s3_object_put(p, s3, bucket, key, NULL, data, datasz);
