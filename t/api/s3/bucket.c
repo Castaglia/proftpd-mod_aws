@@ -73,7 +73,7 @@ static struct s3_conn *get_s3(pool *p) {
   struct s3_conn *s3;
 
   path = "/Users/tj/.aws/credentials";
-  profile = "mod_aws";
+  profile = "default";
   access_key_id = secret_access_key = session_token = NULL;
 
   mark_point();

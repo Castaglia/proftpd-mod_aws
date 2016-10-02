@@ -90,7 +90,8 @@ static int copy_object_metadata(pool *p, const char *object_key,
     int flags) {
   const void *k;
 
-  if (dst_object_metadata == NULL) {
+  if (dst_object_metadata == NULL ||
+      src_object_metadata == NULL) {
     return 0;
   }
 
@@ -198,9 +199,11 @@ int aws_s3_object_get(pool *p, struct s3_conn *s3, const char *bucket_name,
       range, 0);
   }
 
-  path = pstrcat(req_pool,
-    "/", aws_http_urlencode(req_pool, s3->http, bucket_name, 0),
-    "/", aws_http_urlencode(req_pool, s3->http, object_key, 0), NULL);
+  /* Note: Ideally we would URL-encode both the bucket name and the object
+   * key.  However, we will often have object keys which contain "/", and those
+   * slashes are legitimately part of the URL.
+   */
+  path = pstrcat(req_pool, "/", bucket_name, "/", object_key, NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -260,9 +263,11 @@ int aws_s3_object_stat(pool *p, struct s3_conn *s3, const char *bucket_name,
   pr_pool_tag(req_pool, "S3 Object Request Pool");
   s3->req_pool = req_pool;
 
-  path = pstrcat(req_pool,
-    "/", aws_http_urlencode(req_pool, s3->http, bucket_name, 0),
-    "/", aws_http_urlencode(req_pool, s3->http, object_key, 0), NULL);
+  /* Note: Ideally we would URL-encode both the bucket name and the object
+   * key.  However, we will often have object keys which contain "/", and those
+   * slashes are legitimately part of the URL.
+   */
+  path = pstrcat(req_pool, "/", bucket_name, "/", object_key, NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -312,9 +317,11 @@ int aws_s3_object_delete(pool *p, struct s3_conn *s3, const char *bucket_name,
   pr_pool_tag(req_pool, "S3 Object Request Pool");
   s3->req_pool = req_pool;
 
-  path = pstrcat(req_pool,
-    "/", aws_http_urlencode(req_pool, s3->http, bucket_name, 0),
-    "/", aws_http_urlencode(req_pool, s3->http, object_key, 0), NULL);
+  /* Note: Ideally we would URL-encode both the bucket name and the object
+   * key.  However, we will often have object keys which contain "/", and those
+   * slashes are legitimately part of the URL.
+   */
+  path = pstrcat(req_pool, "/", bucket_name, "/", object_key, NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -433,9 +440,12 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
 
   req_headers = pr_table_alloc(s3->req_pool, 0);
 
-  src_path = pstrcat(req_pool,
-    "/", aws_http_urlencode(req_pool, s3->http, src_bucket_name, 0),
-    "/", aws_http_urlencode(req_pool, s3->http, src_object_key, 0), NULL);
+  /* Note: Ideally we would URL-encode both the bucket name and the object
+   * key.  However, we will often have object keys which contain "/", and those
+   * slashes are legitimately part of the URL.
+   */
+  src_path = pstrcat(req_pool, "/", src_bucket_name, "/", src_object_key, NULL);
+
   pr_table_add(req_headers,
     pstrdup(s3->req_pool, AWS_S3_OBJECT_COPY_SOURCE_KEY), src_path, 0);
 
@@ -457,6 +467,11 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
         dst_object_metadata, src_object_metadata, metadata_flags);
     }
 
+    /* Restore our request pool pointer, which would have been cleared out
+     * by object_stat().
+     */
+    s3->req_pool = req_pool;
+
     (void) copy_object_metadata(req_pool, dst_object_key,
       req_headers, dst_object_metadata, metadata_flags);
 
@@ -467,9 +482,7 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
       metadata_directive, 0);
   }
 
-  dst_path = pstrcat(req_pool,
-    "/", aws_http_urlencode(req_pool, s3->http, dst_bucket_name, 0),
-    "/", aws_http_urlencode(req_pool, s3->http, dst_object_key, 0), NULL);
+  dst_path = pstrcat(req_pool, "/", dst_bucket_name, "/", dst_object_key, NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
