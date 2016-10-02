@@ -63,6 +63,14 @@ S3:
    aws_s3_object_content_md5()?  Given streamy downloads of S3 objects, we
    should always calculate the md5 (e.g. via MD5Update()).
 
+   However, per the AWS CLI FAQ, there are reasons/cases why even the cli
+   doesn't use Content-MD5:
+
+    http://docs.aws.amazon.com/cli/latest/topic/s3-faq.html
+
+   Namely, it looks like x-amz-content-sha256 has superceded Content-MD5.
+
+
   Maximum key size?  1024?  This has an impact on the max path length in
   an S3-backed directory!
 
