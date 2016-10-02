@@ -314,7 +314,7 @@ struct aws_error *aws_s3_error_parse_xml(pool *p, const char *data,
 
   err_pool = make_sub_pool(p);
   pr_pool_tag(err_pool, "AWS S3 Error Pool");
-  err = palloc(err_pool, sizeof(struct aws_error));
+  err = pcalloc(err_pool, sizeof(struct aws_error));
   err->pool = err_pool;
 
   err->err_code = aws_s3_error_get_code(err->pool,
