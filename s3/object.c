@@ -521,3 +521,91 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
   errno = xerrno;
   return res;
 }
+
+/* Note: Since PUT does not return a response, this callback should not be
+ * invoked.  But we provide one anyway, since libcurl needs it.
+ */
+static size_t put_object_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct s3_conn *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->respsz == 0) {
+    info->respsz = datasz;
+    ptr = info->resp = palloc(info->req_pool, info->respsz);
+
+  } else {
+    ptr = info->resp;
+    info->resp = palloc(info->req_pool, info->respsz + datasz);
+    memcpy(info->resp, ptr, info->respsz);
+
+    ptr = info->resp + info->respsz;
+    info->respsz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
+    const char *object_key, pr_table_t *object_metadata, char *object_data,
+    off_t object_datasz) {
+  int res, xerrno;
+  const char *path;
+  pool *req_pool;
+  array_header *query_params;
+  pr_table_t *req_headers = NULL;
+
+  if (p == NULL ||
+      s3 == NULL ||
+      bucket_name == NULL ||
+      object_key == NULL ||
+      object_data == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  req_pool = make_sub_pool(s3->pool);
+  pr_pool_tag(req_pool, "S3 Object Request Pool");
+  s3->req_pool = req_pool;
+
+  /* Note: Ideally we would URL-encode both the bucket name and the object
+   * key.  However, we will often have object keys which contain "/", and those
+   * slashes are legitimately part of the URL.
+   */
+  path = pstrcat(req_pool, "/", bucket_name, "/", object_key, NULL);
+
+  query_params = make_array(req_pool, 1, sizeof(char *));
+
+  if (object_metadata != NULL) {
+    int metadata_flags = AWS_S3_OBJECT_COPY_METADATA_FL_IGNORE_SYSTEM_ATTRS|
+      AWS_S3_OBJECT_COPY_METADATA_FL_KEEP_PREFIX;
+
+    req_headers = pr_table_alloc(s3->req_pool, 0);
+
+    (void) copy_object_metadata(req_pool, object_key,
+      req_headers, object_metadata, metadata_flags);
+  }
+
+  res = aws_s3_put(p, s3->http, req_headers, path, query_params, object_data,
+    object_datasz, NULL, put_object_cb, (void *) s3, s3);
+  xerrno = errno;
+
+  if (res == 0) {
+    pr_trace_msg(trace_channel, 19,
+      "successfully put object %s in bucket %s", object_key, bucket_name);
+  }
+
+  aws_s3_conn_clear_response(s3);
+
+  errno = xerrno;
+  return res;
+}
