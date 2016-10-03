@@ -203,7 +203,9 @@ int aws_s3_object_get(pool *p, struct s3_conn *s3, const char *bucket_name,
    * key.  However, we will often have object keys which contain "/", and those
    * slashes are legitimately part of the URL.
    */
-  path = pstrcat(req_pool, "/", bucket_name, "/", object_key, NULL);
+  path = pstrcat(req_pool, "/",
+    aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/",
+    object_key, NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -267,7 +269,9 @@ int aws_s3_object_stat(pool *p, struct s3_conn *s3, const char *bucket_name,
    * key.  However, we will often have object keys which contain "/", and those
    * slashes are legitimately part of the URL.
    */
-  path = pstrcat(req_pool, "/", bucket_name, "/", object_key, NULL);
+  path = pstrcat(req_pool, "/",
+    aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/",
+    object_key, NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -321,7 +325,9 @@ int aws_s3_object_delete(pool *p, struct s3_conn *s3, const char *bucket_name,
    * key.  However, we will often have object keys which contain "/", and those
    * slashes are legitimately part of the URL.
    */
-  path = pstrcat(req_pool, "/", bucket_name, "/", object_key, NULL);
+  path = pstrcat(req_pool, "/",
+    aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/",
+    object_key, NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -339,7 +345,7 @@ int aws_s3_object_delete(pool *p, struct s3_conn *s3, const char *bucket_name,
   return res;
 }
 
-static size_t copy_object_cb(char *data, size_t item_sz, size_t item_count,
+static size_t s3_response_cb(char *data, size_t item_sz, size_t item_count,
     void *user_data) {
   struct s3_conn *info;
   size_t datasz;
@@ -411,6 +417,7 @@ static int parse_copy_object(pool *p, const char *data, size_t datasz,
     *etag = aws_xml_elt_get_text(p, elt);
   }
 
+  aws_xml_doc_free(p, doc);
   return 0;
 }
 
@@ -444,7 +451,9 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
    * key.  However, we will often have object keys which contain "/", and those
    * slashes are legitimately part of the URL.
    */
-  src_path = pstrcat(req_pool, "/", src_bucket_name, "/", src_object_key, NULL);
+  src_path = pstrcat(req_pool, "/",
+    aws_http_urlencode(req_pool, s3->http, src_bucket_name, 0), "/",
+    src_object_key, NULL);
 
   pr_table_add(req_headers,
     pstrdup(s3->req_pool, AWS_S3_OBJECT_COPY_SOURCE_KEY), src_path, 0);
@@ -482,12 +491,14 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
       metadata_directive, 0);
   }
 
-  dst_path = pstrcat(req_pool, "/", dst_bucket_name, "/", dst_object_key, NULL);
+  dst_path = pstrcat(req_pool, "/",
+    aws_http_urlencode(req_pool, s3->http, dst_bucket_name, 0), "/",
+    dst_object_key, NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
   res = aws_s3_put(p, s3->http, req_headers, dst_path, query_params, "", 0,
-    NULL, copy_object_cb, (void *) s3, s3);
+    NULL, s3_response_cb, (void *) s3, s3);
   xerrno = errno;
 
   if (res == 0) {
@@ -522,39 +533,6 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
   return res;
 }
 
-/* Note: Since PUT does not return a response, this callback should not be
- * invoked.  But we provide one anyway, since libcurl needs it.
- */
-static size_t put_object_cb(char *data, size_t item_sz, size_t item_count,
-    void *user_data) {
-  struct s3_conn *info;
-  size_t datasz;
-  char *ptr;
-
-  info = user_data;
-  datasz = item_sz * item_count;
-
-  if (datasz == 0) {
-    return 0;
-  }
-
-  if (info->respsz == 0) {
-    info->respsz = datasz;
-    ptr = info->resp = palloc(info->req_pool, info->respsz);
-
-  } else {
-    ptr = info->resp;
-    info->resp = palloc(info->req_pool, info->respsz + datasz);
-    memcpy(info->resp, ptr, info->respsz);
-
-    ptr = info->resp + info->respsz;
-    info->respsz += datasz;
-  }
-
-  memcpy(ptr, data, datasz);
-  return datasz;
-}
-
 int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
     const char *object_key, pr_table_t *object_metadata, char *object_data,
     off_t object_datasz) {
@@ -586,7 +564,9 @@ int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
    * key.  However, we will often have object keys which contain "/", and those
    * slashes are legitimately part of the URL.
    */
-  path = pstrcat(req_pool, "/", bucket_name, "/", object_key, NULL);
+  path = pstrcat(req_pool, "/",
+    aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/",
+    object_key, NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -601,7 +581,7 @@ int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
   }
 
   res = aws_s3_put(p, s3->http, req_headers, path, query_params, object_data,
-    object_datasz, NULL, put_object_cb, (void *) s3, s3);
+    object_datasz, NULL, s3_response_cb, (void *) s3, s3);
   xerrno = errno;
 
   if (res == 0) {
@@ -610,6 +590,380 @@ int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
   }
 
   aws_s3_conn_clear_response(s3);
+
+  errno = xerrno;
+  return res;
+}
+
+static int parse_init_multipart(pool *p, const char *data, size_t datasz,
+    const char **upload_id) {
+  void *doc, *root, *elt;
+  const char *elt_name;
+  size_t elt_namelen;
+
+  doc = aws_xml_doc_parse(p, data, (int) datasz);
+  if (doc == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  root = aws_xml_doc_get_root_elt(p, doc);
+  if (root == NULL) {
+    /* Malformed XML. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return -1;
+  }
+
+  elt_name = aws_xml_elt_get_name(p, root, &elt_namelen);
+  if (elt_namelen != 29 ||
+      strncmp(elt_name, "InitiateMultipartUploadResult", elt_namelen + 1) != 0) {
+
+    /* Not the root element we expected. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return -1;
+  }
+
+  elt = aws_xml_elt_get_child(p, root, "UploadId", 8);
+  if (elt == NULL) {
+    pr_trace_msg(trace_channel, 5, "missing required <UploadId> element");
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return -1;
+  }
+
+  *upload_id = aws_xml_elt_get_text(p, elt);
+
+  aws_xml_doc_free(p, doc);
+  return 0;
+}
+
+struct s3_object_multipart *aws_s3_object_multipart_open(pool *p,
+    struct s3_conn *s3, const char *bucket_name, const char *object_key,
+    pr_table_t *object_metadata) {
+  int res, xerrno;
+  const char *path;
+  pool *req_pool;
+  array_header *query_params;
+  pr_table_t *req_headers = NULL;
+  struct s3_object_multipart *multipart = NULL;
+
+  if (p == NULL ||
+      s3 == NULL ||
+      bucket_name == NULL ||
+      object_key == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  req_pool = make_sub_pool(s3->pool);
+  pr_pool_tag(req_pool, "S3 Object Request Pool");
+  s3->req_pool = req_pool;
+
+  /* Note: Ideally we would URL-encode both the bucket name and the object
+   * key.  However, we will often have object keys which contain "/", and those
+   * slashes are legitimately part of the URL.
+   */
+  path = pstrcat(req_pool, "/",
+    aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/",
+    object_key, "?uploads", NULL);
+
+  query_params = make_array(req_pool, 1, sizeof(char *));
+
+  if (object_metadata != NULL) {
+    int metadata_flags = AWS_S3_OBJECT_COPY_METADATA_FL_IGNORE_SYSTEM_ATTRS|
+      AWS_S3_OBJECT_COPY_METADATA_FL_KEEP_PREFIX;
+
+    req_headers = pr_table_alloc(s3->req_pool, 0);
+
+    (void) copy_object_metadata(req_pool, object_key,
+      req_headers, object_metadata, metadata_flags);
+  }
+
+  res = aws_s3_post(p, s3->http, req_headers, path, query_params, "", 0,
+    NULL, s3_response_cb, (void *) s3, s3);
+  xerrno = errno;
+
+  if (res == 0) {
+    const char *upload_id = NULL;
+
+    pr_trace_msg(trace_channel, 19,
+      "multipart object upload response: '%.*s'", (int) s3->respsz, s3->resp);
+
+    if (parse_init_multipart(req_pool, s3->resp, s3->respsz, &upload_id) < 0) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "error parsing S3 init multipart XML response: %s",
+        strerror(errno));
+      errno = EINVAL;
+
+    } else {
+      pool *sub_pool;
+
+      sub_pool = make_sub_pool(p);
+      pr_pool_tag(sub_pool, "S3 Multipart Object Pool");
+
+      multipart = pcalloc(sub_pool, sizeof(struct s3_object_multipart));
+      multipart->pool = sub_pool;
+      multipart->upload_id = pstrdup(multipart->pool, upload_id);
+      multipart->parts = make_array(multipart->pool, 0,
+        sizeof(struct s3_object_part *));
+    }
+  }
+
+  aws_s3_conn_clear_response(s3);
+
+  errno = xerrno;
+  return multipart;
+}
+
+int aws_s3_object_multipart_append(pool *p, struct s3_conn *s3,
+    struct s3_object_multipart *multipart, char *part_data,
+    off_t part_datasz) {
+  int res, xerrno;
+  const char *path;
+  pool *req_pool;
+  array_header *query_params;
+  pr_table_t *resp_headers;
+  char *part_number;
+
+  if (p == NULL ||
+      s3 == NULL ||
+      multipart == NULL ||
+      part_data == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  /* Note: We could, in theory, reject calls if the part_datasz is less
+   * then AWS_S3_OBJECT_MULTIPART_MIN_SIZE here.  Except that we DO need
+   * to allow for a smaller "last" part.  Thus any buffering necessary for
+   * ensuring the appended part size is large enough will happen at the
+   * FSIO layer, not here.
+   */
+
+  req_pool = make_sub_pool(s3->pool);
+  pr_pool_tag(req_pool, "S3 Object Request Pool");
+  s3->req_pool = req_pool;
+
+  /* Note: Ideally we would URL-encode both the bucket name and the object
+   * key.  However, we will often have object keys which contain "/", and those
+   * slashes are legitimately part of the URL.
+   */
+  path = pstrcat(req_pool, "/",
+    aws_http_urlencode(req_pool, s3->http, multipart->bucket_name, 0), "/",
+    multipart->object_key, NULL);
+
+  query_params = make_array(req_pool, 1, sizeof(char *));
+
+  *((char **) push_array(query_params)) = pstrcat(req_pool, "uploadId=",
+    aws_http_urlencode(req_pool, s3->http, multipart->upload_id, 0), NULL);
+
+  part_number = aws_utils_str_n2s(req_pool, (int) (multipart->partno + 1));
+  *((char **) push_array(query_params)) = pstrcat(req_pool, "partNumber=",
+    part_number, 0);
+
+  resp_headers = pr_table_alloc(req_pool, 0);
+
+  res = aws_s3_put(p, s3->http, NULL, path, query_params, part_data,
+    part_datasz, resp_headers, s3_response_cb, (void *) s3, s3);
+  xerrno = errno;
+
+  if (res == 0) {
+    const char *part_etag;
+
+    multipart->partno++;
+
+    part_etag = pr_table_get(resp_headers, AWS_HTTP_HEADER_ETAG, NULL);
+    if (part_etag == NULL) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "missing expected %s response header for S3 multipart object upload",
+        AWS_HTTP_HEADER_ETAG);
+      errno = EINVAL;
+      res = -1;
+
+    } else {
+      struct s3_object_part *part;
+
+      part = palloc(multipart->pool, sizeof(struct s3_object_part));
+      part->part_number = pstrdup(multipart->pool, part_number);
+      part->part_etag = pstrdup(multipart->pool, part_etag);
+      *((struct s3_object_part **) push_array(multipart->parts)) = part;
+
+      pr_trace_msg(trace_channel, 19,
+        "appended multipart data to object %s in bucket %s: part %s = ETag %s",
+        multipart->object_key, multipart->bucket_name, part_number, part_etag);
+    }
+  }
+
+  aws_s3_conn_clear_response(s3);
+
+  errno = xerrno;
+  return res;
+}
+
+static int parse_complete_multipart(pool *p, const char *data, size_t datasz) {
+  void *doc, *root, *elt;
+  const char *elt_name;
+  size_t elt_namelen;
+
+  doc = aws_xml_doc_parse(p, data, (int) datasz);
+  if (doc == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  root = aws_xml_doc_get_root_elt(p, doc);
+  if (root == NULL) {
+    /* Malformed XML. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return -1;
+  }
+
+  elt_name = aws_xml_elt_get_name(p, root, &elt_namelen);
+  if (elt_namelen != 29 ||
+      strncmp(elt_name, "CompleteMultipartUploadResult", elt_namelen + 1) != 0) {
+
+    /* Not the root element we expected. */
+    aws_xml_doc_free(p, doc);
+
+    errno = EINVAL;
+    return -1;
+  }
+
+  elt = aws_xml_elt_get_child(p, root, "Bucket", 6);
+  if (elt != NULL) {
+    pr_trace_msg(trace_channel, 15,
+      "completed multipart object upload: bucket = %s",
+      aws_xml_elt_get_text(p, elt));
+  }
+
+  elt = aws_xml_elt_get_child(p, root, "Key", 3);
+  if (elt != NULL) {
+    pr_trace_msg(trace_channel, 15,
+      "completed multipart object upload: key = %s",
+      aws_xml_elt_get_text(p, elt));
+  }
+
+  elt = aws_xml_elt_get_child(p, root, "ETag", 4);
+  if (elt != NULL) {
+    pr_trace_msg(trace_channel, 15,
+      "completed multipart object upload: etag = %s",
+      aws_xml_elt_get_text(p, elt));
+  }
+
+  elt = aws_xml_elt_get_child(p, root, "Location", 8);
+  if (elt != NULL) {
+    pr_trace_msg(trace_channel, 15,
+      "completed multipart object upload: location = %s",
+      aws_xml_elt_get_text(p, elt));
+  }
+
+  aws_xml_doc_free(p, doc);
+  return 0;
+}
+
+int aws_s3_object_multipart_close(pool *p, struct s3_conn *s3,
+    struct s3_object_multipart *multipart, int flags) {
+  int res, xerrno;
+  const char *path;
+  pool *req_pool;
+  array_header *query_params;
+
+  if (p == NULL ||
+      s3 == NULL ||
+      multipart == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (flags != AWS_S3_OBJECT_MULTIPART_FL_SUCCESS &&
+      flags != AWS_S3_OBJECT_MULTIPART_FL_FAILURE) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  req_pool = make_sub_pool(s3->pool);
+  pr_pool_tag(req_pool, "S3 Object Request Pool");
+  s3->req_pool = req_pool;
+
+  /* Note: Ideally we would URL-encode both the bucket name and the object
+   * key.  However, we will often have object keys which contain "/", and those
+   * slashes are legitimately part of the URL.
+   */
+  path = pstrcat(req_pool, "/",
+    aws_http_urlencode(req_pool, s3->http, multipart->bucket_name, 0), "/",
+    multipart->object_key, NULL);
+
+  query_params = make_array(req_pool, 1, sizeof(char *));
+
+  *((char **) push_array(query_params)) = pstrcat(req_pool, "uploadId=",
+    aws_http_urlencode(req_pool, s3->http, multipart->upload_id, 0), NULL);
+
+  if (flags == AWS_S3_OBJECT_MULTIPART_FL_FAILURE) {
+    res = aws_s3_delete(p, s3->http, NULL, path, query_params, NULL, s3);
+    xerrno = errno;
+
+    if (res == 0) {
+      pr_trace_msg(trace_channel, 19,
+        "successfully aborted multipart object %s in bucket %s",
+        multipart->object_key, multipart->bucket_name);
+    }
+
+  } else {
+    register unsigned int i;
+    void *text;
+    const char *xml;
+    size_t xmlsz;
+
+    text = aws_xml_text_alloc(req_pool);
+
+    aws_xml_text_elt_start(p, text, "CompleteMultipartUpload");
+
+    for (i = 0; i < multipart->parts->nelts; i++) {
+      struct s3_object_part *part;
+
+      part = ((struct s3_object_part **) multipart->parts->elts)[i];
+
+      aws_xml_text_elt_start(p, text, "Part");
+      aws_xml_text_elt_add_child(p, text, "PartNumber", part->part_number);
+      aws_xml_text_elt_add_child(p, text, "ETag", part->part_etag);
+      aws_xml_text_elt_end(p, text);
+    }
+
+    aws_xml_text_elt_end(p, text);
+
+    xml = aws_xml_text_content(req_pool, text);
+    aws_xml_text_free(req_pool, text);
+
+    xmlsz = strlen(xml);
+    res = aws_s3_post(p, s3->http, NULL, path, query_params, (char *) xml,
+      xmlsz, NULL, s3_response_cb, (void *) s3, s3);
+    xerrno = errno;
+
+    if (res == 0) {
+      pr_trace_msg(trace_channel, 19,
+        "successfully completed multipart object %s in bucket %s: '%.*s'",
+        multipart->object_key, multipart->bucket_name, (int) s3->respsz,
+        s3->resp);
+
+      if (parse_complete_multipart(req_pool, s3->resp, s3->respsz) < 0) {
+        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+          "error parsing S3 complete multipart XML response: %s",
+          strerror(errno));
+      }
+    }
+  }
+
+  /* Destroy the multipart object; we don't need it anymore. */
+  aws_s3_conn_clear_response(s3);
+
+  destroy_pool(multipart->pool);
 
   errno = xerrno;
   return res;

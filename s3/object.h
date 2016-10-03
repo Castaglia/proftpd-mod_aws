@@ -43,8 +43,11 @@
 #define AWS_S3_OBJECT_COPY_SOURCE_KEY		"x-amz-copy-source"
 #define AWS_S3_OBJECT_COPY_SOURCE_METADATA	"x-amz-metadata-directive"
 
-/* Maximum size of object for single PUT. */
-#define AWS_S3_OBJECT_PUT_MAX_SIZE		(off_t) (5 * 1024 * 1024 * 1024)
+/* Maximum size of object for single PUT: 5 GB */
+#define AWS_S3_OBJECT_PUT_MAX_SIZE		((off_t) (5UL * 1024UL * 1024UL * 1024UL))
+
+/* Minimum size of single part for multipart uploads: 5 MB */
+#define AWS_S3_OBJECT_MULTIPART_MIN_SIZE	((off_t) (5UL * 1024UL * 1024UL))
 
 /* Get an object from the specified bucket, using a byte range specified by the
  * given offset and length.
@@ -67,7 +70,38 @@ int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
   const char *object_key, pr_table_t *object_metadata, char *object_data,
   off_t object_datasz);
 
-/* XXX TODO: Functions for multipart object uploads. */
+/* Multipart S3 object uploads. */
+
+struct s3_object_part {
+  const char *part_number;
+  const char *part_etag;
+};
+
+struct s3_object_multipart {
+  pool *pool;
+
+  const char *bucket_name;
+  const char *object_key;
+  const char *upload_id;
+
+  /* Counter to be used as the next part number. */
+  unsigned int partno;
+
+  /* List tracking part numbers and their respective ETags. */
+  array_header *parts;
+};
+
+struct s3_object_multipart *aws_s3_object_multipart_open(pool *p,
+  struct s3_conn *s3, const char *bucket_name, const char *object_key,
+  pr_table_t *object_metadata);
+
+int aws_s3_object_multipart_append(pool *p, struct s3_conn *s3,
+  struct s3_object_multipart *multipart, char *part_data, off_t part_datasz);
+
+int aws_s3_object_multipart_close(pool *p, struct s3_conn *s3,
+  struct s3_object_multipart *mulipart, int flags);
+#define AWS_S3_OBJECT_MULTIPART_FL_SUCCESS		0
+#define AWS_S3_OBJECT_MULTIPART_FL_FAILURE		1
 
 /* Delete an object from the specified bucket. */
 int aws_s3_object_delete(pool *p, struct s3_conn *s3, const char *bucket_name,

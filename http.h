@@ -42,6 +42,7 @@
 #define AWS_HTTP_HEADER_CONTENT_LEN			"Content-Length"
 #define AWS_HTTP_HEADER_CONTENT_TYPE			"Content-Type"
 #define AWS_HTTP_HEADER_DATE				"Date"
+#define AWS_HTTP_HEADER_ETAG				"ETag"
 #define AWS_HTTP_HEADER_EXPECT				"Expect"
 #define AWS_HTTP_HEADER_EXPIRES				"Expires"
 #define AWS_HTTP_HEADER_HOST				"Host"
