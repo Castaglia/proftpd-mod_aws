@@ -297,14 +297,14 @@ void aws_xml_text_free(pool *p, void *ptr) {
 
   text = ptr;
 
-  if (text->buffer != NULL) {
-    xmlBufferFree(text->buffer);
-    text->buffer = NULL;
-  }
-
   if (text->writer != NULL) {
     xmlFreeTextWriter(text->writer);
     text->writer = NULL;
+  }
+
+  if (text->buffer != NULL) {
+    xmlBufferFree(text->buffer);
+    text->buffer = NULL;
   }
 
   destroy_pool(text->pool);
