@@ -43,6 +43,17 @@ S3:
   incoming data to temp file on disk, to buffer up for optimal upload size
   (e.g. 10-50 MB)?
 
+    struct s3_object_multipart {
+      pool *pool;
+      const char *upload_id;
+      unsigned int partno;
+    }
+
+  Looks like modifying a large object in place (e.g. resumed upload) IS
+  possible; see:
+
+    http://docs.aws.amazon.com/AmazonS3/latest/API/mpUploadUploadPartCopy.html
+
   Retries:
     HTTP 500, 503
     HTTP 400, but ONLY if AWS_S3_ERROR_CODE_REQUEST_TIMEOUT
