@@ -27,6 +27,12 @@
 
 #include "mod_aws.h"
 
+/* XML Reading/Parsing */
+
+void *aws_xml_doc_parse(pool *p, const char *data, size_t datasz);
+void aws_xml_doc_free(pool *p, void *xml);
+void *aws_xml_doc_get_root_elt(pool *p, void *xml);
+
 int aws_xml_elt_get_child_count(pool *p, void *elt, unsigned long *count);
 void *aws_xml_elt_get_child(pool *p, void *elt, const char *name,
   size_t name_len);
@@ -34,9 +40,18 @@ const char *aws_xml_elt_get_name(pool *p, void *elt, size_t *name_len);
 void *aws_xml_elt_get_next(pool *p, void *elt);
 const char *aws_xml_elt_get_text(pool *p, void *elt);
 
-void *aws_xml_doc_parse(pool *p, const char *data, size_t datasz);
-void aws_xml_doc_free(pool *p, void *xml);
-void *aws_xml_doc_get_root_elt(pool *p, void *xml);
+/* XML Writing */
+
+void *aws_xml_text_alloc(pool *p);
+void aws_xml_text_free(pool *p, void *text);
+const char *aws_xml_text_content(pool *p, void *text);
+
+int aws_xml_text_elt_start(pool *p, void *text, const char *elt_name);
+int aws_xml_text_elt_end(pool *p, void *text);
+int aws_xml_text_elt_add_attribute(pool *p, void *text, const char *name,
+  const char *value);
+int aws_xml_text_elt_add_child(pool *p, void *text, const char *name,
+  const char *value);
 
 /* API lifetime functions, for mod_aws use only. */
 int aws_xml_init(pool *p);

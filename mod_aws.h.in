@@ -46,6 +46,12 @@
 # error "libxml2 library/headers required"
 #endif
 
+/* Define if you have the libxml2 libxml/xmlwriter.h header.  */
+#undef HAVE_LIBXML_XMLWRITER_H
+#if !defined(HAVE_LIBXML_XMLWRITER_H)
+# error "libxml2 library/headers required"
+#endif
+
 /* Define if you have the CURLOPT_TCP_KEEPALIVE option in libcurl. */
 #undef HAVE_CURL_CURLOPT_TCP_KEEPALIVE
 

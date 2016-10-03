@@ -31,6 +31,11 @@
 # include <libxml/tree.h>
 #endif
 
+#ifdef HAVE_LIBXML_XMLWRITER_H
+# include <libxml/encoding.h>
+# include <libxml/xmlwriter.h>
+#endif
+
 static int xml_parse_opts = XML_PARSE_COMPACT|XML_PARSE_NOBLANKS|XML_PARSE_NONET|XML_PARSE_PEDANTIC;
 
 static const char *trace_channel = "aws.xml";
@@ -225,6 +230,218 @@ void *aws_xml_doc_get_root_elt(pool *p, void *xml) {
   doc = xml;
   elt = xmlDocGetRootElement(doc);
   return elt;
+}
+
+/* XML writers/texts */
+
+struct aws_xml_text {
+  pool *pool;
+  xmlBufferPtr buffer;
+  xmlTextWriterPtr writer; 
+  int completed;
+};
+
+void *aws_xml_text_alloc(pool *p) {
+  pool *sub_pool;
+  struct aws_xml_text *text;
+  xmlBufferPtr buffer;
+  xmlTextWriterPtr writer;
+  int res;
+
+  if (p == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  buffer = xmlBufferCreate();
+  if (buffer == NULL) {
+    errno = ENOMEM;
+    return NULL;
+  }
+
+  writer = xmlNewTextWriterMemory(buffer, 0);
+  if (writer == NULL) {
+    xmlBufferFree(buffer);
+
+    errno = ENOMEM;
+    return NULL;
+  }
+
+  res = xmlTextWriterStartDocument(writer, NULL, "UTF-8", NULL);
+  if (res < 0) {
+    xmlFreeTextWriter(writer);
+    xmlBufferFree(buffer);
+
+    errno = EPERM;
+    return NULL;
+  }
+
+  sub_pool = make_sub_pool(p);
+  pr_pool_tag(sub_pool, "XML Text Pool");
+
+  text = pcalloc(sub_pool, sizeof(struct aws_xml_text));
+  text->pool = sub_pool;
+  text->buffer = buffer;
+  text->writer = writer;
+
+  return text;
+}
+
+void aws_xml_text_free(pool *p, void *ptr) {
+  struct aws_xml_text *text;
+
+  if (p == NULL ||
+      ptr == NULL) {
+    return;
+  }
+
+  text = ptr;
+
+  if (text->buffer != NULL) {
+    xmlBufferFree(text->buffer);
+    text->buffer = NULL;
+  }
+
+  if (text->writer != NULL) {
+    xmlFreeTextWriter(text->writer);
+    text->writer = NULL;
+  }
+
+  destroy_pool(text->pool);
+}
+
+const char *aws_xml_text_content(pool *p, void *ptr) {
+  struct aws_xml_text *text;
+  const char *content;
+
+  if (p == NULL ||
+      ptr == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  text = ptr;
+
+  /* Make sure the text is finished. */
+  if (text->completed == FALSE) {
+    int res;
+
+    res = xmlTextWriterEndDocument(text->writer);
+    if (res < 0) {
+      errno = EPERM;
+      return NULL;
+    }
+
+    xmlFreeTextWriter(text->writer);
+    text->writer = NULL;
+
+    text->completed = TRUE;
+  }
+  
+  content = pstrdup(p, (const char *) text->buffer->content);
+  return content;
+}
+
+int aws_xml_text_elt_start(pool *p, void *ptr, const char *elt_name) {
+  struct aws_xml_text *text;
+  int res;
+
+  if (p == NULL ||
+      ptr == NULL ||
+      elt_name == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  text = ptr;
+
+  res = xmlTextWriterStartElement(text->writer, (const xmlChar *) elt_name);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 2, "error starting element <%s>", elt_name);
+    errno = EPERM;
+    return -1;
+  }
+
+  return 0;
+}
+
+int aws_xml_text_elt_end(pool *p, void *ptr) {
+  struct aws_xml_text *text;
+  int res;
+
+  if (p == NULL ||
+      ptr == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  text = ptr;
+
+  res = xmlTextWriterEndElement(text->writer);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 2, "error ending element");
+
+    errno = EPERM;
+    return -1;
+  }
+
+  return 0;
+}
+
+int aws_xml_text_elt_add_attribute(pool *p, void *ptr, const char *name,
+    const char *value) {
+  struct aws_xml_text *text;
+  int res;
+
+  if (p == NULL ||
+      ptr == NULL ||
+      name == NULL ||
+      value == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  text = ptr;
+
+  res = xmlTextWriterWriteAttribute(text->writer, (const xmlChar *) name,
+    (const xmlChar *) value);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 2, "error adding attribute '%s=%s'", name,
+      value);
+
+    errno = EPERM;
+    return -1;
+  }
+
+  return 0;
+}
+
+int aws_xml_text_elt_add_child(pool *p, void *ptr, const char *name,
+    const char *value) {
+  struct aws_xml_text *text;
+  int res;
+
+  if (p == NULL ||
+      ptr == NULL ||
+      name == NULL ||
+      value == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  text = ptr;
+
+  res = xmlTextWriterWriteElement(text->writer, (const xmlChar *) name,
+    (const xmlChar *) value);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 2, "error adding child element <%s>%s</%s>",
+      name, value, name);
+
+    errno = EPERM;
+    return -1;
+  }
+
+  return 0;
 }
 
 /* Generic error reporting callback. */
