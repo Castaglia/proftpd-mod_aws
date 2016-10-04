@@ -33,12 +33,35 @@
 
 static const char *trace_channel = "aws.s3.object";
 
+/* S3 object downloads */
+
 struct object_reader {
   pool *pool;
   const char *bucket_name;
   const char *object_key;
   off_t offset;
   int (*consume_data)(pool *, void *, off_t, off_t);
+};
+
+/* S3 multipart object uploads */
+
+struct s3_object_part {
+  const char *part_number;
+  const char *part_etag;
+};
+
+struct s3_object_multipart {
+  pool *pool;
+
+  const char *bucket_name;
+  const char *object_key;
+  const char *upload_id;
+
+  /* Counter to be used as the next part number. */
+  unsigned int partno;
+
+  /* List tracking part numbers and their respective ETags. */
+  array_header *parts;
 };
 
 static size_t object_body(char *data, size_t item_sz, size_t item_count,

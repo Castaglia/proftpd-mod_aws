@@ -72,24 +72,8 @@ int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
 
 /* Multipart S3 object uploads. */
 
-struct s3_object_part {
-  const char *part_number;
-  const char *part_etag;
-};
-
-struct s3_object_multipart {
-  pool *pool;
-
-  const char *bucket_name;
-  const char *object_key;
-  const char *upload_id;
-
-  /* Counter to be used as the next part number. */
-  unsigned int partno;
-
-  /* List tracking part numbers and their respective ETags. */
-  array_header *parts;
-};
+struct s3_object_part;
+struct s3_object_multipart;
 
 struct s3_object_multipart *aws_s3_object_multipart_open(pool *p,
   struct s3_conn *s3, const char *bucket_name, const char *object_key,
