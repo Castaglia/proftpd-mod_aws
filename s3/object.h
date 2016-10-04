@@ -49,6 +49,9 @@
 /* Minimum size of single part for multipart uploads: 5 MB */
 #define AWS_S3_OBJECT_MULTIPART_MIN_SIZE	((off_t) (5UL * 1024UL * 1024UL))
 
+/* Maximum number of parts for a multipart upload: 10000 */
+#define AWS_S3_OBJECT_MULTIPART_MAX_COUNT	10000
+
 /* Get an object from the specified bucket, using a byte range specified by the
  * given offset and length.
  *

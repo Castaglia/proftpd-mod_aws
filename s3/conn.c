@@ -568,8 +568,6 @@ int aws_s3_post(pool *p, void *http, pr_table_t *http_headers, const char *path,
   }
 
   req_headers = s3_http_headers(p, gmt_tm, http_headers);
-  (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_CONTENT_TYPE),
-    pstrdup(p, "application/x-www-form-urlencoded; charset=utf-8"), 0);
 
   if (req_body == NULL) {
     content_len = pstrdup(p, "0");

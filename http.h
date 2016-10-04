@@ -76,6 +76,7 @@
 /* HTTP content types */
 #define AWS_HTTP_CONTENT_TYPE_HTML			"text/html"
 #define AWS_HTTP_CONTENT_TYPE_XML			"application/xml"
+#define AWS_HTTP_CONTENT_TYPE_BINARY			"application/octet-stream"
 
 /* HTTP Date format buffer size; contains space for 16 characters
  * (YYYYMMDDThhmmssZ) plus the trailing NUL.

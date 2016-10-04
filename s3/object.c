@@ -668,7 +668,7 @@ static int parse_init_multipart(pool *p, const char *data, size_t datasz,
 struct s3_object_multipart *aws_s3_object_multipart_open(pool *p,
     struct s3_conn *s3, const char *bucket_name, const char *object_key,
     pr_table_t *object_metadata) {
-  int res, xerrno;
+  int res, xerrno, default_content_type = TRUE;
   const char *path;
   pool *req_pool;
   array_header *query_params;
@@ -692,19 +692,36 @@ struct s3_object_multipart *aws_s3_object_multipart_open(pool *p,
    * slashes are legitimately part of the URL.
    */
   path = pstrcat(req_pool, "/",
-    aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/",
-    object_key, "?uploads", NULL);
+    aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/", object_key,
+    NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
+
+  /* Note: The AWS docs, on the format of this query string, are out-of-date.
+   * IFF you are using AWS signature V4, then this query string MUST have
+   * a trailing '='; this is NOT mentioned in the AWS docs for this request.
+   * Grr.  I had to search the s3fs source code to find this tidbit.
+   */
+  *((char **) push_array(query_params)) = pstrdup(req_pool, "uploads=");
+
+  req_headers = pr_table_alloc(s3->req_pool, 0);
 
   if (object_metadata != NULL) {
     int metadata_flags = AWS_S3_OBJECT_COPY_METADATA_FL_IGNORE_SYSTEM_ATTRS|
       AWS_S3_OBJECT_COPY_METADATA_FL_KEEP_PREFIX;
-
-    req_headers = pr_table_alloc(s3->req_pool, 0);
-
     (void) copy_object_metadata(req_pool, object_key,
       req_headers, object_metadata, metadata_flags);
+
+    if (pr_table_get(object_metadata, AWS_HTTP_HEADER_CONTENT_TYPE,
+        NULL) != NULL) {
+      default_content_type = FALSE;
+    }
+  }
+
+  if (default_content_type == TRUE) {
+    (void) pr_table_add(req_headers,
+      pstrdup(req_pool, AWS_HTTP_HEADER_CONTENT_TYPE),
+      pstrdup(req_pool, AWS_HTTP_CONTENT_TYPE_BINARY), 0);
   }
 
   res = aws_s3_post(p, s3->http, req_headers, path, query_params, "", 0,
@@ -746,7 +763,7 @@ struct s3_object_multipart *aws_s3_object_multipart_open(pool *p,
 int aws_s3_object_multipart_append(pool *p, struct s3_conn *s3,
     struct s3_object_multipart *multipart, char *part_data,
     off_t part_datasz) {
-  int res, xerrno;
+  int res, xerrno, partno;
   const char *path;
   pool *req_pool;
   array_header *query_params;
@@ -785,7 +802,17 @@ int aws_s3_object_multipart_append(pool *p, struct s3_conn *s3,
   *((char **) push_array(query_params)) = pstrcat(req_pool, "uploadId=",
     aws_http_urlencode(req_pool, s3->http, multipart->upload_id, 0), NULL);
 
-  part_number = aws_utils_str_n2s(req_pool, (int) (multipart->partno + 1));
+  partno = (int) (multipart->partno + 1);
+  if (partno > AWS_S3_OBJECT_MULTIPART_MAX_COUNT) {
+    pr_trace_msg(trace_channel, 5,
+      "maximum part count for multipart upload of object %s in bucket %s "
+      "exceeded: %d > %d", multipart->object_key, multipart->bucket_name,
+      partno, (int) AWS_S3_OBJECT_MULTIPART_MAX_COUNT);
+    errno = EINVAL;
+    return -1;
+  }
+
+  part_number = aws_utils_str_n2s(req_pool, partno);
   *((char **) push_array(query_params)) = pstrcat(req_pool, "partNumber=",
     part_number, 0);
 
@@ -940,6 +967,7 @@ int aws_s3_object_multipart_close(pool *p, struct s3_conn *s3,
 
   } else {
     register unsigned int i;
+    pr_table_t *req_headers;
     void *text;
     const char *xml;
     size_t xmlsz;
@@ -962,11 +990,18 @@ int aws_s3_object_multipart_close(pool *p, struct s3_conn *s3,
     aws_xml_text_elt_end(p, text);
 
     xml = aws_xml_text_content(req_pool, text);
+    xmlsz = strlen(xml);
+
     aws_xml_text_free(req_pool, text);
 
-    xmlsz = strlen(xml);
-    res = aws_s3_post(p, s3->http, NULL, path, query_params, (char *) xml,
-      xmlsz, NULL, s3_response_cb, (void *) s3, s3);
+    req_headers = pr_table_alloc(req_pool, 0);
+
+    (void) pr_table_add(req_headers,
+      pstrdup(req_pool, AWS_HTTP_HEADER_CONTENT_TYPE),
+      pstrdup(req_pool, AWS_HTTP_CONTENT_TYPE_XML), 0);
+
+    res = aws_s3_post(p, s3->http, req_headers, path, query_params,
+      (char *) xml, xmlsz, NULL, s3_response_cb, (void *) s3, s3);
     xerrno = errno;
 
     if (res == 0) {
