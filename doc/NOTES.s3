@@ -66,6 +66,11 @@ S3:
       http://docs.aws.amazon.com/general/latest/gr/api-retries.html
       https://news.ycombinator.com/item?id=9206090
 
+   Will re-opening of curl handle, while chrooted, be a problem, viz the
+   cacerts file?  If so, may need to configure those certs via in-memory buffer
+   rather than file.
+
+
    Consider adding/using Content-MD5 request/response header, for additional
    end-to-end integrity/corruption checking.  The TLS part only covers the
    content from mod_aws to S3's frontend servers; who knows what happens to
