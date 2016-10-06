@@ -689,6 +689,36 @@ int aws_http_put(pool *p, void *http, const char *url, pr_table_t *req_headers,
   return res;
 }
 
+static char *canon_http_header_name(pool *p, const char *name, size_t namesz) {
+  char *canon_name;
+
+  /* There are not many headers for which we need to ensure canonicalization. */
+
+  switch (name[0]) {
+    case 'C':
+    case 'c':
+      if (namesz == 14 &&
+          strncasecmp(name, AWS_HTTP_HEADER_CONTENT_LEN, 14) == 0) {
+        canon_name = pstrdup(p, AWS_HTTP_HEADER_CONTENT_LEN);
+        break;
+      }
+
+    case 'E':
+    case 'e':
+      if (namesz == 4 &&
+          strncasecmp(name, AWS_HTTP_HEADER_ETAG, 4) == 0) {
+        canon_name = pstrdup(p, AWS_HTTP_HEADER_ETAG);
+        break;
+      }
+
+    default:
+      canon_name = pstrndup(p, name, namesz);
+      break;
+  }
+
+  return canon_name;
+}
+
 static void stash_resp_header(pool *p, pr_table_t *headers, char *data,
     size_t datasz) {
   char *ptr;
@@ -704,7 +734,13 @@ static void stash_resp_header(pool *p, pr_table_t *headers, char *data,
     size_t klen, vlen;
 
     klen = ptr - data;
-    k = pstrndup(p, data, klen);
+
+    /* Note: we need to handle the fact that header names are case-INSENSITIVE;
+     * the various AWS services COULD use different casing.  Thus we need to
+     * canonicalize the header names here, and avoid passing that burden onto
+     * the calling code.
+     */
+    k = canon_http_header_name(p, data, klen);
 
     vlen = datasz - klen - 2;
     v = pstrndup(p, ptr + 2, vlen);
