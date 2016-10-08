@@ -233,13 +233,6 @@ FTP/SFTP mapping:
   mod_aws would be in complete control of the IO on the data connection...
 
 
-Core API:
-
-  Need pr_table_knext(), if you want to get the size of the key that is
-  returned.  pr_table_next() does not do this.  (Needed, e.g., for implementing
-  pr_table_size() for calculating size of keys/values in table.)
-
-
 Performance Tuning:
 
   https://cloudnative.io/blog/2015/01/aws-s3-performance-tuning/
