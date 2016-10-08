@@ -274,6 +274,10 @@ Future features:
   Support for server-side encryption (per-directory?)
     https://github.com/s3fs-fuse/s3fs-fuse/issues/49
 
+  Support for expiration (per-directory)?  I.e. set the Expires header on
+  upload, and examine it on download -- and omit/remove that file from
+  listing/view via FSIO, once expired.
+
   Support for CloudFront, for read-only/read-heavy directories?
 
   Performance improvements via better object naming:
