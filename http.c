@@ -703,11 +703,32 @@ static char *canon_http_header_name(pool *p, const char *name, size_t namesz) {
         break;
       }
 
+    case 'D':
+    case 'd':
+      if (namesz == 4 &&
+          strncasecmp(name, AWS_HTTP_HEADER_DATE, 4) == 0) {
+        canon_name = pstrdup(p, AWS_HTTP_HEADER_DATE);
+        break;
+      }
+
     case 'E':
     case 'e':
       if (namesz == 4 &&
           strncasecmp(name, AWS_HTTP_HEADER_ETAG, 4) == 0) {
         canon_name = pstrdup(p, AWS_HTTP_HEADER_ETAG);
+        break;
+
+      } else if (namesz == 7 &&
+                 strncasecmp(name, AWS_HTTP_HEADER_EXPIRES, 7) == 0) {
+        canon_name = pstrdup(p, AWS_HTTP_HEADER_EXPIRES);
+        break;
+      }
+
+    case 'L':
+    case 'l':
+      if (namesz == 13 &&
+          strncasecmp(name, AWS_HTTP_HEADER_LAST_MODIFIED, 13) == 0) {
+        canon_name = pstrdup(p, AWS_HTTP_HEADER_LAST_MODIFIED);
         break;
       }
 
