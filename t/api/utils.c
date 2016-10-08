@@ -81,6 +81,57 @@ START_TEST (utils_table2array_test) {
 }
 END_TEST
 
+START_TEST (utils_table_dup_test) {
+  pr_table_t *src, *dst;
+  int expected;
+  const void *v;
+  size_t vsz;
+
+  mark_point();
+  dst = aws_utils_table_dup(NULL, NULL);
+  fail_unless(dst == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  dst = aws_utils_table_dup(p, NULL);
+  fail_unless(dst == NULL, "Failed to handle null src table");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  src = pr_table_alloc(p, 0);
+
+  mark_point();
+  dst = aws_utils_table_dup(p, src);
+  fail_unless(dst != NULL, "Failed to duplicate table: %s", strerror(errno));
+
+  expected = pr_table_count(src);
+  fail_unless(pr_table_count(dst) == expected, "Expected %d, got %d", expected,
+    pr_table_count(dst));
+
+  pr_table_free(src);
+  src = pr_table_alloc(p, 0);
+
+  pr_table_add(src, pstrdup(p, "foo"), pstrdup(p, "bar"), 0);
+
+  mark_point();
+  dst = aws_utils_table_dup(p, src);
+  fail_unless(dst != NULL, "Failed to duplicate table: %s", strerror(errno));
+
+  expected = pr_table_count(src);
+  fail_unless(pr_table_count(dst) == expected, "Expected %d, got %d", expected,
+    pr_table_count(dst));
+
+  v = pr_table_get(dst, "foo", &vsz);
+  fail_unless(v != NULL, "Expected 'foo' value, got null");
+  fail_unless(vsz == 4, "Expected 4, got %lu", (unsigned long) vsz);
+  fail_unless(strcmp((char *) v, "bar") == 0,
+    "Expected 'bar', got '%s'", (char *) v);
+
+  pr_table_free(src);
+}
+END_TEST
+
 START_TEST (utils_str_n2s_test) {
   char *res, *expected;
   int n;
@@ -340,6 +391,7 @@ Suite *tests_get_utils_suite(void) {
   tcase_add_checked_fixture(testcase, set_up, tear_down);
 
   tcase_add_test(testcase, utils_table2array_test);
+  tcase_add_test(testcase, utils_table_dup_test);
   tcase_add_test(testcase, utils_str_n2s_test);
   tcase_add_test(testcase, utils_str_ul2s_test);
   tcase_add_test(testcase, utils_str_off2s_test);

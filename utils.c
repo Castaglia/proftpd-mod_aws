@@ -59,6 +59,48 @@ array_header *aws_utils_table2array(pool *p, pr_table_t *tab) {
   return list;
 }
 
+pr_table_t *aws_utils_table_dup(pool *p, pr_table_t *src) {
+  pr_table_t *dst;
+  const void *key;
+
+  if (p == NULL ||
+      src == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  dst = pr_table_alloc(p, 0);
+
+  pr_table_rewind(src);
+
+  key = pr_table_next(src);
+  while (key != NULL) {
+    const void *val;
+    size_t valsz = 0;
+
+    pr_signals_handle();
+
+    val = pr_table_get(src, (const char *) key, &valsz);
+    if (val != NULL) {
+      void *dst_val;
+
+      /* NOTE: This will only work for tables whose keys are strings.  The
+       * core Table API needs a new function for iterating, such that the
+       * size of the key is also provided, for better table duplication to be
+       * supportable.
+       */
+
+      dst_val = palloc(p, valsz);
+      memcpy(dst_val, val, valsz);
+      (void) pr_table_add(dst, key, dst_val, valsz);
+    }
+
+    key = pr_table_next(src);
+  }
+
+  return dst;
+}
+
 char *aws_utils_str_n2s(pool *p, int n) {
   char buf[256], *num;
   int len;
