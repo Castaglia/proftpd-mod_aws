@@ -63,6 +63,7 @@ Suite *tests_get_s3_error_suite(void);
 Suite *tests_get_s3_utils_suite(void);
 Suite *tests_get_s3_bucket_suite(void);
 Suite *tests_get_s3_object_suite(void);
+Suite *tests_get_s3_fsio_suite(void);
 
 unsigned int recvd_signal_flags;
 extern pid_t mpid;

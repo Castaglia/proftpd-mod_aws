@@ -43,6 +43,7 @@ static struct testsuite_info suites[] = {
   { "s3.utils",		tests_get_s3_utils_suite },
   { "s3.bucket",	tests_get_s3_bucket_suite },
   { "s3.object",	tests_get_s3_object_suite },
+  { "s3.fsio",		tests_get_s3_fsio_suite },
 
   { NULL, NULL }
 };

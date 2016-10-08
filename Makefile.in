@@ -14,13 +14,15 @@ S3_OBJS=s3/conn.o \
   s3/error.o \
   s3/utils.o \
   s3/bucket.o \
-  s3/object.o
+  s3/object.o \
+  s3/fsio.o
 
 SHARED_S3_OBJS=s3/conn.lo \
   s3/error.lo \
   s3/utils.lo \
   s3/bucket.lo \
-  s3/object.lo
+  s3/object.lo \
+  s3/fsio.lo
 
 MODULE_NAME=mod_aws
 MODULE_OBJS=mod_aws.o \
