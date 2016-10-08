@@ -424,7 +424,6 @@ Suite *tests_get_xml_suite(void) {
 
   tcase_add_checked_fixture(testcase, set_up, tear_down);
 
-#if 0
   /* XML document parsing/reading */
   tcase_add_test(testcase, xml_doc_parse_test);
   tcase_add_test(testcase, xml_doc_get_root_elt_test);
@@ -433,7 +432,6 @@ Suite *tests_get_xml_suite(void) {
   tcase_add_test(testcase, xml_elt_get_next_test);
   tcase_add_test(testcase, xml_elt_get_name_test);
   tcase_add_test(testcase, xml_elt_get_text_test);
-#endif
 
   /* XML text writing */
   tcase_add_test(testcase, xml_text_alloc_test);
