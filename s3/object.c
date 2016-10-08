@@ -55,6 +55,7 @@ struct s3_object_multipart {
 
   const char *bucket_name;
   const char *object_key;
+  pr_table_t *object_metadata;
   const char *upload_id;
 
   /* Counter to be used as the next part number. */
@@ -78,14 +79,14 @@ static size_t object_body(char *data, size_t item_sz, size_t item_count,
   }
 
   pr_trace_msg(trace_channel, 15,
-    "downloaded %lu bytes of object %s from bucket %s", (unsigned long) datasz,
-    reader->object_key, reader->bucket_name);
+    "downloaded %lu bytes of object '%s' from bucket '%s'",
+    (unsigned long) datasz, reader->object_key, reader->bucket_name);
 
   res = (reader->consume_data)(reader->pool, data, reader->offset, datasz);
   if (res < 0) {
     pr_trace_msg(trace_channel, 4,
-      "download of object %s from bucket %s aborted: %s", reader->object_key,
-      reader->bucket_name, strerror(errno));
+      "download of object '%s' from bucket '%s' aborted: %s",
+      reader->object_key, reader->bucket_name, strerror(errno));
 
     /* Note: If consuming of this data does fail, curl will close the
      * connection.  This, in turn, means that we might need to have some
@@ -133,7 +134,7 @@ static int copy_object_metadata(pool *p, const char *object_key,
          strcasecmp(k, AWS_S3_OBJECT_METADATA_STORAGE_CLASS) == 0)) {
       v = pr_table_get(src_object_metadata, k, &vlen);
       if (v != NULL) {
-        pr_trace_msg(trace_channel, 9, "object %s metadata: %s = %.*s",
+        pr_trace_msg(trace_channel, 9, "object '%s' metadata: %s = %.*s",
           object_key, (char *) k, (int) vlen, (char *) v);
         pr_table_add(dst_object_metadata, pstrdup(p, k),
           pstrndup(p, v, vlen), 0);
@@ -155,7 +156,7 @@ static int copy_object_metadata(pool *p, const char *object_key,
           log_key = dup_key;
         }
 
-        pr_trace_msg(trace_channel, 9, "object %s metadata: %s = %.*s",
+        pr_trace_msg(trace_channel, 9, "object '%s' metadata: %s = %.*s",
           object_key, (char *) log_key, (int) vlen, (char *) v);
 
         pr_table_add(dst_object_metadata, pstrdup(p, dup_key),
@@ -249,12 +250,12 @@ int aws_s3_object_get(pool *p, struct s3_conn *s3, const char *bucket_name,
 
   if (res == 0) {
     pr_trace_msg(trace_channel, 19,
-      "successfully downloaded object %s from bucket %s", object_key,
+      "successfully downloaded object '%s' from bucket '%s'", object_key,
       bucket_name);
 
     if (resp_headers != NULL) {
       if (pr_trace_get_level(trace_channel) >= 17) {
-        pr_trace_msg(trace_channel, 17, "object %s response header count: %d",
+        pr_trace_msg(trace_channel, 17, "object '%s' response header count: %d",
           object_key, pr_table_count(resp_headers));
       }
     }
@@ -307,11 +308,12 @@ int aws_s3_object_stat(pool *p, struct s3_conn *s3, const char *bucket_name,
 
   if (res == 0) {
     pr_trace_msg(trace_channel, 19,
-      "successfully checked object %s in bucket %s", object_key, bucket_name);
+      "successfully checked object '%s' in bucket '%s'", object_key,
+      bucket_name);
 
     if (resp_headers != NULL) {
       if (pr_trace_get_level(trace_channel) >= 17) {
-        pr_trace_msg(trace_channel, 17, "object %s response header count: %d",
+        pr_trace_msg(trace_channel, 17, "object '%s' response header count: %d",
           object_key, pr_table_count(resp_headers));
       }
     }
@@ -359,7 +361,8 @@ int aws_s3_object_delete(pool *p, struct s3_conn *s3, const char *bucket_name,
 
   if (res == 0) {
     pr_trace_msg(trace_channel, 19,
-      "successfully deleted object %s from bucket %s", object_key, bucket_name);
+      "successfully deleted object '%s' from bucket '%s'", object_key,
+      bucket_name);
   }
 
   aws_s3_conn_clear_response(s3);
@@ -529,8 +532,9 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
     const char *etag = NULL;
 
     pr_trace_msg(trace_channel, 19,
-      "successfully copied object %s from bucket %s to object %s in bucket %s",
-        src_object_key, src_bucket_name, dst_object_key, dst_bucket_name);
+      "successfully copied object '%s' from bucket '%s' to object '%s' in "
+      "bucket '%s'", src_object_key, src_bucket_name, dst_object_key,
+      dst_bucket_name);
 
     pr_trace_msg(trace_channel, 19,
       "copy object response: '%.*s'", (int) s3->respsz, s3->resp);
@@ -609,7 +613,7 @@ int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
 
   if (res == 0) {
     pr_trace_msg(trace_channel, 19,
-      "successfully put object %s in bucket %s", object_key, bucket_name);
+      "successfully put object '%s' in bucket '%s'", object_key, bucket_name);
   }
 
   aws_s3_conn_clear_response(s3);
@@ -748,9 +752,17 @@ struct s3_object_multipart *aws_s3_object_multipart_open(pool *p,
 
       multipart = pcalloc(sub_pool, sizeof(struct s3_object_multipart));
       multipart->pool = sub_pool;
+      multipart->bucket_name = pstrdup(multipart->pool, bucket_name);
+      multipart->object_key = pstrdup(multipart->pool, object_key);
+      multipart->object_metadata = aws_utils_table_dup(multipart->pool,
+        object_metadata);
       multipart->upload_id = pstrdup(multipart->pool, upload_id);
       multipart->parts = make_array(multipart->pool, 0,
         sizeof(struct s3_object_part *));
+
+      pr_trace_msg(trace_channel, 15,
+        "obtained upload ID '%s' for object '%s', bucket '%s'",
+        multipart->upload_id, multipart->object_key, multipart->bucket_name);
     }
   }
 
@@ -805,7 +817,7 @@ int aws_s3_object_multipart_append(pool *p, struct s3_conn *s3,
   partno = (int) (multipart->partno + 1);
   if (partno > AWS_S3_OBJECT_MULTIPART_MAX_COUNT) {
     pr_trace_msg(trace_channel, 5,
-      "maximum part count for multipart upload of object %s in bucket %s "
+      "maximum part count for multipart upload of object '%s' in bucket '%s' "
       "exceeded: %d > %d", multipart->object_key, multipart->bucket_name,
       partno, (int) AWS_S3_OBJECT_MULTIPART_MAX_COUNT);
     errno = EINVAL;
@@ -844,8 +856,9 @@ int aws_s3_object_multipart_append(pool *p, struct s3_conn *s3,
       *((struct s3_object_part **) push_array(multipart->parts)) = part;
 
       pr_trace_msg(trace_channel, 19,
-        "appended multipart data to object %s in bucket %s: part %s = ETag %s",
-        multipart->object_key, multipart->bucket_name, part_number, part_etag);
+        "appended multipart data to object '%s' in bucket '%s': "
+        "part %s = ETag %s", multipart->object_key, multipart->bucket_name,
+        part_number, part_etag);
     }
   }
 
@@ -961,8 +974,9 @@ int aws_s3_object_multipart_close(pool *p, struct s3_conn *s3,
 
     if (res == 0) {
       pr_trace_msg(trace_channel, 19,
-        "successfully aborted multipart object %s in bucket %s",
+        "successfully aborted multipart object '%s' in bucket '%s'",
         multipart->object_key, multipart->bucket_name);
+      destroy_pool(multipart->pool);
     }
 
   } else {
@@ -971,6 +985,31 @@ int aws_s3_object_multipart_close(pool *p, struct s3_conn *s3,
     void *text;
     const char *xml;
     size_t xmlsz;
+
+    /* Note: If no parts have been appended/uploaded for this object, then
+     * we cannot complete the multipart upload as is.  The AWS S3 Multipart
+     * Upload API requires one or more parts.
+     *
+     * Instead, when we detect this case, we will fall back to simply using
+     * PUT for the zero-length object.
+     */
+    if (multipart->parts->nelts == 0) {
+      pr_trace_msg(trace_channel, 17,
+        "empty length multipart upload of '%s' to bucket '%s' detected, "
+        "using PUT", multipart->object_key, multipart->bucket_name);
+      destroy_pool(req_pool);
+
+      res = aws_s3_object_put(p, s3, multipart->bucket_name,
+        multipart->object_key, multipart->object_metadata, "", 0);
+      xerrno = errno;
+
+      if (res == 0) {
+        destroy_pool(multipart->pool);
+      }
+
+      errno = xerrno;
+      return res;
+    }
 
     text = aws_xml_text_alloc(req_pool);
 
@@ -994,6 +1033,10 @@ int aws_s3_object_multipart_close(pool *p, struct s3_conn *s3,
 
     aws_xml_text_free(req_pool, text);
 
+    pr_trace_msg(trace_channel, 15,
+      "closing multipart upload of '%s' to bucket '%s' using XML: '%.*s'",
+      multipart->object_key, multipart->bucket_name, (int) xmlsz, xml);
+
     req_headers = pr_table_alloc(req_pool, 0);
 
     (void) pr_table_add(req_headers,
@@ -1006,7 +1049,7 @@ int aws_s3_object_multipart_close(pool *p, struct s3_conn *s3,
 
     if (res == 0) {
       pr_trace_msg(trace_channel, 19,
-        "successfully completed multipart object %s in bucket %s: '%.*s'",
+        "successfully completed multipart object '%s' in bucket '%s': '%.*s'",
         multipart->object_key, multipart->bucket_name, (int) s3->respsz,
         s3->resp);
 
@@ -1015,13 +1058,13 @@ int aws_s3_object_multipart_close(pool *p, struct s3_conn *s3,
           "error parsing S3 complete multipart XML response: %s",
           strerror(errno));
       }
+
+      destroy_pool(multipart->pool);
     }
   }
 
   /* Destroy the multipart object; we don't need it anymore. */
   aws_s3_conn_clear_response(s3);
-
-  destroy_pool(multipart->pool);
 
   errno = xerrno;
   return res;

@@ -571,7 +571,289 @@ START_TEST (s3_object_put_test) {
   fail_unless(res == 0, "Failed to delete object %s from bucket %s: %s",
     key, bucket, strerror(errno));
 
+  /* Once more, with metadata. */
+  metadata = pr_table_alloc(p, 0);
+  (void) pr_table_add(metadata, pstrdup(p, "x-amz-meta-foo"),
+    pstrdup(p, "bar"), 0);
+  (void) pr_table_add(metadata, pstrdup(p, "x-amz-meta-baz"),
+    pstrdup(p, "quxx"), 0);
+
+  mark_point();
+  res = aws_s3_object_put(p, s3, bucket, key, metadata, data, datasz);
+  fail_unless(res == 0, "Failed to put object '%s' in bucket '%s': %s",
+    key, bucket, strerror(errno));
+
+  mark_point();
+  res = aws_s3_object_delete(p, s3, bucket, key);
+  fail_unless(res == 0, "Failed to delete object %s from bucket %s: %s",
+    key, bucket, strerror(errno));
+
   (void) aws_s3_conn_destroy(p, s3);
+}
+END_TEST
+
+START_TEST (s3_object_multipart_open_test) {
+  struct s3_conn *s3;
+  struct s3_object_multipart *multipart;
+  const char *bucket, *key;
+  pr_table_t *metadata;
+
+  mark_point();
+  multipart = aws_s3_object_multipart_open(NULL, NULL, NULL, NULL, NULL);
+  fail_unless(multipart == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  multipart = aws_s3_object_multipart_open(p, NULL, NULL, NULL, NULL);
+  fail_unless(multipart == NULL, "Failed to handle null s3");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  s3 = (struct s3_conn *) 1;
+
+  mark_point();
+  multipart = aws_s3_object_multipart_open(p, s3, NULL, NULL, NULL);
+  fail_unless(multipart == NULL, "Failed to handle null bucket_name");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  bucket = "NO_SUCH_BUCKET";
+
+  mark_point();
+  multipart = aws_s3_object_multipart_open(p, s3, bucket, NULL, NULL);
+  fail_unless(multipart == NULL, "Failed to handle null object_key");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  if (getenv("TRAVIS_CI") != NULL) {
+    return;
+  }
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
+
+  key = "NO_SUCH_KEY";
+  metadata = pr_table_alloc(p, 0);
+
+  mark_point();
+  multipart = aws_s3_object_multipart_open(p, s3, bucket, key, metadata);
+  fail_unless(multipart == NULL, "Failed to handle invalid bucket");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  (void) aws_s3_conn_destroy(p, s3);
+}
+END_TEST
+
+START_TEST (s3_object_multipart_append_test) {
+  int res;
+  struct s3_conn *s3;
+  struct s3_object_multipart *multipart;
+
+  mark_point();
+  res = aws_s3_object_multipart_append(NULL, NULL, NULL, NULL, 0);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_object_multipart_append(p, NULL, NULL, NULL, 0);
+  fail_unless(res < 0, "Failed to handle null s3");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  s3 = (struct s3_conn *) 1;
+
+  mark_point();
+  res = aws_s3_object_multipart_append(p, s3, NULL, NULL, 0);
+  fail_unless(res < 0, "Failed to handle null multipart");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  multipart = (struct s3_object_multipart *) 2;
+
+  mark_point();
+  res = aws_s3_object_multipart_append(p, s3, multipart, NULL, 0);
+  fail_unless(res < 0, "Failed to handle null part_data");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+}
+END_TEST
+
+START_TEST (s3_object_multipart_close_test) {
+  int res;
+  struct s3_conn *s3;
+  struct s3_object_multipart *multipart;
+
+  mark_point();
+  res = aws_s3_object_multipart_close(NULL, NULL, NULL, 0);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_object_multipart_close(p, NULL, NULL, 0);
+  fail_unless(res < 0, "Failed to handle null s3");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  s3 = (struct s3_conn *) 1;
+
+  mark_point();
+  res = aws_s3_object_multipart_close(p, s3, NULL, 0);
+  fail_unless(res < 0, "Failed to handle null multipart");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  multipart = (struct s3_object_multipart *) 2;
+
+  mark_point();
+  res = aws_s3_object_multipart_close(p, s3, multipart, -1);
+  fail_unless(res < 0, "Failed to handle invalid flags");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+}
+END_TEST
+
+START_TEST (s3_object_multipart_test) {
+  register unsigned int i;
+  int res;
+  struct s3_conn *s3;
+  struct s3_object_multipart *multipart;
+  const char *bucket, *key;
+  pr_table_t *metadata;
+  char *data;
+  size_t datasz;
+
+  if (getenv("TRAVIS_CI") != NULL) {
+    return;
+  }
+
+  bucket = getenv("AWS_S3_BUCKET");
+  fail_unless(bucket != NULL,
+    "Failed to provide AWS_S3_BUCKET environment variable");
+  key = getenv("AWS_S3_OBJECT_KEY");
+  fail_unless(key != NULL,
+    "Failed to provide AWS_S3_OBJECT_KEY environment variable");
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
+
+  metadata = pr_table_alloc(p, 0);
+
+  /* open+close, no append */
+
+  mark_point();
+  res = aws_s3_object_delete(p, s3, bucket, key);
+  fail_unless(res == 0, "Failed to delete '%s' from bucket '%s': %s", key,
+    bucket, strerror(errno));
+
+  mark_point();
+  multipart = aws_s3_object_multipart_open(p, s3, bucket, key, metadata);
+  fail_unless(multipart != NULL,
+     "Failed to open multipart upload of '%s' to bucket '%s': %s", key,
+     bucket, strerror(errno));
+
+  mark_point();
+  res = aws_s3_object_multipart_close(p, s3, multipart,
+    AWS_S3_OBJECT_MULTIPART_FL_SUCCESS);
+  fail_unless(res == 0,
+    "Failed to close multipart upload of '%s' to bucket '%s': %s", key,
+    bucket, strerror(errno));
+
+  /* open+abort, no append */
+
+  mark_point();
+  res = aws_s3_object_delete(p, s3, bucket, key);
+  fail_unless(res == 0, "Failed to delete '%s' from bucket '%s': %s", key,
+    bucket, strerror(errno));
+
+  mark_point();
+  multipart = aws_s3_object_multipart_open(p, s3, bucket, key, metadata);
+  fail_unless(multipart != NULL,
+     "Failed to open multipart upload of '%s' to bucket '%s': %s", key,
+     bucket, strerror(errno));
+
+  mark_point();
+  res = aws_s3_object_multipart_close(p, s3, multipart,
+    AWS_S3_OBJECT_MULTIPART_FL_FAILURE);
+  fail_unless(res == 0,
+    "Failed to abort multipart upload of '%s' to bucket '%s': %s", key,
+    bucket, strerror(errno));
+
+  /* open+append (too small append) */
+
+  mark_point();
+  res = aws_s3_object_delete(p, s3, bucket, key);
+  fail_unless(res == 0, "Failed to delete '%s' from bucket '%s': %s", key,
+    bucket, strerror(errno));
+
+  mark_point();
+  multipart = aws_s3_object_multipart_open(p, s3, bucket, key, metadata);
+  fail_unless(multipart != NULL,
+     "Failed to open multipart upload of '%s' to bucket '%s': %s", key,
+     bucket, strerror(errno));
+
+  data = pstrdup(p, "foo bar baz");
+  datasz = strlen(data);
+
+  /* Note: the reason this "small append" actually succeeds is that it is
+   * the LAST part uploaded, and thus AWS S3 will not impose its minimum
+   * size limit upon it.
+   */
+  mark_point();
+  res = aws_s3_object_multipart_append(p, s3, multipart, data, datasz);
+  fail_unless(res == 0, "Failed to handle small multipart append: %s",
+    strerror(errno));
+
+  mark_point();
+  res = aws_s3_object_multipart_close(p, s3, multipart,
+    AWS_S3_OBJECT_MULTIPART_FL_SUCCESS);
+  fail_unless(res == 0,
+    "Failed to close multipart upload of '%s' to bucket '%s': %s", key,
+    bucket, strerror(errno));
+
+  /* open, multiple appends, close */
+
+  mark_point();
+  res = aws_s3_object_delete(p, s3, bucket, key);
+  fail_unless(res == 0, "Failed to delete '%s' from bucket '%s': %s", key,
+    bucket, strerror(errno));
+
+  mark_point();
+  multipart = aws_s3_object_multipart_open(p, s3, bucket, key, metadata);
+  fail_unless(multipart != NULL,
+     "Failed to open multipart upload of '%s' to bucket '%s': %s", key,
+     bucket, strerror(errno));
+
+  for (i = 0; i < 5; i++) {
+    mark_point();
+    res = aws_s3_object_multipart_append(p, s3, multipart, data, datasz);
+    fail_unless(res == 0, "Failed to handle multipart append: %s",
+      strerror(errno));
+  }
+
+  mark_point();
+  res = aws_s3_object_multipart_close(p, s3, multipart,
+    AWS_S3_OBJECT_MULTIPART_FL_SUCCESS);
+  fail_unless(res < 0, "Failed to handle too-small parts");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_object_multipart_close(p, s3, multipart,
+    AWS_S3_OBJECT_MULTIPART_FL_FAILURE);
+  fail_unless(res == 0,
+    "Failed to abort multipart upload of '%s' to bucket '%s': %s", key,
+    bucket, strerror(errno));
+
+  mark_point();
+  res = aws_s3_object_delete(p, s3, bucket, key);
+  fail_unless(res == 0, "Failed to delete '%s' from bucket '%s': %s", key,
+    bucket, strerror(errno));
+
+ (void) aws_s3_conn_destroy(p, s3);
 }
 END_TEST
 
@@ -589,6 +871,11 @@ Suite *tests_get_s3_object_suite(void) {
   tcase_add_test(testcase, s3_object_delete_test);
   tcase_add_test(testcase, s3_object_copy_test);
   tcase_add_test(testcase, s3_object_put_test);
+
+  tcase_add_test(testcase, s3_object_multipart_open_test);
+  tcase_add_test(testcase, s3_object_multipart_append_test);
+  tcase_add_test(testcase, s3_object_multipart_close_test);
+  tcase_add_test(testcase, s3_object_multipart_test);
 
   /* HTTP calls may need longer timeouts. */
   tcase_set_timeout(testcase, max_connect_secs + max_request_secs);
