@@ -39,9 +39,11 @@ pr_table_t *aws_utils_table_dup(pool *p, pr_table_t *tab);
 char *aws_utils_str_n2s(pool *p, int n);
 char *aws_utils_str_ul2s(pool *p, unsigned long n);
 char *aws_utils_str_off2s(pool *p, off_t n);
+char *aws_utils_str_oct2s(pool *p, int o);
 
 /* Converts the given strings to numbers. */
 int aws_utils_str_s2off(pool *p, const char *s, off_t *n);
+int aws_utils_str_s2oct(pool *P, const char *s, int *o);
 
 /* Trim any leading/trailing whitespace from the given string.
  *

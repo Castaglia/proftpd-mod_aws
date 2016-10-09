@@ -149,6 +149,22 @@ char *aws_utils_str_off2s(pool *p, off_t n) {
   return num;
 }
 
+char *aws_utils_str_oct2s(pool *p, int o) {
+  char buf[256], *oct;
+  int len;
+
+  if (p == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  memset(buf, '\0', sizeof(buf));
+  len = snprintf(buf, sizeof(buf)-1, "%04o", o);
+  oct = pstrndup(p, buf, len);
+
+  return oct;
+}
+
 int aws_utils_str_s2off(pool *p, const char *s, off_t *n) {
   char *ptr = NULL;
 
@@ -170,6 +186,26 @@ int aws_utils_str_s2off(pool *p, const char *s, off_t *n) {
     return -1;
   }
 
+  return 0;
+}
+
+int aws_utils_str_s2oct(pool *p, const char *s, int *o) {
+  int count, num;
+
+  if (p == NULL ||
+      s == NULL ||
+      o == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  count = sscanf(s, "%04o", &num);
+  if (count != 1) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  *o = num;
   return 0;
 }
 
