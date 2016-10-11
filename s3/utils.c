@@ -27,6 +27,50 @@
 
 static const char *trace_channel = "aws.s3.utils";
 
+const char *aws_s3_utils_urlencode(pool *p, const char *str) {
+  static const char *hex = "0123456789ABCDEF";
+  register unsigned int i, j;
+  char *encoded_str;
+  size_t len, encoded_len;
+
+  if (p == NULL ||
+      str == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  len = strlen(str);
+
+  /* In the worst case scenario, we need to encode every character in the
+   * given string.  Each encoded character is 3 characters, and one for
+   * the terminating NUL, of course.
+   */
+  encoded_len = len * 3;
+  encoded_str = pcalloc(p, encoded_len + 1);
+
+  for (i = 0, j = 0; i < len; i++) {
+    char ch;
+
+    ch = str[i];
+    if (('a' <= ch && ch <= 'z') ||
+        ('A' <= ch && ch <= 'Z') ||
+        ('0' <= ch && ch <= '9') ||
+        (ch == '/')) {
+      encoded_str[j++] = ch;
+
+    } else if (ch == ' ') {
+      encoded_str[j++] = '+';
+
+    } else {
+      encoded_str[j++] = '%';
+      encoded_str[j++] = hex[ch >> 4];
+      encoded_str[j++] = hex[ch & 15];
+    }
+  }
+
+  return encoded_str;
+}
+
 time_t aws_s3_utils_lastmod2unix(pool *p, const char *last_modified) {
   struct tm *tm;
   time_t date;

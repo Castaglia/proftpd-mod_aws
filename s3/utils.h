@@ -27,6 +27,11 @@
 
 #include "mod_aws.h"
 
+/* Slightly modified URL encoding scheme for S3 object names; we URL-encode
+ * non-ASCII characters except for slashes.
+ */
+const char *aws_s3_utils_urlencode(pool *p, const char *str);
+
 /* The timestamp format used for the <LastModified> elements in S3 responses. */
 time_t aws_s3_utils_lastmod2unix(pool *p, const char *last_modified);
 const char *aws_s3_utils_unix2lastmod(pool *p, time_t last_modified);

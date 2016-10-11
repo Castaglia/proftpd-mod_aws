@@ -126,6 +126,53 @@ START_TEST (s3_utils_unix2lastmod_test) {
 }
 END_TEST
 
+START_TEST (s3_utils_urlencode_test) {
+  const char *res, *str, *expected;
+
+  mark_point();
+  res = aws_s3_utils_urlencode(NULL, NULL);
+  fail_unless(res == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_utils_urlencode(p, NULL);
+  fail_unless(res == NULL, "Failed to handle null str");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  str = "foo bar";
+  expected = "foo+bar";
+
+  mark_point();
+  res = aws_s3_utils_urlencode(p, str);
+  fail_unless(res != NULL, "Failed to URL-encode '%s': %s", str,
+    strerror(errno));
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
+    expected, res);
+
+  str = "foo/bar";
+  expected = "foo/bar";
+
+  mark_point();
+  res = aws_s3_utils_urlencode(p, str);
+  fail_unless(res != NULL, "Failed to URL-encode '%s': %s", str,
+    strerror(errno));
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
+    expected, res);
+
+  str = "foo/bar@baz&&quxx";
+  expected = "foo/bar%40baz%26%26quxx";
+
+  mark_point();
+  res = aws_s3_utils_urlencode(p, str);
+  fail_unless(res != NULL, "Failed to URL-encode '%s': %s", str,
+    strerror(errno));
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
+    expected, res);
+}
+END_TEST
+
 Suite *tests_get_s3_utils_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -137,6 +184,7 @@ Suite *tests_get_s3_utils_suite(void) {
 
   tcase_add_test(testcase, s3_utils_lastmod2unix_test);
   tcase_add_test(testcase, s3_utils_unix2lastmod_test);
+  tcase_add_test(testcase, s3_utils_urlencode_test);
 
   suite_add_tcase(suite, testcase);
   return suite;
