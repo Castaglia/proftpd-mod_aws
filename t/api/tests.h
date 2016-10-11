@@ -43,6 +43,7 @@
 #include "s3/utils.h"
 #include "s3/bucket.h"
 #include "s3/object.h"
+#include "s3/fsio.h"
 
 #ifdef HAVE_CHECK_H
 # include <check.h>
