@@ -979,7 +979,14 @@ int aws_s3_object_multipart_close(pool *p, struct s3_conn *s3,
       xerrno = errno;
 
       if (res == 0) {
-        destroy_pool(multipart->pool);
+        /* Don't forget to remove the multipart upload, too. */
+        if (aws_s3_object_multipart_close(p, s3, multipart,
+            AWS_S3_OBJECT_MULTIPART_FL_FAILURE) < 0) {
+          pr_trace_msg(trace_channel, 3,
+            "failed to abort empty length multipart upload of '%s' to "
+            "bucket '%s': %s", multipart->object_key, multipart->bucket_name,
+            strerror(errno));
+        }
       }
 
       errno = xerrno;
