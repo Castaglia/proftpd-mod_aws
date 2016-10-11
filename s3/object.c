@@ -30,6 +30,7 @@
 #include "s3/conn.h"
 #include "s3/error.h"
 #include "s3/object.h"
+#include "s3/utils.h"
 
 static const char *trace_channel = "aws.s3.object";
 
@@ -223,13 +224,9 @@ int aws_s3_object_get(pool *p, struct s3_conn *s3, const char *bucket_name,
       range, 0);
   }
 
-  /* Note: Ideally we would URL-encode both the bucket name and the object
-   * key.  However, we will often have object keys which contain "/", and those
-   * slashes are legitimately part of the URL.
-   */
   path = pstrcat(req_pool, "/",
     aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/",
-    object_key, NULL);
+    aws_s3_utils_urlencode(req_pool, object_key), NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -289,13 +286,9 @@ int aws_s3_object_stat(pool *p, struct s3_conn *s3, const char *bucket_name,
   pr_pool_tag(req_pool, "S3 Object Request Pool");
   s3->req_pool = req_pool;
 
-  /* Note: Ideally we would URL-encode both the bucket name and the object
-   * key.  However, we will often have object keys which contain "/", and those
-   * slashes are legitimately part of the URL.
-   */
   path = pstrcat(req_pool, "/",
     aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/",
-    object_key, NULL);
+    aws_s3_utils_urlencode(req_pool, object_key), NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -346,13 +339,9 @@ int aws_s3_object_delete(pool *p, struct s3_conn *s3, const char *bucket_name,
   pr_pool_tag(req_pool, "S3 Object Request Pool");
   s3->req_pool = req_pool;
 
-  /* Note: Ideally we would URL-encode both the bucket name and the object
-   * key.  However, we will often have object keys which contain "/", and those
-   * slashes are legitimately part of the URL.
-   */
   path = pstrcat(req_pool, "/",
     aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/",
-    object_key, NULL);
+    aws_s3_utils_urlencode(req_pool, object_key), NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -473,13 +462,9 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
 
   req_headers = pr_table_alloc(s3->req_pool, 0);
 
-  /* Note: Ideally we would URL-encode both the bucket name and the object
-   * key.  However, we will often have object keys which contain "/", and those
-   * slashes are legitimately part of the URL.
-   */
   src_path = pstrcat(req_pool, "/",
     aws_http_urlencode(req_pool, s3->http, src_bucket_name, 0), "/",
-    src_object_key, NULL);
+    aws_s3_utils_urlencode(req_pool, src_object_key), NULL);
 
   pr_table_add(req_headers,
     pstrdup(s3->req_pool, AWS_S3_OBJECT_COPY_SOURCE_KEY), src_path, 0);
@@ -587,13 +572,9 @@ int aws_s3_object_put(pool *p, struct s3_conn *s3, const char *bucket_name,
   pr_pool_tag(req_pool, "S3 Object Request Pool");
   s3->req_pool = req_pool;
 
-  /* Note: Ideally we would URL-encode both the bucket name and the object
-   * key.  However, we will often have object keys which contain "/", and those
-   * slashes are legitimately part of the URL.
-   */
   path = pstrcat(req_pool, "/",
     aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/",
-    object_key, NULL);
+    aws_s3_utils_urlencode(req_pool, object_key), NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -691,13 +672,9 @@ struct s3_object_multipart *aws_s3_object_multipart_open(pool *p,
   pr_pool_tag(req_pool, "S3 Object Request Pool");
   s3->req_pool = req_pool;
 
-  /* Note: Ideally we would URL-encode both the bucket name and the object
-   * key.  However, we will often have object keys which contain "/", and those
-   * slashes are legitimately part of the URL.
-   */
   path = pstrcat(req_pool, "/",
-    aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/", object_key,
-    NULL);
+    aws_http_urlencode(req_pool, s3->http, bucket_name, 0), "/",
+    aws_s3_utils_urlencode(req_pool, object_key), NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -801,13 +778,9 @@ int aws_s3_object_multipart_append(pool *p, struct s3_conn *s3,
   pr_pool_tag(req_pool, "S3 Object Request Pool");
   s3->req_pool = req_pool;
 
-  /* Note: Ideally we would URL-encode both the bucket name and the object
-   * key.  However, we will often have object keys which contain "/", and those
-   * slashes are legitimately part of the URL.
-   */
   path = pstrcat(req_pool, "/",
     aws_http_urlencode(req_pool, s3->http, multipart->bucket_name, 0), "/",
-    multipart->object_key, NULL);
+    aws_s3_utils_urlencode(req_pool, multipart->object_key), NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
@@ -955,13 +928,9 @@ int aws_s3_object_multipart_close(pool *p, struct s3_conn *s3,
   pr_pool_tag(req_pool, "S3 Object Request Pool");
   s3->req_pool = req_pool;
 
-  /* Note: Ideally we would URL-encode both the bucket name and the object
-   * key.  However, we will often have object keys which contain "/", and those
-   * slashes are legitimately part of the URL.
-   */
   path = pstrcat(req_pool, "/",
     aws_http_urlencode(req_pool, s3->http, multipart->bucket_name, 0), "/",
-    multipart->object_key, NULL);
+    aws_s3_utils_urlencode(req_pool, multipart->object_key), NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
