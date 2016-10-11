@@ -29,5 +29,6 @@
 
 /* The timestamp format used for the <LastModified> elements in S3 responses. */
 time_t aws_s3_utils_lastmod2unix(pool *p, const char *last_modified);
+const char *aws_s3_utils_unix2lastmod(pool *p, time_t last_modified);
 
 #endif /* MOD_AWS_S3_UTILS_H */

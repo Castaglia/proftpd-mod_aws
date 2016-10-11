@@ -44,6 +44,9 @@ time_t aws_s3_utils_lastmod2unix(pool *p, const char *last_modified) {
   if (ptr == NULL) {
     int xerrno = errno;
 
+    /* Should we try to handle "%a, %d %b %Y %H:%M:%S %Z" here as a fallback?
+     * It would make for a more useful function.
+     */
     pr_trace_msg(trace_channel, 3,
       "unable to parse LastModified date '%s': %s", last_modified,
       strerror(xerrno));
@@ -62,4 +65,26 @@ time_t aws_s3_utils_lastmod2unix(pool *p, const char *last_modified) {
     "parsed LastModified date '%s' as Unix epoch %lu", last_modified,
     (unsigned long) date);
   return date;
+}
+
+const char *aws_s3_utils_unix2lastmod(pool *p, time_t date) {
+  const char *last_modified;
+  struct tm *tm;
+  char buf[256];
+
+  if (p == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  tm = pr_gmtime(NULL, &date);
+
+  memset(buf, '\0', sizeof(buf));
+  strftime(buf, sizeof(buf)-1, "%Y-%m-%dT%H:%M:%S", tm);
+  last_modified = pstrdup(p, buf);
+
+  pr_trace_msg(trace_channel, 17,
+    "parsed Unix epoch %lu as LastModified date '%s'", (unsigned long) date,
+    last_modified);
+  return last_modified;
 }

@@ -92,6 +92,40 @@ START_TEST (s3_utils_lastmod2unix_test) {
 }
 END_TEST
 
+START_TEST (s3_utils_unix2lastmod_test) {
+  time_t now;
+  const char *last_modified, *expected;
+
+  mark_point();
+  last_modified = aws_s3_utils_unix2lastmod(NULL, 0);
+  fail_unless(last_modified == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  now = 0;
+
+  mark_point();
+  last_modified = aws_s3_utils_unix2lastmod(p, now);
+  fail_unless(last_modified != NULL, "Failed to handle Unix epoch %lu: %s",
+    (unsigned long) now, strerror(errno));
+
+  expected = "1970-01-01T00:00:00";
+  fail_unless(strcmp(last_modified, expected) == 0, "Expected '%s', got '%s'",
+    expected, last_modified);
+
+  now = 1476157691;
+
+  mark_point();
+  last_modified = aws_s3_utils_unix2lastmod(p, now);
+  fail_unless(last_modified != NULL, "Failed to handle Unix epoch %lu: %s",
+    (unsigned long) now, strerror(errno));
+
+  expected = "2016-10-11T03:48:11";
+  fail_unless(strcmp(last_modified, expected) == 0, "Expected '%s', got '%s'",
+    expected, last_modified);
+}
+END_TEST
+
 Suite *tests_get_s3_utils_suite(void) {
   Suite *suite;
   TCase *testcase;
@@ -102,6 +136,7 @@ Suite *tests_get_s3_utils_suite(void) {
   tcase_add_checked_fixture(testcase, set_up, tear_down);
 
   tcase_add_test(testcase, s3_utils_lastmod2unix_test);
+  tcase_add_test(testcase, s3_utils_unix2lastmod_test);
 
   suite_add_tcase(suite, testcase);
   return suite;
