@@ -145,7 +145,8 @@ static int copy_object_metadata(pool *p, const char *object_key,
         AWS_S3_OBJECT_METADATA_PREFIX_LEN) == 0) {
       v = pr_table_get(src_object_metadata, k, &vlen);
       if (v != NULL) {
-        const char *dup_key, *log_key;
+        int res;
+        const char *dup_key, *dup_val, *log_key;
 
         if (flags & AWS_S3_OBJECT_COPY_METADATA_FL_KEEP_PREFIX) {
           dup_key = k;
@@ -160,8 +161,13 @@ static int copy_object_metadata(pool *p, const char *object_key,
         pr_trace_msg(trace_channel, 9, "object '%s' metadata: %s = %.*s",
           object_key, (char *) log_key, (int) vlen, (char *) v);
 
-        pr_table_add(dst_object_metadata, pstrdup(p, dup_key),
-          pstrndup(p, v, vlen), 0);
+        dup_key = pstrdup(p, dup_key);
+        dup_val = pstrndup(p, v, vlen);
+        res = pr_table_add(dst_object_metadata, dup_key, dup_val, 0);
+        if (res < 0 &&
+            errno == EEXIST) {
+          pr_table_set(dst_object_metadata, dup_key, dup_val, 0);
+        }
       }
     }
 
@@ -504,7 +510,7 @@ int aws_s3_object_copy(pool *p, struct s3_conn *s3,
 
   dst_path = pstrcat(req_pool, "/",
     aws_http_urlencode(req_pool, s3->http, dst_bucket_name, 0), "/",
-    dst_object_key, NULL);
+    aws_s3_utils_urlencode(req_pool, dst_object_key), NULL);
 
   query_params = make_array(req_pool, 1, sizeof(char *));
 
