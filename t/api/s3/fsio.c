@@ -263,7 +263,7 @@ START_TEST (s3_fsio_stat2table_test) {
   check_stat_table(object_metadata, 0, 0, 0, "wheel", "0000", 0, "root",
     "0000", 0);
 
-  pr_table_clear(object_metadata);
+  pr_table_empty(object_metadata);
 }
 END_TEST
 
