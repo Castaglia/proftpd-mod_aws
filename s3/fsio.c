@@ -30,15 +30,130 @@
 
 static const char *trace_channel = "aws.s3.fsio";
 
+#define AWS_S3_FSIO_DEFAULT_BLOCKSZ			4096
+
 struct s3_fsio {
   struct s3_conn *s3;
   const char *bucket_name;
   const char *object_prefix;
 };
 
+/* Obtain the data for struct stat from a table of the metadata for an S3
+ * object.  For interoperability, we look for/use the same metadata keys
+ * that s3fs, s3cmd, and others use:
+ *
+ *  st.st_size  <-> Content-Length
+ *  st.st_mode  <-> x-amz-meta-mode, x-amz-meta-permissions
+ *  st.st_mtime <-> x-amz-meta-mtime
+ *  st.st_uid   <-> x-amz-meta-uid, x-amz-meta-owner
+ *  st.st_gid   <-> x-amz-meta-gid, x-amz-meta-group
+ *
+ * And then there are xattrs.  Sigh.
+ */
+
+int aws_s3_fsio_stat2table(pool *p, struct stat *st, pr_table_t *tab) {
+  uid_t uid;
+  gid_t gid;
+  time_t mtime, atime;
+  off_t size;
+  mode_t mode;
+  const char *owner, *group;
+
+  if (p == NULL ||
+      st == NULL ||
+      tab == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  /* XXX TODO: Convert the following struct stat fields:
+   *
+   *  st.st_mode
+   *  st.st_uid
+   *  st.st_gid
+   *  st.st_atime
+   *  st.st_mtime
+   *  st.st_size
+   *
+   * In addition, provision the following additional fields:
+   *
+   *  user owner (name)
+   *  group owner (name)
+   *
+   */
+
+/* XXX Note: Should we include the file type or not? */
+  mode = st->st_mode;
+
+/* XXX These use aws_s3_utils_unix2lastmod, BUT that uses a strftime(3) format
+ * which may not interopate with that used by e.g. s3fs.  Hrm.
+ */
+  mtime = st->st_mtime;
+  atime = st->st_atime;
+
+  size = st->st_size;
+
+  uid = st->st_uid;
+  owner = pr_auth_uid2name(p, uid);
+
+  gid = st->st_gid;
+  group = pr_auth_gid2name(p, gid);
+
+  errno = ENOSYS;
+  return -1;
+}
+
+int aws_s3_fsio_table2stat(pool *p, pr_table_t *tab, struct stat *st) {
+
+  if (p == NULL ||
+      tab == NULL ||
+      st == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (pr_table_count(tab) == 0) {
+    /* Nothing to be done. */
+    return 0;
+  }
+
+  /* XXX TODO: Obtain the following struct stat fields:
+   *
+   *  st.st_mode
+   *  st.st_uid
+   *  st.st_gid
+   *  st.st_atime
+   *  st.st_mtime
+   *  st.st_size
+   *
+   * Let the filesystem provide the following, via the shadow entry for the
+   * file:
+   *
+   *  st.st_dev
+   *  st.st_ino
+   *  st.st_nlink
+   */
+
+  st->st_blksize = AWS_S3_FSIO_DEFAULT_BLOCKSZ;
+  st->st_blocks = (st->st_size / st->st_blksize) + 1;
+
+  errno = ENOSYS;
+  return -1;
+}
+
 /* FSIO Callbacks */
 
 static int s3_fsio_stat(pr_fs_t *fs, const char *path, struct stat *st) {
+  struct s3_fsio *s3fs;
+
+  s3fs = fs->fs_data;
+
+  /* XXX TODO: FIRST, stat(2) the path on disk.  Note that this may require
+   * some juggling of the FSIO registration entries, in order to get the
+   * "next" FS in line.  Or maybe we walk the fs->next pointers ourselves
+   * (being sure to honor the mount point?), until we reach "system"?
+   */
+
   errno = ENOSYS;
   return -1;
 }
@@ -54,6 +169,13 @@ static int s3_fsio_lstat(pr_fs_t *fs, const char *path, struct stat *st) {
 }
 
 static int s3_fsio_rename(pr_fs_t *fs, const char *src, const char *dst) {
+
+  /* XXX TODO:
+   *  IF within bucket, implemented as COPY + DELETE.
+   *  IF into bucket, implemented as an upload + unlink(2).
+   *  If out of bucket, implemented as download + DELETE.
+   */
+
   errno = ENOSYS;
   return -1;
 }
@@ -64,11 +186,21 @@ static int s3_fsio_unlink(pr_fs_t *fs, const char *path) {
 }
 
 static int s3_fsio_open(pr_fh_t *fh, const char *path, int flags) {
+  /* XXX TODO:
+   *  If reading, do stat() of requested object for existence.  (If exists,
+   *    also ensure that local shadow copy exists?)
+   *  If writing, first open local file.  Then start multipart upload.
+   */
   errno = ENOSYS;
   return -1;
 }
 
 static int s3_fsio_close(pr_fh_t *fh, int fd) {
+  /* XXX TODO:
+   *  If reading, ...
+   *  If writing, ...
+   */
+
   errno = ENOSYS;
   return -1;
 }
@@ -90,18 +222,24 @@ static off_t s3_fsio_lseek(pr_fh_t *fh, int fd, off_t offset, int flags) {
 
 static int s3_fsio_link(pr_fs_t *fs, const char *target_path,
     const char *link_path) {
+  /* XXX TODO: Rely on local shadow copy implementation for this? */
+
   errno = ENOSYS;
   return -1;
 }
 
 static int s3_fsio_readlink(pr_fs_t *fs, const char *path, char *buf,
     size_t bufsz) {
+  /* XXX TODO: Rely on local shadow copy implementation for this? */
+
   errno = ENOSYS;
   return -1;
 }
 
 static int s3_fsio_symlink(pr_fs_t *fs, const char *target_path,
     const char *link_path) {
+  /* XXX TODO: Rely on local shadow copy implementation for this? */
+
   errno = ENOSYS;
   return -1;
 }
@@ -117,6 +255,8 @@ static int s3_fsio_truncate(pr_fs_t *fs, const char *path, off_t offset) {
 }
 
 static int s3_fsio_chmod(pr_fs_t *fs, const char *path, mode_t perms) {
+  /* XXX TODO: Implement as COPY, with new metadata. */
+
   errno = ENOSYS;
   return -1;
 }
@@ -127,6 +267,8 @@ static int s3_fsio_fchmod(pr_fh_t *fh, int fd, mode_t perms) {
 }
 
 static int s3_fsio_chown(pr_fs_t *fs, const char *path, uid_t uid, gid_t gid) {
+  /* XXX TODO: Implement as COPY, with new metadata. */
+
   errno = ENOSYS;
   return -1;
 }
@@ -154,6 +296,8 @@ static int s3_fsio_faccess(pr_fh_t *fh, int mode, uid_t uid, gid_t gid,
 }
 
 static int s3_fsio_utimes(pr_fs_t *fs, const char *path, struct timeval *tvs) {
+  /* XXX TODO: Implement as COPY, with new metadata. */
+
   errno = ENOSYS;
   return -1;
 }
@@ -241,36 +385,59 @@ static int s3_fsio_fsetxattr(pool *p, pr_fh_t *fh, int fd, const char *name,
 }
 
 static int s3_fsio_chdir(pr_fs_t *fs, const char *path) {
+  /* XXX TODO: Rely on local shadow copy implementation for this? */
+
   errno = ENOSYS;
   return -1;
 }
 
 static int s3_fsio_chroot(pr_fs_t *fs, const char *path) {
+  /* XXX TODO: Rely on local shadow copy implementation for this? */
+
   errno = ENOSYS;
   return -1;
 }
 
 static void *s3_fsio_opendir(pr_fs_t *fs, const char *path) {
+  /* XXX TODO: Rely on local shadow copy implementation for this? */
+
   errno = ENOSYS;
   return NULL;
 }
 
 static int s3_fsio_closedir(pr_fs_t *fs, void *dirh) {
+  /* XXX TODO: Rely on local shadow copy implementation for this? */
+
   errno = ENOSYS;
   return -1;
 }
 
 static struct dirent *s3_fsio_readdir(pr_fs_t *fs, void *dirh) {
+  /* XXX TODO: Rely on local shadow copy implementation for MOST of this,
+   * however we would need an object_stat() per entry to get the rest of
+   * the object metadata.
+   */
+
   errno = ENOSYS;
   return NULL;
 }
 
 static int s3_fsio_mkdir(pr_fs_t *fs, const char *path, mode_t perms) {
+  /* XXX TODO: First, make the local shadow copy directory.  Then, create
+   * an S3 object, whose name ends in "/" (to be treated as a directory/folder
+   * by the AWS Console), and whose Content-Type is "application/x-directory"
+   * (for interoperability with e.g. s3fs).
+   */
+
   errno = ENOSYS;
   return -1;
 }
 
 static int s3_fsio_rmdir(pr_fs_t *fh, const char *path) {
+  /* XXX TODO: First, delete the S3 object (ensure it's a directory object?),
+   * then remove the local shadow copy directory.
+   */
+
   errno = ENOSYS;
   return -1;
 }
@@ -295,13 +462,15 @@ static struct s3_fsio *get_s3fs(pool *p, struct s3_conn *s3,
 }
 
 pr_fs_t *aws_s3_fsio_get_fs(pool *p, const char *path, struct s3_conn *s3,
-    const char *bucket_name) {
+    const char *bucket_name, const char *object_prefix) {
   pr_fs_t *fs;
   struct s3_fsio *s3fs;
 
   if (p == NULL ||
       path == NULL ||
-      s3 == NULL) {
+      s3 == NULL ||
+      bucket_name == NULL ||
+      object_prefix == NULL) {
     errno = EINVAL;
     return NULL;
   }
@@ -363,7 +532,7 @@ pr_fs_t *aws_s3_fsio_get_fs(pool *p, const char *path, struct s3_conn *s3,
   fs->mkdir = s3_fsio_mkdir;
   fs->rmdir = s3_fsio_rmdir;
 
-  s3fs = get_s3fs(fs->fs_pool, s3, bucket_name, NULL);
+  s3fs = get_s3fs(fs->fs_pool, s3, bucket_name, object_prefix);
   fs->fs_data = s3fs;
 
   return fs;
