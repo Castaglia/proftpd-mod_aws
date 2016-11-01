@@ -147,9 +147,10 @@ S3 FSIO:
 
       https://github.com/bloomreach/s4cmd/issues/19
 
-    What will mod_aws do for existing x-amz-meta values for an object, e.g.
-    when copying?  Maybe always do aws_s3_object_stat() to get metadata
-    inside of aws_s3_object_copy(), so that it always Does The Right Thing(tm)?
+    What happens if the S3 object was created OUTSIDE of mod_aws, and does
+    not have the expected metadata?  How to specify defaults for e.g. UID,
+    GID, perms?  And if no configured defaults, how about using the UID/GID
+    of the authenticated user?  And perms as defined by Umask?
 
     What if two objects have the same UID, but different owner names?
 
