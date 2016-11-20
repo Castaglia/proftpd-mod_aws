@@ -66,6 +66,8 @@ Suite *tests_get_s3_bucket_suite(void);
 Suite *tests_get_s3_object_suite(void);
 Suite *tests_get_s3_fsio_suite(void);
 
+int tests_rmpath(pool *p, const char *path);
+
 unsigned int recvd_signal_flags;
 extern pid_t mpid;
 extern server_rec *main_server;

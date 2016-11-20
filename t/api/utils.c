@@ -224,40 +224,40 @@ START_TEST (utils_str_off2s_test) {
 }
 END_TEST
 
-START_TEST (utils_str_oct2s_test) {
+START_TEST (utils_str_mode2s_test) {
   char *res, *expected;
-  int o;
+  mode_t m;
 
-  res = aws_utils_str_oct2s(NULL, 0);
+  res = aws_utils_str_mode2s(NULL, 0);
   fail_unless(res == NULL, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
-  o = 0;
-  expected = "0000";
-  res = aws_utils_str_oct2s(p, o);
-  fail_unless(res != NULL, "Failed to handle %04o: %s", o, strerror(errno));
+  m = 0;
+  expected = "00000000";
+  res = aws_utils_str_mode2s(p, m);
+  fail_unless(res != NULL, "Failed to handle %04o: %s", m, strerror(errno));
   fail_unless(strcmp(res, expected) == 0,
     "Expected '%s', got '%s'", expected, res);
 
-  o = 7;
-  expected = "0007";
-  res = aws_utils_str_oct2s(p, o);
-  fail_unless(res != NULL, "Failed to handle %04o: %s", o, strerror(errno));
+  m = 7;
+  expected = "00000007";
+  res = aws_utils_str_mode2s(p, m);
+  fail_unless(res != NULL, "Failed to handle %08o: %s", m, strerror(errno));
   fail_unless(strcmp(res, expected) == 0,
     "Expected '%s', got '%s'", expected, res);
 
-  o = -1;
-  expected = "37777777777";
-  res = aws_utils_str_oct2s(p, o);
-  fail_unless(res != NULL, "Failed to handle %04o: %s", o, strerror(errno));
+  m = -1;
+  expected = "00177777";
+  res = aws_utils_str_mode2s(p, m);
+  fail_unless(res != NULL, "Failed to handle %08o: %s", m, strerror(errno));
   fail_unless(strcmp(res, expected) == 0,
     "Expected '%s', got '%s'", expected, res);
 
-  o = 0755;
-  expected = "0755";
-  res = aws_utils_str_oct2s(p, o);
-  fail_unless(res != NULL, "Failed to handle %04o: %s", o, strerror(errno));
+  m = 0755;
+  expected = "00000755";
+  res = aws_utils_str_mode2s(p, m);
+  fail_unless(res != NULL, "Failed to handle %08o: %s", m, strerror(errno));
   fail_unless(strcmp(res, expected) == 0,
     "Expected '%s', got '%s'", expected, res);
 }
@@ -316,19 +316,19 @@ START_TEST (utils_str_s2off_test) {
 }
 END_TEST
 
-START_TEST (utils_str_s2oct_test) {
+START_TEST (utils_str_s2mode_test) {
   int res;
   const char *s;
-  int o, expected;
+  mode_t m, expected;
 
   mark_point();
-  res = aws_utils_str_s2oct(NULL, NULL, NULL);
+  res = aws_utils_str_s2mode(NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
-  res = aws_utils_str_s2oct(p, NULL, NULL);
+  res = aws_utils_str_s2mode(p, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null s");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -336,41 +336,99 @@ START_TEST (utils_str_s2oct_test) {
   s = "0";
 
   mark_point();
-  res = aws_utils_str_s2oct(p, s, NULL);
-  fail_unless(res < 0, "Failed to handle null n");
+  res = aws_utils_str_s2mode(p, s, NULL);
+  fail_unless(res < 0, "Failed to handle null m");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   expected = 0;
 
   mark_point();
-  res = aws_utils_str_s2oct(p, s, &o);
+  res = aws_utils_str_s2mode(p, s, &m);
   fail_unless(res == 0, "Failed to handle %s: %s", s, strerror(errno));
-  fail_unless(o == expected, "Expected '%04o, got '%04o'", expected, res);
+  fail_unless(m == expected, "Expected '%08o', got '%08o'", expected, res);
 
   s = "7";
   expected = 7;
 
   mark_point();
-  res = aws_utils_str_s2oct(p, s, &o);
+  res = aws_utils_str_s2mode(p, s, &m);
   fail_unless(res == 0, "Failed to handle %s: %s", s, strerror(errno));
-  fail_unless(o == expected, "Expected '%04o', got '%04o'", expected, res);
+  fail_unless(m == expected, "Expected '%08o', got '%08o'", expected, res);
 
   s = "-1";
   expected = -1;
 
   mark_point();
-  res = aws_utils_str_s2oct(p, s, &o);
+  res = aws_utils_str_s2mode(p, s, &m);
   fail_unless(res == 0, "Failed to handle %s: %s", s, strerror(errno));
-  fail_unless(o == expected, "Expected '%04o', got '%04o'", expected, res);
+  fail_unless(m == expected, "Expected '%04o', got '%04o'", expected, res);
 
   s = "0755";
   expected = (mode_t) 0755;
 
   mark_point();
-  res = aws_utils_str_s2oct(p, s, &o);
+  res = aws_utils_str_s2mode(p, s, &m);
   fail_unless(res == 0, "Failed to handle %s: %s", s, strerror(errno));
-  fail_unless(o == expected, "Expected '%04o', got '%04o'", expected, res);
+  fail_unless(m == expected, "Expected '%08o', got '%08o'", expected, res);
+}
+END_TEST
+
+START_TEST (utils_str_s2ul_test) {
+  int res;
+  const char *s;
+  unsigned long l, expected;
+
+  mark_point();
+  res = aws_utils_str_s2ul(NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_utils_str_s2ul(p, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null s");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  s = "0";
+
+  mark_point();
+  res = aws_utils_str_s2ul(p, s, NULL);
+  fail_unless(res < 0, "Failed to handle null l");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  expected = 0;
+
+  mark_point();
+  res = aws_utils_str_s2ul(p, s, &l);
+  fail_unless(res == 0, "Failed to handle %s: %s", s, strerror(errno));
+  fail_unless(l == expected, "Expected '%lu', got '%lu'", expected, l);
+
+  s = "7";
+  expected = 7;
+
+  mark_point();
+  res = aws_utils_str_s2ul(p, s, &l);
+  fail_unless(res == 0, "Failed to handle %s: %s", s, strerror(errno));
+  fail_unless(l == expected, "Expected '%lu', got '%lu'", expected, l);
+
+  s = "-1";
+  expected = -1;
+
+  mark_point();
+  res = aws_utils_str_s2ul(p, s, &l);
+  fail_unless(res == 0, "Failed to handle %s: %s", s, strerror(errno));
+  fail_unless(l == expected, "Expected '%lu', got '%lu'", expected, l);
+
+  s = "1479609543";
+  expected = 1479609543;
+
+  mark_point();
+  res = aws_utils_str_s2ul(p, s, &l);
+  fail_unless(res == 0, "Failed to handle %s: %s", s, strerror(errno));
+  fail_unless(l == expected, "Expected '%lu', got '%lu'", expected, l);
 }
 END_TEST
 
@@ -492,9 +550,10 @@ Suite *tests_get_utils_suite(void) {
   tcase_add_test(testcase, utils_str_n2s_test);
   tcase_add_test(testcase, utils_str_ul2s_test);
   tcase_add_test(testcase, utils_str_off2s_test);
-  tcase_add_test(testcase, utils_str_oct2s_test);
+  tcase_add_test(testcase, utils_str_mode2s_test);
   tcase_add_test(testcase, utils_str_s2off_test);
-  tcase_add_test(testcase, utils_str_s2oct_test);
+  tcase_add_test(testcase, utils_str_s2mode_test);
+  tcase_add_test(testcase, utils_str_s2ul_test);
   tcase_add_test(testcase, utils_str_trim_test);
   tcase_add_test(testcase, utils_strn_trim_test);
 

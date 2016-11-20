@@ -156,84 +156,57 @@ START_TEST (s3_fsio_get_fs_test) {
 }
 END_TEST
 
-static void check_stat_table(pr_table_t *tab, off_t content_len, time_t atime,
-    gid_t gid, const char *group, mode_t mode, time_t mtime, const char *owner,
-    mode_t perms, uid_t uid) {
-  void *k, *v;
+static void check_stat2table(pr_table_t *tab, const char *content_len,
+    const char *atime, const char *mtime, const char *uid, const char *gid,
+    const char *mode) {
+  const char *k, *v;
 
+  mark_point();
   k = AWS_S3_FSIO_METADATA_KEY_SIZE;
   v = pr_table_get(tab, k, NULL);
-  fail_unless(v != NULL, "Failed to find key %s in stat table",
-    (const char *) k);
-  fail_unless(*((off_t *) v) == content_len,
-    "Expected size %" PR_LU ", got %" PR_LU, content_len, *((off_t *) v));
+  fail_unless(v != NULL, "Failed to find key %s in stat table", k);
+  fail_unless(strcmp(v, content_len) == 0, "Expected %s '%s', got '%s'", k,
+    content_len, v);
 
+  mark_point();
   k = AWS_S3_FSIO_METADATA_KEY_ATIME;
   v = pr_table_get(tab, k, NULL);
-  fail_unless(v != NULL, "Failed to find key %s in stat table",
-    (const char *) k);
-  fail_unless(*((time_t *) v) == atime,
-    "Expected atime %lu, got %lu", (unsigned long) atime,
-    (unsigned long) *((time_t *) v));
+  fail_unless(v != NULL, "Failed to find key %s in stat table", k);
+  fail_unless(strcmp(v, atime) == 0, "Expected %s '%s', got '%s'", k,
+    atime, v);
 
-  k = AWS_S3_FSIO_METADATA_KEY_GID;
-  v = pr_table_get(tab, k, NULL);
-  fail_unless(v != NULL, "Failed to find key %s in stat table",
-    (const char *) k);
-  fail_unless(*((gid_t *) v) == gid,
-    "Expected GID %lu, got %lu", (unsigned long) gid,
-    (unsigned long) *((gid_t *) v));
-
-  k = AWS_S3_FSIO_METADATA_KEY_GROUP;
-  v = pr_table_get(tab, k, NULL);
-  fail_unless(v != NULL, "Failed to find key %s in stat table",
-    (const char *) k);
-  fail_unless(strcmp((const char *) v, group) == 0,
-    "Expected group '%s', got '%s'", group, (const char *) v);
-
-  k = AWS_S3_FSIO_METADATA_KEY_MODE;
-  v = pr_table_get(tab, k, NULL);
-  fail_unless(v != NULL, "Failed to find key %s in stat table",
-    (const char *) k);
-  fail_unless(*((mode_t *) v) == mode,
-    "Expected mode %04o, got %04o", mode, *((mode_t *) v));
-
+  mark_point();
   k = AWS_S3_FSIO_METADATA_KEY_MTIME;
   v = pr_table_get(tab, k, NULL);
-  fail_unless(v != NULL, "Failed to find key %s in stat table",
-    (const char *) k);
-  fail_unless(*((time_t *) v) == mtime,
-    "Expected mtime %lu, got %lu", (unsigned long) mtime,
-    (unsigned long) *((time_t *) v));
+  fail_unless(v != NULL, "Failed to find key %s in stat table", k);
+  fail_unless(strcmp(v, mtime) == 0, "Expected %s '%s', got '%s'", k,
+    mtime, v);
 
-  k = AWS_S3_FSIO_METADATA_KEY_OWNER;
-  v = pr_table_get(tab, k, NULL);
-  fail_unless(v != NULL, "Failed to find key %s in stat table",
-    (const char *) k);
-  fail_unless(strcmp((const char *) v, owner) == 0,
-    "Expected owner '%s', got '%s'", owner, (const char *) v);
-
-  k = AWS_S3_FSIO_METADATA_KEY_PERMS;
-  v = pr_table_get(tab, k, NULL);
-  fail_unless(v != NULL, "Failed to find key %s in stat table",
-    (const char *) k);
-  fail_unless(*((mode_t *) v) == perms,
-    "Expected perms %04o, got %04o", perms, *((mode_t *) v));
-
+  mark_point();
   k = AWS_S3_FSIO_METADATA_KEY_UID;
   v = pr_table_get(tab, k, NULL);
-  fail_unless(v != NULL, "Failed to find key %s in stat table",
-    (const char *) k);
-  fail_unless(*((uid_t *) v) == uid,
-    "Expected UID %lu, got %lu", (unsigned long) uid,
-    (unsigned long) *((uid_t *) v));
+  fail_unless(v != NULL, "Failed to find key %s in stat table", k);
+  fail_unless(strcmp(v, uid) == 0, "Expected %s '%s', got '%s'", k, uid, v);
+
+  mark_point();
+  k = AWS_S3_FSIO_METADATA_KEY_GID;
+  v = pr_table_get(tab, k, NULL);
+  fail_unless(v != NULL, "Failed to find key %s in stat table", k);
+  fail_unless(strcmp(v, gid) == 0, "Expected %s '%s', got '%s'", k, gid, v);
+
+  mark_point();
+  k = AWS_S3_FSIO_METADATA_KEY_MODE;
+  v = pr_table_get(tab, k, NULL);
+  fail_unless(v != NULL, "Failed to find key %s in stat table", k);
+  fail_unless(strcmp(v, mode) == 0, "Expected %s '%s', got '%s'", k, mode, v);
+
+  mark_point();
 }
 
 START_TEST (s3_fsio_stat2table_test) {
   int res;
   pr_table_t *object_metadata;
   struct stat st;
-  void *v;
 
   mark_point();
   res = aws_s3_fsio_stat2table(NULL, NULL, NULL);
@@ -255,19 +228,111 @@ START_TEST (s3_fsio_stat2table_test) {
 
   object_metadata = pr_table_alloc(p, 0);
 
+  mark_point();
+
   memset(&st, 0, sizeof(st));
+  res = aws_s3_fsio_stat2table(p, &st, object_metadata);
+  fail_unless(res == 0, "Failed to convert stat to table: %s", strerror(errno));
+  check_stat2table(object_metadata, "0", "0", "0", "0", "0", "00000000");
+
+  pr_table_empty(object_metadata);
+  mark_point();
+
+  st.st_size = 12345;
+  st.st_atime = 1479666690;
+  st.st_mtime = 1479666691;
+  st.st_uid = 500;
+  st.st_gid = 500;
+  st.st_mode = S_IFMT|S_IFREG|0644;
+
+  res = aws_s3_fsio_stat2table(p, &st, object_metadata);
+  fail_unless(res == 0, "Failed to convert stat to table: %s", strerror(errno));
+  check_stat2table(object_metadata, "12345", "1479666690", "1479666691", "500",
+    "500", "00170644");
+}
+END_TEST
+
+static void check_table2stat(struct stat *st, off_t content_len, time_t atime,
+    time_t mtime, uid_t uid, gid_t gid, mode_t mode) {
+  const char *k;
+
+  k = AWS_S3_FSIO_METADATA_KEY_SIZE;
+  fail_unless(st->st_size == content_len, "Expected %s %lu, got %lu", k,
+    (unsigned long) content_len, (unsigned long) st->st_size);
+
+  k = AWS_S3_FSIO_METADATA_KEY_ATIME;
+  fail_unless(st->st_atime == atime, "Expected %s %lu, got %lu", k,
+    (unsigned long) atime, (unsigned long) st->st_atime);
+
+  k = AWS_S3_FSIO_METADATA_KEY_MTIME;
+  fail_unless(st->st_mtime == mtime, "Expected %s %lu, got %lu", k,
+    (unsigned long) mtime, (unsigned long) st->st_mtime);
+
+  k = AWS_S3_FSIO_METADATA_KEY_UID;
+  fail_unless(st->st_uid == uid, "Expected %s %lu, got %lu", k,
+    (unsigned long) uid, (unsigned long) st->st_uid);
+
+  k = AWS_S3_FSIO_METADATA_KEY_GID;
+  fail_unless(st->st_gid == gid, "Expected %s %lu, got %lu", k,
+    (unsigned long) gid, (unsigned long) st->st_gid);
+
+  k = AWS_S3_FSIO_METADATA_KEY_MODE;
+  fail_unless(st->st_mode == mode, "Expected %s %08o, got %08o", k, mode,
+    st->st_mode);
+}
+
+START_TEST (s3_fsio_table2stat_test) {
+  int res;
+  pr_table_t *object_metadata;
+  struct stat st;
+
+  mark_point();
+  res = aws_s3_fsio_table2stat(NULL, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_fsio_table2stat(p, NULL, NULL);
+  fail_unless(res < 0, "Failed to handle null table");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  object_metadata = pr_table_alloc(p, 0);
+
+  mark_point();
+  res = aws_s3_fsio_table2stat(p, object_metadata, NULL);
+  fail_unless(res < 0, "Failed to handle null stat");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  memset(&st, 0, sizeof(st));
+
+  mark_point();
+  res = aws_s3_fsio_table2stat(p, object_metadata, &st);
+  fail_unless(res == 0, "Failed to convert table to stat: %s", strerror(errno));
+  check_table2stat(&st, 0, 0, 0, 0, 0, (mode_t) 0);
+
+  pr_table_empty(object_metadata);
+  memset(&st, 0, sizeof(st));
+
+  st.st_size = 12345;
+  st.st_atime = 1479666690;
+  st.st_mtime = 1479666691;
+  st.st_uid = 500;
+  st.st_gid = 500;
+  st.st_mode = S_IFMT|S_IFREG|0644;
 
   mark_point();
   res = aws_s3_fsio_stat2table(p, &st, object_metadata);
   fail_unless(res == 0, "Failed to convert stat to table: %s", strerror(errno));
-  check_stat_table(object_metadata, 0, 0, 0, "wheel", "0000", 0, "root",
-    "0000", 0);
 
-  pr_table_empty(object_metadata);
-}
-END_TEST
-
-START_TEST (s3_fsio_table2stat_test) {
+  memset(&st, 0, sizeof(st));
+  mark_point();
+  res = aws_s3_fsio_table2stat(p, object_metadata, &st);
+  fail_unless(res == 0, "Failed to convert table to stat: %s", strerror(errno));
+  check_table2stat(&st, 12345, 1479666690, 1479666691, 500, 500,
+    S_IFMT|S_IFREG|0644);
 }
 END_TEST
 

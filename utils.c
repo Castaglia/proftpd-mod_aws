@@ -149,8 +149,8 @@ char *aws_utils_str_off2s(pool *p, off_t n) {
   return num;
 }
 
-char *aws_utils_str_oct2s(pool *p, int o) {
-  char buf[256], *oct;
+char *aws_utils_str_mode2s(pool *p, mode_t m) {
+  char buf[256], *mode;
   int len;
 
   if (p == NULL) {
@@ -159,10 +159,10 @@ char *aws_utils_str_oct2s(pool *p, int o) {
   }
 
   memset(buf, '\0', sizeof(buf));
-  len = snprintf(buf, sizeof(buf)-1, "%04o", o);
-  oct = pstrndup(p, buf, len);
+  len = snprintf(buf, sizeof(buf)-1, "%08o", m);
+  mode = pstrndup(p, buf, len);
 
-  return oct;
+  return mode;
 }
 
 int aws_utils_str_s2off(pool *p, const char *s, off_t *n) {
@@ -189,23 +189,45 @@ int aws_utils_str_s2off(pool *p, const char *s, off_t *n) {
   return 0;
 }
 
-int aws_utils_str_s2oct(pool *p, const char *s, int *o) {
-  int count, num;
+int aws_utils_str_s2mode(pool *p, const char *s, mode_t *m) {
+  int count;
+  unsigned int num;
 
   if (p == NULL ||
       s == NULL ||
-      o == NULL) {
+      m == NULL) {
     errno = EINVAL;
     return -1;
   }
 
-  count = sscanf(s, "%04o", &num);
+  count = sscanf(s, "%08o", &num);
   if (count != 1) {
     errno = EINVAL;
     return -1;
   }
 
-  *o = num;
+  *m = num;
+  return 0;
+}
+
+int aws_utils_str_s2ul(pool *p, const char *s, unsigned long *l) {
+  int count;
+  unsigned long num;
+
+  if (p == NULL ||
+      s == NULL ||
+      l == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  count = sscanf(s, "%lu", &num);
+  if (count != 1) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  *l = num;
   return 0;
 }
 

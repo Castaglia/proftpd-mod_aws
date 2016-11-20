@@ -23,6 +23,7 @@
  */
 
 #include "mod_aws.h"
+#include "../utils.h"
 #include "s3/conn.h"
 #include "s3/bucket.h"
 #include "s3/object.h"
@@ -38,6 +39,16 @@ struct s3_fsio {
   const char *object_prefix;
 };
 
+static void store_stat_kv(pr_table_t *tab, char *k, const char *v) {
+  int res;
+
+  res = pr_table_add(tab, k, v, 0);
+  if (res < 0) {
+    pr_trace_msg(trace_channel, 2, "error stashing '%s' in table: %s", k,
+      strerror(errno));
+  }
+}
+
 /* Obtain the data for struct stat from a table of the metadata for an S3
  * object.  For interoperability, we look for/use the same metadata keys
  * that s3fs, s3cmd, and others use:
@@ -50,14 +61,8 @@ struct s3_fsio {
  *
  * And then there are xattrs.  Sigh.
  */
-
 int aws_s3_fsio_stat2table(pool *p, struct stat *st, pr_table_t *tab) {
-  uid_t uid;
-  gid_t gid;
-  time_t mtime, atime;
-  off_t size;
-  mode_t mode;
-  const char *owner, *group;
+  const char *k, *v;
 
   if (p == NULL ||
       st == NULL ||
@@ -66,44 +71,44 @@ int aws_s3_fsio_stat2table(pool *p, struct stat *st, pr_table_t *tab) {
     return -1;
   }
 
-  /* XXX TODO: Convert the following struct stat fields:
-   *
-   *  st.st_mode
-   *  st.st_uid
-   *  st.st_gid
-   *  st.st_atime
-   *  st.st_mtime
-   *  st.st_size
-   *
-   * In addition, provision the following additional fields:
-   *
-   *  user owner (name)
-   *  group owner (name)
-   *
-   */
+  k = AWS_S3_FSIO_METADATA_KEY_MODE;
+  v = aws_utils_str_mode2s(p, st->st_mode);
+  store_stat_kv(tab, pstrdup(p, k), v);
 
-/* XXX Note: Should we include the file type or not? */
-  mode = st->st_mode;
+  k = AWS_S3_FSIO_METADATA_KEY_MTIME;
+  v = aws_utils_str_ul2s(p, (unsigned long) st->st_mtime);
+  store_stat_kv(tab, pstrdup(p, k), v);
 
-/* XXX These use aws_s3_utils_unix2lastmod, BUT that uses a strftime(3) format
- * which may not interopate with that used by e.g. s3fs.  Hrm.
- */
-  mtime = st->st_mtime;
-  atime = st->st_atime;
+  k = AWS_S3_FSIO_METADATA_KEY_ATIME;
+  v = aws_utils_str_ul2s(p, (unsigned long) st->st_atime);
+  store_stat_kv(tab, pstrdup(p, k), v);
 
-  size = st->st_size;
+  k = AWS_S3_FSIO_METADATA_KEY_SIZE;
+  v = aws_utils_str_off2s(p, st->st_size);
+  store_stat_kv(tab, pstrdup(p, k), v);
 
-  uid = st->st_uid;
-  owner = pr_auth_uid2name(p, uid);
+  k = AWS_S3_FSIO_METADATA_KEY_UID;
+  v = pr_uid2str(p, st->st_uid);
+  store_stat_kv(tab, pstrdup(p, k), v);
+  /* Note: Should we also store the UID using AWS_S3_FSIO_METADATA_KEY_OWNER? */
 
-  gid = st->st_gid;
-  group = pr_auth_gid2name(p, gid);
+  k = AWS_S3_FSIO_METADATA_KEY_GID;
+  v = pr_gid2str(p, st->st_gid);
+  store_stat_kv(tab, pstrdup(p, k), v);
+  /* Note: Should we also store the GID using AWS_S3_FSIO_METADATA_KEY_GROUP? */
 
-  errno = ENOSYS;
-  return -1;
+  return 0;
 }
 
+/* Note: Let the filesystem provide the following, via the shadow entry for the
+ * file:
+ *
+ *  st.st_dev
+ *  st.st_ino
+ *  st.st_nlink
+ */
 int aws_s3_fsio_table2stat(pool *p, pr_table_t *tab, struct stat *st) {
+  const char *k, *v;
 
   if (p == NULL ||
       tab == NULL ||
@@ -113,32 +118,119 @@ int aws_s3_fsio_table2stat(pool *p, pr_table_t *tab, struct stat *st) {
   }
 
   if (pr_table_count(tab) == 0) {
+    pr_trace_msg(trace_channel, 17,
+      "empty stat table, not setting stat fields");
+
     /* Nothing to be done. */
     return 0;
   }
 
-  /* XXX TODO: Obtain the following struct stat fields:
-   *
-   *  st.st_mode
-   *  st.st_uid
-   *  st.st_gid
-   *  st.st_atime
-   *  st.st_mtime
-   *  st.st_size
-   *
-   * Let the filesystem provide the following, via the shadow entry for the
-   * file:
-   *
-   *  st.st_dev
-   *  st.st_ino
-   *  st.st_nlink
-   */
+  k = AWS_S3_FSIO_METADATA_KEY_MODE;
+  v = pr_table_get(tab, k, NULL);
+  if (v != NULL) {
+    mode_t mode;
+
+    if (aws_utils_str_s2mode(p, v, &mode) == 0) {
+      st->st_mode = mode;
+
+    } else {
+      pr_trace_msg(trace_channel, 7, "unable to convert '%s' to mode: %s", v,
+        strerror(errno));
+    }
+
+  } else {
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+  }
+
+  k = AWS_S3_FSIO_METADATA_KEY_MTIME;
+  v = pr_table_get(tab, k, NULL);
+  if (v != NULL) {
+    time_t mtime;
+
+    if (aws_utils_str_s2ul(p, v, (unsigned long *) &mtime) == 0) {
+      st->st_mtime = mtime;
+
+    } else {
+      pr_trace_msg(trace_channel, 7, "unable to convert '%s' to time: %s", v,
+        strerror(errno));
+    }
+
+  } else {
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+  }
+
+  k = AWS_S3_FSIO_METADATA_KEY_ATIME;
+  v = pr_table_get(tab, k, NULL);
+  if (v != NULL) {
+    time_t atime;
+
+    if (aws_utils_str_s2ul(p, v, (unsigned long *) &atime) == 0) {
+      st->st_atime = atime;
+
+    } else {
+      pr_trace_msg(trace_channel, 7, "unable to convert '%s' to time: %s", v,
+        strerror(errno));
+    }
+
+  } else {
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+  }
+
+  k = AWS_S3_FSIO_METADATA_KEY_SIZE;
+  v = pr_table_get(tab, k, NULL);
+  if (v != NULL) {
+    off_t size;
+
+    if (aws_utils_str_s2off(p, v, &size) == 0) {
+      st->st_size = size;
+
+    } else {
+      pr_trace_msg(trace_channel, 7, "unable to convert '%s' to size: %s", v,
+        strerror(errno));
+    }
+
+  } else {
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+  }
+
+  k = AWS_S3_FSIO_METADATA_KEY_UID;
+  v = pr_table_get(tab, k, NULL);
+  if (v != NULL) {
+    uid_t uid;
+
+    if (pr_str2uid(v, &uid) == 0) {
+      st->st_uid = uid;
+
+    } else {
+      pr_trace_msg(trace_channel, 7, "unable to convert '%s' to UID: %s", v,
+        strerror(errno));
+    }
+
+  } else {
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+  }
+
+  k = AWS_S3_FSIO_METADATA_KEY_GID;
+  v = pr_table_get(tab, k, NULL);
+  if (v != NULL) {
+    gid_t gid;
+
+    if (pr_str2gid(v, &gid) == 0) {
+      st->st_gid = gid;
+
+    } else {
+      pr_trace_msg(trace_channel, 7, "unable to convert '%s' to GID: %s", v,
+        strerror(errno));
+    }
+
+  } else {
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+  }
 
   st->st_blksize = AWS_S3_FSIO_DEFAULT_BLOCKSZ;
   st->st_blocks = (st->st_size / st->st_blksize) + 1;
 
-  errno = ENOSYS;
-  return -1;
+  return 0;
 }
 
 /* FSIO Callbacks */
