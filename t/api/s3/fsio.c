@@ -424,14 +424,15 @@ Suite *tests_get_s3_fsio_suite(void) {
 
   tcase_add_checked_fixture(testcase, set_up, tear_down);
 
+  tcase_add_test(testcase, s3_fsio_stat2table_test);
+  tcase_add_test(testcase, s3_fsio_table2stat_test);
+
   if (getenv("TRAVIS_CI") != NULL) {
     suite_add_tcase(suite, testcase);
     return suite;
   }
 
   tcase_add_test(testcase, s3_fsio_get_fs_test);
-  tcase_add_test(testcase, s3_fsio_stat2table_test);
-  tcase_add_test(testcase, s3_fsio_table2stat_test);
 
   tcase_add_test(testcase, s3_fsio_stat_test);
 #if 0

@@ -247,8 +247,8 @@ START_TEST (utils_str_mode2s_test) {
   fail_unless(strcmp(res, expected) == 0,
     "Expected '%s', got '%s'", expected, res);
 
-  m = -1;
-  expected = "00177777";
+  m = S_IFMT|S_IFREG|0644;
+  expected = "00170644";
   res = aws_utils_str_mode2s(p, m);
   fail_unless(res != NULL, "Failed to handle %08o: %s", m, strerror(errno));
   fail_unless(strcmp(res, expected) == 0,
