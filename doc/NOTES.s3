@@ -130,16 +130,19 @@ S3 FSIO:
   interoperability with the other metadata headers that tools like s3fs,
   s3cmd, s3sync, etc maintain?
 
-    In https://github.com/s3fs-fuse/.../s3fs_util.cpp#is_need_check_obj_detail()
+    In
+      https://github.com/s3fs-fuse/s3fs-fuse/blob/master/src/s3fs_util.cpp#is_need_check_obj_detail()
+      https://github.com/s3fs-fuse/s3fs-fuse/blob/master/src/s3fs.cpp#L926
+
     was seen the following:
 
-      x-amz-meta-mode
-      x-amz-meta-mtime
-      x-amz-meta-uid
-      x-amz-meta-gid
-      x-amz-meta-owner
-      x-amz-meta-group
-      x-amz-meta-permissions
+      x-amz-meta-mode: stored as stringified mode_t
+      x-amz-meta-mtime: stored as stringified time_t
+      x-amz-meta-uid: stored as strintified uid_t
+      x-amz-meta-gid: stored as stringified gid_t
+      x-amz-meta-owner (used/set by s3sync, per comments)
+      x-amz-meta-group (used/set by s3sync, per comments)
+      x-amz-meta-permissions (used/set by s3sync, per comments)
       x-amz-meta-xattr
         https://github.com/s3fs-fuse/s3fs-fuse/blob/master/src/common.h#L113
 
