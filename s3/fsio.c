@@ -139,7 +139,7 @@ int aws_s3_fsio_table2stat(pool *p, pr_table_t *tab, struct stat *st) {
     }
 
   } else {
-    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%s' key", k);
   }
 
   k = AWS_S3_FSIO_METADATA_KEY_MTIME;
@@ -156,7 +156,7 @@ int aws_s3_fsio_table2stat(pool *p, pr_table_t *tab, struct stat *st) {
     }
 
   } else {
-    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%s' key", k);
   }
 
   k = AWS_S3_FSIO_METADATA_KEY_ATIME;
@@ -173,7 +173,7 @@ int aws_s3_fsio_table2stat(pool *p, pr_table_t *tab, struct stat *st) {
     }
 
   } else {
-    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%s' key", k);
   }
 
   k = AWS_S3_FSIO_METADATA_KEY_SIZE;
@@ -190,7 +190,7 @@ int aws_s3_fsio_table2stat(pool *p, pr_table_t *tab, struct stat *st) {
     }
 
   } else {
-    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%s' key", k);
   }
 
   k = AWS_S3_FSIO_METADATA_KEY_UID;
@@ -207,7 +207,7 @@ int aws_s3_fsio_table2stat(pool *p, pr_table_t *tab, struct stat *st) {
     }
 
   } else {
-    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%s' key", k);
   }
 
   k = AWS_S3_FSIO_METADATA_KEY_GID;
@@ -224,7 +224,7 @@ int aws_s3_fsio_table2stat(pool *p, pr_table_t *tab, struct stat *st) {
     }
 
   } else {
-    pr_trace_msg(trace_channel, 5, "stat table missing expected '%k' key", k);
+    pr_trace_msg(trace_channel, 5, "stat table missing expected '%s' key", k);
   }
 
   st->st_blksize = AWS_S3_FSIO_DEFAULT_BLOCKSZ;
@@ -233,31 +233,208 @@ int aws_s3_fsio_table2stat(pool *p, pr_table_t *tab, struct stat *st) {
   return 0;
 }
 
+/* Get the "next" FS in line, for working with the underlying disk.  We walk
+ * the next pointers ourselves, making sure to honor the mount point.
+ */
+static pr_fs_t *get_next_fs(pr_fs_t *fs) {
+  pr_fs_t *next_fs;
+
+  next_fs = fs->fs_next;
+  if (next_fs == NULL) {
+    return fs;
+  }
+
+  /* XXX Check mount points? */
+
+  return next_fs;
+}
+
 /* FSIO Callbacks */
 
+static int object_stat(pool *p, struct s3_fsio *s3fs, const char *path,
+    struct stat *st, const char *desc) {
+  int res;
+  pr_table_t *object_metadata;
+  const char *object_key;
+
+  object_metadata = pr_table_alloc(p, 0);
+  object_key = pstrcat(p, s3fs->object_prefix, path, NULL);
+
+  pr_trace_msg(trace_channel, 19,
+    "using bucket %s, object key %s for %s on path %s", s3fs->bucket_name,
+    object_key, desc, path);
+
+  res = aws_s3_object_stat(p, s3fs->s3, s3fs->bucket_name, object_key,
+    object_metadata);
+  if (res == 0) {
+    res = aws_s3_fsio_table2stat(p, object_metadata, st);
+    if (res < 0) {
+      pr_trace_msg(trace_channel, 4,
+        "error converting S3 object metadata (bucket %s, object %s) "
+        "to struct stat: %s", s3fs->bucket_name, object_key, strerror(errno));
+    }
+
+    res = 0;
+  }
+
+  return res;
+}
+
 static int s3_fsio_stat(pr_fs_t *fs, const char *path, struct stat *st) {
+  int res, xerrno, have_shadow = TRUE;
   struct s3_fsio *s3fs;
+  pr_fs_t *next_fs;
+  pool *tmp_pool;
 
   s3fs = fs->fs_data;
+  next_fs = get_next_fs(fs);
 
-  /* XXX TODO: FIRST, stat(2) the path on disk.  Note that this may require
-   * some juggling of the FSIO registration entries, in order to get the
-   * "next" FS in line.  Or maybe we walk the fs->next pointers ourselves
-   * (being sure to honor the mount point?), until we reach "system"?
+  /* Find the first non-NULL custom stat handler.  If there are none,
+   * use the system stat.
+   */
+  while (next_fs != NULL &&
+         next_fs->fs_next != NULL &&
+         next_fs->stat == NULL) {
+    next_fs = next_fs->fs_next;
+  }
+
+  res = (next_fs->stat)(next_fs, path, st);
+  xerrno = errno;
+
+  if (res < 0) {
+    if (xerrno == ENOENT) {
+      /* XXX Possibly check here to see if there is an S3 object for this path;
+       * if so, create/mirror that s3 object onto local disk?  This is also
+       * why having x-amz-meta-mode store the file type is important: would
+       * we need to create a file, or directory, etc on disk?
+       */
+
+      have_shadow = FALSE;
+    }
+
+    return -1;
+  }
+
+  /* Now that we have the on-disk stat data, check for the S3 object and get
+   * its stat data.
    */
 
-  errno = ENOSYS;
-  return -1;
+  tmp_pool = make_sub_pool(fs->fs_pool);
+  res = object_stat(tmp_pool, s3fs, path, st, "stat(2)");
+  xerrno = errno;
+
+  if (res < 0 &&
+      xerrno == ENOENT) {
+
+    /* If we DON'T have the S3 object, but DO have the local shadow copy, then
+     * we need to unlink the local shadow copy. S3 is authoritative.
+     */
+    if (have_shadow == TRUE) {
+      pr_trace_msg(trace_channel, 9,
+        "no S3 object found for path '%s', but local shadow copy exists; "
+        "deleting", path);
+
+      if (pr_fsio_unlink(path) < 0) {
+        pr_trace_msg(trace_channel, 6,
+          "error deleting local shadow copy of '%s': %s", path,
+          strerror(errno));
+      }
+
+      xerrno = ENOENT;
+    }
+  }
+
+  destroy_pool(tmp_pool);
+  errno = xerrno;
+  return 0;
 }
 
 static int s3_fsio_fstat(pr_fh_t *fh, int fd, struct stat *st) {
-  errno = ENOSYS;
-  return -1;
+  int res, xerrno;
+  struct s3_fsio *s3fs;
+  pr_fs_t *next_fs;
+  pool *tmp_pool;
+
+  s3fs = fh->fh_fs->fs_data;
+  next_fs = get_next_fs(fh->fh_fs);
+
+  /* Find the first non-NULL custom fstat handler.  If there are none,
+   * use the system stat.
+   */
+  while (next_fs != NULL &&
+         next_fs->fs_next != NULL &&
+         next_fs->fstat == NULL) {
+    next_fs = next_fs->fs_next;
+  }
+
+  res = (next_fs->fstat)(fh, fd, st);
+  xerrno = errno;
+
+  if (res < 0) {
+    if (xerrno == ENOENT) {
+      /* XXX Possibly check here to see if there is an S3 object for this path;
+       * if so, create/mirror that s3 object onto local disk?  This is also
+       * why having x-amz-meta-mode store the file type is important: would
+       * we need to create a file, or directory, etc on disk?
+       */
+    }
+
+    return -1;
+  }
+
+  /* Now that we have the on-disk stat data, check for the S3 object and get
+   * its stat data.
+   */
+
+  tmp_pool = make_sub_pool(fh->fh_fs->fs_pool);
+  res = object_stat(tmp_pool, s3fs, fh->fh_path, st, "fstat(2)");
+  destroy_pool(tmp_pool);
+
+  return 0;
 }
 
 static int s3_fsio_lstat(pr_fs_t *fs, const char *path, struct stat *st) {
-  errno = ENOSYS;
-  return -1;
+  int res, xerrno;
+  struct s3_fsio *s3fs;
+  pr_fs_t *next_fs;
+  pool *tmp_pool;
+
+  s3fs = fs->fs_data;
+  next_fs = get_next_fs(fs);
+
+  /* Find the first non-NULL custom lstat handler.  If there are none,
+   * use the system stat.
+   */
+  while (next_fs != NULL &&
+         next_fs->fs_next != NULL &&
+         next_fs->lstat == NULL) {
+    next_fs = next_fs->fs_next;
+  }
+
+  res = (next_fs->lstat)(next_fs, path, st);
+  xerrno = errno;
+
+  if (res < 0) {
+    if (xerrno == ENOENT) {
+      /* XXX Possibly check here to see if there is an S3 object for this path;
+       * if so, create/mirror that s3 object onto local disk?  This is also
+       * why having x-amz-meta-mode store the file type is important: would
+       * we need to create a file, or directory, etc on disk?
+       */
+    }
+
+    return -1;
+  }
+
+  /* Now that we have the on-disk stat data, check for the S3 object and get
+   * its stat data.
+   */
+
+  tmp_pool = make_sub_pool(fs->fs_pool);
+  res = object_stat(tmp_pool, s3fs, path, st, "lstat(2)");
+  destroy_pool(tmp_pool);
+
+  return 0;
 }
 
 static int s3_fsio_rename(pr_fs_t *fs, const char *src, const char *dst) {
@@ -273,7 +450,45 @@ static int s3_fsio_rename(pr_fs_t *fs, const char *src, const char *dst) {
 }
 
 static int s3_fsio_unlink(pr_fs_t *fs, const char *path) {
-  errno = ENOSYS;
+  int object_res, object_errno, path_res, path_errno;
+  struct s3_fsio *s3fs;
+  pr_fs_t *next_fs;
+  pool *tmp_pool;
+  const char *bucket_name, *object_key;
+
+  s3fs = fs->fs_data;
+  next_fs = get_next_fs(fs);
+
+  tmp_pool = make_sub_pool(fs->fs_pool);
+  object_key = pstrcat(tmp_pool, s3fs->object_prefix, path, NULL);
+  object_res = aws_s3_object_delete(tmp_pool, s3fs->s3, s3fs->bucket_name,
+    object_key);
+  object_errno = errno;
+  destroy_pool(tmp_pool);
+
+  /* Find the first non-NULL custom unlink handler.  If there are none,
+   * use the system unlink.
+   */
+  while (next_fs != NULL &&
+         next_fs->fs_next != NULL &&
+         next_fs->unlink == NULL) {
+    next_fs = next_fs->fs_next;
+  }
+
+  path_res = (next_fs->unlink)(next_fs, path);
+  path_errno = errno;
+
+  if (object_res == 0 &&
+      path_res == 0) {
+    return 0;
+  }
+
+  if (object_res != 0) {
+    errno = object_errno;
+    return -1;
+  }
+
+  errno = path_errno;
   return -1;
 }
 
@@ -282,6 +497,18 @@ static int s3_fsio_open(pr_fh_t *fh, const char *path, int flags) {
    *  If reading, do stat() of requested object for existence.  (If exists,
    *    also ensure that local shadow copy exists?)
    *  If writing, first open local file.  Then start multipart upload.
+   *
+   *  To get the object_metadata, open the fd FIRST (using next_fs), then
+   *  use fstat() on it to get the stat data!
+   *
+   *  To handle:
+   *    O_RDONLY
+   *    O_WRONLY
+   *    O_RDWR
+   *    O_TRUNC (delete existing S3 object?)
+   *    O_CREAT (or not)
+   *
+   *    open() on a directory path?
    */
   errno = ENOSYS;
   return -1;
@@ -298,11 +525,15 @@ static int s3_fsio_close(pr_fh_t *fh, int fd) {
 }
 
 static int s3_fsio_read(pr_fh_t *fh, int fd, char *buf, size_t bufsz) {
+  /* XXX If fh_data flags show this as NOT open for reading, then EPERM */
+  /* XXX aws_s3_object_get().  Double-buffering into fh->fh_buf? */
   errno = ENOSYS;
   return -1;
 }
 
 static int s3_fsio_write(pr_fh_t *fh, int fd, const char *buf, size_t bufsz) {
+  /* XXX If fh_data flags show this as NOT open for writing, then EPERM */
+  /* XXX aws_s3_object_put()?.  Double-buffering via fh->fh_buf? */
   errno = ENOSYS;
   return -1;
 }
@@ -314,25 +545,17 @@ static off_t s3_fsio_lseek(pr_fh_t *fh, int fd, off_t offset, int flags) {
 
 static int s3_fsio_link(pr_fs_t *fs, const char *target_path,
     const char *link_path) {
-  /* XXX TODO: Rely on local shadow copy implementation for this? */
-
-  errno = ENOSYS;
-  return -1;
-}
-
-static int s3_fsio_readlink(pr_fs_t *fs, const char *path, char *buf,
-    size_t bufsz) {
-  /* XXX TODO: Rely on local shadow copy implementation for this? */
-
-  errno = ENOSYS;
+  pr_trace_msg(trace_channel, 3,
+    "creation of hard links via link(2) not allowed within an S3 FS");
+  errno = EPERM;
   return -1;
 }
 
 static int s3_fsio_symlink(pr_fs_t *fs, const char *target_path,
     const char *link_path) {
-  /* XXX TODO: Rely on local shadow copy implementation for this? */
-
-  errno = ENOSYS;
+  pr_trace_msg(trace_channel, 3,
+    "creation of symlinks via symlink(2) not allowed within an S3 FS");
+  errno = EPERM;
   return -1;
 }
 
@@ -395,8 +618,7 @@ static int s3_fsio_utimes(pr_fs_t *fs, const char *path, struct timeval *tvs) {
 }
 
 static int s3_fsio_futimes(pr_fh_t *fh, int fd, struct timeval *tvs) {
-  errno = ENOSYS;
-  return -1;
+  return s3_fsio_utimes(fh->fh_fs, fh->fh_path, tvs);
 }
 
 static int s3_fsio_fsync(pr_fh_t *fh, int fd) {
@@ -492,6 +714,9 @@ static int s3_fsio_chroot(pr_fs_t *fs, const char *path) {
 
 static void *s3_fsio_opendir(pr_fs_t *fs, const char *path) {
   /* XXX TODO: Rely on local shadow copy implementation for this? */
+  /* XXX What if no local shadow copy, but there IS a bucket/directory for
+   * the name, with objects?
+   */
 
   errno = ENOSYS;
   return NULL;
@@ -572,7 +797,14 @@ pr_fs_t *aws_s3_fsio_get_fs(pool *p, const char *path, struct s3_conn *s3,
     return NULL;
   }
 
-  /* File operations */
+  /* File operations
+   *
+   * Note that some operations are deliberately omitted, as they are best
+   * handled by the underlying FSIO/filesystem:
+   *
+   *  - readlink
+   */
+
   fs->stat = s3_fsio_stat;
   fs->fstat = s3_fsio_fstat;
   fs->lstat = s3_fsio_lstat;
@@ -584,7 +816,6 @@ pr_fs_t *aws_s3_fsio_get_fs(pool *p, const char *path, struct s3_conn *s3,
   fs->write = s3_fsio_write;
   fs->lseek = s3_fsio_lseek;
   fs->link = s3_fsio_link;
-  fs->readlink = s3_fsio_readlink;
   fs->symlink = s3_fsio_symlink;
   fs->ftruncate = s3_fsio_ftruncate;
   fs->truncate = s3_fsio_truncate;

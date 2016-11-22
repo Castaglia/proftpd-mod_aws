@@ -347,7 +347,7 @@ static void register_s3fs(pool *p, struct s3_conn *s3) {
     "Failed to provide AWS_S3_BUCKET environment variable");
 
   prefix = getenv("AWS_S3_BUCKET_PREFIX");
-  fail_unless(bucket != NULL,
+  fail_unless(prefix != NULL,
     "Failed to provide AWS_S3_BUCKET_PREFIX environment variable");
 
   /* On Mac OSX, because /tmp is often a symlink. */
@@ -392,6 +392,43 @@ static void unregister_s3fs(pool *p, struct s3_conn *s3) {
   fsio_mount_point = NULL;
 }
 
+/* NOTE: We need to test open/close first, so that we know we can use these
+ * functions to create the temporary files/objects needed for later tests.
+ */
+START_TEST (s3_fsio_close_test) {
+}
+END_TEST
+
+START_TEST (s3_fsio_open_test) {
+}
+END_TEST
+
+START_TEST (s3_fsio_unlink_test) {
+  int res;
+  const char *path;
+  struct s3_conn *s3;
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
+
+  register_s3fs(p, s3);
+
+  path = pdircat(p, fsio_mount_point, "test.dat", NULL);
+
+  mark_point();
+  res = pr_fsio_unlink(path);
+  fail_unless(res < 0, "Deleted '%s' unexpectedly", path);
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+/* XXX Local file, but no S3 object */
+/* XXX No local file, but S3 object */
+/* XXX Local file AND S3 object */
+
+  unregister_s3fs(p, s3);
+}
+END_TEST
+
 START_TEST (s3_fsio_stat_test) {
   int res;
   const char *path;
@@ -411,7 +448,28 @@ START_TEST (s3_fsio_stat_test) {
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
     strerror(errno), errno);
 
+/* XXX Stat a file object */
+
+/* XXX Stat a "directory" object */
+
+/* XXX Symlink objects? Does s3fs support symlink objects? I can see where
+ * symlinks MIGHT be difficult -- or not.  File as future feature request?
+ */
+
+/* XXX Case where local shadow exists, remote object does not */
+/* XXX Case where local shadow exists, remote object exists */
+/* XXX Case where local shadow does not exist, remote object exists */
+/* XXX Case where local shadow does not exist, remote object does not exist */
+
   unregister_s3fs(p, s3);
+}
+END_TEST
+
+START_TEST (s3_fsio_fstat_test) {
+}
+END_TEST
+
+START_TEST (s3_fsio_lstat_test) {
 }
 END_TEST
 
@@ -426,27 +484,25 @@ Suite *tests_get_s3_fsio_suite(void) {
 
   tcase_add_test(testcase, s3_fsio_stat2table_test);
   tcase_add_test(testcase, s3_fsio_table2stat_test);
+  tcase_add_test(testcase, s3_fsio_get_fs_test);
 
   if (getenv("TRAVIS_CI") != NULL) {
     suite_add_tcase(suite, testcase);
     return suite;
   }
 
-  tcase_add_test(testcase, s3_fsio_get_fs_test);
-
-  tcase_add_test(testcase, s3_fsio_stat_test);
-#if 0
-  tcase_add_test(testcase, s3_fsio_fstat_test);
-  tcase_add_test(testcase, s3_fsio_lstat_test);
-  tcase_add_test(testcase, s3_fsio_rename_test);
-  tcase_add_test(testcase, s3_fsio_unlink_test);
   tcase_add_test(testcase, s3_fsio_open_test);
   tcase_add_test(testcase, s3_fsio_close_test);
+  tcase_add_test(testcase, s3_fsio_unlink_test);
+  tcase_add_test(testcase, s3_fsio_stat_test);
+  tcase_add_test(testcase, s3_fsio_fstat_test);
+  tcase_add_test(testcase, s3_fsio_lstat_test);
+#if 0
+  tcase_add_test(testcase, s3_fsio_rename_test);
   tcase_add_test(testcase, s3_fsio_read_test);
   tcase_add_test(testcase, s3_fsio_write_test);
   tcase_add_test(testcase, s3_fsio_lseek_test);
   tcase_add_test(testcase, s3_fsio_link_test);
-  tcase_add_test(testcase, s3_fsio_readlink_test);
   tcase_add_test(testcase, s3_fsio_symlink_test);
   tcase_add_test(testcase, s3_fsio_ftruncate_test);
   tcase_add_test(testcase, s3_fsio_truncate_test);

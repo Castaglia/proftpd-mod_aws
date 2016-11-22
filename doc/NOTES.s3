@@ -179,6 +179,13 @@ S3 FSIO:
     http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectCOPY.html
 
 
+  What about statfs/vstatfs, for e.g. displaying filesystem size variable,
+  on an S3 FS path?  For now, guess have to document that the reported value
+  is that of the local filesystem, not of S3.
+
+  Document caveat that creation of hard/soft links on S3 FS is not allowed.
+  (Mostly applicable to SFTP, rsync.)
+
   Caching: Consider a read-many file stored in S3.  Serving that file from
   local disk is definitely faster (and cheaper) than proxying it from S3 to
   the requesting client.  Thus mod_aws SHOULD offer the option of caching
