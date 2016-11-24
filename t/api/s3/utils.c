@@ -161,6 +161,16 @@ START_TEST (s3_utils_urlencode_test) {
   fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
     expected, res);
 
+  str = "foo.bar";
+  expected = "foo.bar";
+
+  mark_point();
+  res = aws_s3_utils_urlencode(p, str);
+  fail_unless(res != NULL, "Failed to URL-encode '%s': %s", str,
+    strerror(errno));
+  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
+    expected, res);
+
   str = "foo/bar@baz&&quxx";
   expected = "foo/bar%40baz%26%26quxx";
 

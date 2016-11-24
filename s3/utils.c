@@ -61,6 +61,9 @@ const char *aws_s3_utils_urlencode(pool *p, const char *str) {
     } else if (ch == ' ') {
       encoded_str[j++] = '+';
 
+    } else if (ch == '.') {
+       encoded_str[j++] = '.';
+
     } else {
       encoded_str[j++] = '%';
       encoded_str[j++] = hex[ch >> 4];
