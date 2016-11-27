@@ -55,14 +55,12 @@ const char *aws_s3_utils_urlencode(pool *p, const char *str) {
     if (('a' <= ch && ch <= 'z') ||
         ('A' <= ch && ch <= 'Z') ||
         ('0' <= ch && ch <= '9') ||
-        (ch == '/')) {
+        (ch == '/') ||
+        (ch == '.')) {
       encoded_str[j++] = ch;
 
     } else if (ch == ' ') {
       encoded_str[j++] = '+';
-
-    } else if (ch == '.') {
-       encoded_str[j++] = '.';
 
     } else {
       encoded_str[j++] = '%';
