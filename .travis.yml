@@ -1,4 +1,3 @@
-env: TRAVIS_CI=true
 language: c
 
 compiler:
@@ -31,7 +30,7 @@ before_script:
 script:
   # - find . -type f -name "*.c" -print | grep -v t\/ | xargs cppcheck 2>&1
   # - find . -type f -name "*.c" -print | grep -v t\/ | xargs rats --language=c
-  - git clone https://github.com/proftpd/proftpd.git
+  - git clone --depth 10 https://github.com/proftpd/proftpd.git
   - mkdir -p proftpd/contrib/mod_aws/s3
   - cp *.[ch] proftpd/contrib/mod_aws/
   - cp -R s3/ proftpd/contrib/mod_aws/

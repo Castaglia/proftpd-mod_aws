@@ -1,5 +1,22 @@
 
+Build:
+  $ ./configure --enable-openssl --enable-tests --with-modules=mod_aws --with-includes=/Users/tj/local/curl-7.50.3/include:/Users/tj/local/openssl-1.0.2j/include:/usr/include/libxml2:/Users/tj/local/check-0.10.0/include --with-libraries=/Users/tj/local/curl-7.50.3/lib:/Users/tj/local/openssl-1.0.2j/lib:/Users/tj/local/check-0.10.0/lib
+
+Test:
+  Hardcoded to expect:
+    AWS credentials at /Users/tj/.aws/credentials
+    CA certs at /Users/tj/git/proftpd-mod_aws/aws-cacerts.pem
+    region = us-west-2
+    domain = amazonaws.com
+    AWS_SS
+
+  TEST_VERBOSE=1 AWS_TEST_SUITE=s3.fsio AWS_S3_BUCKET=castaglia AWS_S3_BUCKET_PREFIX=fsio/private
+
+  $ TEST_VERBOSE=1 AWS_TEST_SUITE=s3.fsio AWS_S3_BUCKET=castaglia AWS_S3_BUCKET_PREFIX=fsio make api-tests
+
 S3:
+
+* [eventual consistency](https://en.wikipedia.org/wiki/Eventual_consistency) can temporarily yield stale data([Amazon S3 Data Consistency Model](http://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#ConsistencyModel))
 
   minimum size threshold of file (on local disk) BEFORE uploading to S3;
   below this threshold, use single PUT to upload to S3.  Configurable?

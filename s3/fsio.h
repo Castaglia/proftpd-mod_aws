@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws S3 FSIO API
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,13 +31,6 @@
 pr_fs_t *aws_s3_fsio_get_fs(pool *p, const char *path, struct s3_conn *s3,
   const char *bucket_name, const char *object_prefix);
 
-/* Convert from a table of S3 object metadata to/from struct stat. */
-int aws_s3_fsio_stat2table(pool *p, struct stat *st,
-  pr_table_t *object_metadata);
-
-int aws_s3_fsio_table2stat(pool *p, pr_table_t *object_metadata,
-  struct stat *st);
-
 /* Below are the most common keys used for storing filesystem metadata about
  * a file, with that file's data in an S3 object.
  */
@@ -50,5 +43,22 @@ int aws_s3_fsio_table2stat(pool *p, pr_table_t *object_metadata,
 #define AWS_S3_FSIO_METADATA_KEY_OWNER		"x-amz-meta-owner"
 #define AWS_S3_FSIO_METADATA_KEY_PERMS		"x-amz-meta-permissions"
 #define AWS_S3_FSIO_METADATA_KEY_UID		"x-amz-meta-uid"
+
+/* Convert from a table of S3 object metadata to/from struct stat. */
+int aws_s3_fsio_stat2table(pool *p, struct stat *st,
+  pr_table_t *object_metadata);
+
+/* Convert the x-amz- headers into a struct stat structure.  Since the
+ * headers for a given struct stat member may not be present, the `st_bits`
+ * value will have bits set for the struct stat members which are present.
+ */
+int aws_s3_fsio_table2stat(pool *p, pr_table_t *object_metadata,
+  struct stat *st, unsigned int *st_bits);
+#define AWS_S3_FSIO_METADATA_HAVE_MODE		0x0001
+#define AWS_S3_FSIO_METADATA_HAVE_UID		0x0002
+#define AWS_S3_FSIO_METADATA_HAVE_GID		0x0004
+#define AWS_S3_FSIO_METADATA_HAVE_ATIME		0x0008
+#define AWS_S3_FSIO_METADATA_HAVE_MTIME		0x0010
+#define AWS_S3_FSIO_METADATA_HAVE_SIZE		0x0020
 
 #endif /* MOD_AWS_S3_FSIO_H */

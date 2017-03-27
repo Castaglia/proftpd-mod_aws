@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2016-2017 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -50,6 +50,7 @@ static void set_up(void) {
 
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("aws.s3.fsio", 1, 20);
+    pr_trace_set_levels("aws.s3.object", 1, 20);
     pr_trace_set_levels("fsio", 1, 20);
   }
 }
@@ -57,6 +58,7 @@ static void set_up(void) {
 static void tear_down(void) {
   if (getenv("TEST_VERBOSE") != NULL) {
     pr_trace_set_levels("aws.s3.fsio", 0, 0);
+    pr_trace_set_levels("aws.s3.object", 0, 0);
     pr_trace_set_levels("fsio", 0, 0);
   }
 
@@ -285,15 +287,16 @@ START_TEST (s3_fsio_table2stat_test) {
   int res;
   pr_table_t *object_metadata;
   struct stat st;
+  unsigned int st_bits;
 
   mark_point();
-  res = aws_s3_fsio_table2stat(NULL, NULL, NULL);
+  res = aws_s3_fsio_table2stat(NULL, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
-  res = aws_s3_fsio_table2stat(p, NULL, NULL);
+  res = aws_s3_fsio_table2stat(p, NULL, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null table");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -301,7 +304,7 @@ START_TEST (s3_fsio_table2stat_test) {
   object_metadata = pr_table_alloc(p, 0);
 
   mark_point();
-  res = aws_s3_fsio_table2stat(p, object_metadata, NULL);
+  res = aws_s3_fsio_table2stat(p, object_metadata, NULL, NULL);
   fail_unless(res < 0, "Failed to handle null stat");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
@@ -309,9 +312,16 @@ START_TEST (s3_fsio_table2stat_test) {
   memset(&st, 0, sizeof(st));
 
   mark_point();
-  res = aws_s3_fsio_table2stat(p, object_metadata, &st);
-  fail_unless(res == 0, "Failed to convert table to stat: %s", strerror(errno));
-  check_table2stat(&st, 0, 0, 0, 0, 0, (mode_t) 0);
+  res = aws_s3_fsio_table2stat(p, object_metadata, &st, NULL);
+  fail_unless(res < 0, "Failed to handle null st_bits");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  res = aws_s3_fsio_table2stat(p, object_metadata, &st, &st_bits);
+  fail_unless(res < 0, "Failed to handle empty table");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
 
   pr_table_empty(object_metadata);
   memset(&st, 0, sizeof(st));
@@ -329,7 +339,7 @@ START_TEST (s3_fsio_table2stat_test) {
 
   memset(&st, 0, sizeof(st));
   mark_point();
-  res = aws_s3_fsio_table2stat(p, object_metadata, &st);
+  res = aws_s3_fsio_table2stat(p, object_metadata, &st, &st_bits);
   fail_unless(res == 0, "Failed to convert table to stat: %s", strerror(errno));
   check_table2stat(&st, 12345, 1479666690, 1479666691, 500, 500,
     S_IFMT|S_IFREG|0644);
@@ -392,20 +402,53 @@ static void unregister_s3fs(pool *p, struct s3_conn *s3) {
   fsio_mount_point = NULL;
 }
 
-/* NOTE: We need to test open/close first, so that we know we can use these
- * functions to create the temporary files/objects needed for later tests.
- */
-START_TEST (s3_fsio_close_test) {
-}
-END_TEST
+static int create_local_file(pool *p, const char *path) {
+  int fd;
 
-START_TEST (s3_fsio_open_test) {
+  (void) unlink(path);
+  fd = open(path, O_WRONLY|O_CREAT);
+  if (fd < 0) {
+    return -1;
+  }
+
+  return close(fd);
 }
-END_TEST
+
+static const char *get_s3_object_key(pool *p, const char *path) {
+  const char *prefix;
+
+  prefix = getenv("AWS_S3_BUCKET_PREFIX");
+
+  return pdircat(p, prefix, path, NULL);
+}
+
+static int create_s3_object(pool *p, struct s3_conn *s3, const char *path,
+    char *data, off_t datasz) {
+  const char *bucket, *object_key;
+  pr_table_t *object_metadata;
+
+  bucket = getenv("AWS_S3_BUCKET");
+  object_key = get_s3_object_key(p, path);
+  object_metadata = pr_table_alloc(p, 0);
+
+  return aws_s3_object_put(p, s3, bucket, object_key, object_metadata,
+    data, datasz);
+}
+
+static int delete_s3_object(pool *p, struct s3_conn *s3, const char *path) {
+  const char *bucket, *object_key;
+
+  bucket = getenv("AWS_S3_BUCKET");
+  object_key = get_s3_object_key(p, path);
+
+  return aws_s3_object_delete(p, s3, bucket, object_key);
+}
 
 START_TEST (s3_fsio_unlink_test) {
   int res;
   const char *path;
+  char *text;
+  size_t text_len;
   struct s3_conn *s3;
 
   s3 = get_s3(p);
@@ -415,17 +458,263 @@ START_TEST (s3_fsio_unlink_test) {
 
   path = pdircat(p, fsio_mount_point, "test.dat", NULL);
 
+  /* No local file, no S3 object. */
   mark_point();
   res = pr_fsio_unlink(path);
   fail_unless(res < 0, "Deleted '%s' unexpectedly", path);
   fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
     strerror(errno), errno);
 
-/* XXX Local file, but no S3 object */
-/* XXX No local file, but S3 object */
-/* XXX Local file AND S3 object */
+  text = "Hello, World!\n";
+  text_len = strlen(text);
+
+  /* No local file, but have an S3 object. */
+  mark_point();
+  res = create_s3_object(p, s3, path, text, text_len);
+  fail_unless(res == 0, "Failed to create S3 object for path '%s': %s", path,
+    strerror(errno));
+
+  res = pr_fsio_unlink(path);
+  fail_unless(res < 0, "Deleted '%s' unexpectedly", path);
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  (void) delete_s3_object(p, s3, path);
+
+  /* Local file, but no S3 object. */
+  mark_point();
+  res = create_local_file(p, path);
+  fail_unless(res == 0, "Failed to create local path '%s': %s", path,
+    strerror(errno));
+
+  res = pr_fsio_unlink(path);
+  fail_unless(res == 0, "Failed to delete path '%s': %s", path,
+    strerror(errno));
+
+  /* Local file AND S3 object. */
+  mark_point();
+  res = create_s3_object(p, s3, path, text, text_len);
+  fail_unless(res == 0, "Failed to create S3 object for path '%s': %s", path,
+    strerror(errno));
+
+  res = create_local_file(p, path);
+  fail_unless(res == 0, "Failed to create local path '%s': %s", path,
+    strerror(errno));
+
+  res = pr_fsio_unlink(path);
+  fail_unless(res == 0, "Failed to delete path '%s': %s", path,
+    strerror(errno));
+
+  (void) unlink(path);
+  (void) delete_s3_object(p, s3, path);
 
   unregister_s3fs(p, s3);
+}
+END_TEST
+
+START_TEST (s3_fsio_open_rdonly_test) {
+  int res;
+  pr_fh_t *fh;
+  const char *path;
+  char *text;
+  size_t text_len;
+  struct s3_conn *s3;
+  struct stat st;
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
+
+  register_s3fs(p, s3);
+
+  path = pdircat(p, fsio_mount_point, "test.dat", NULL);
+  (void) unlink(path);
+  (void) delete_s3_object(p, s3, path);
+
+  /* Open a file for reading, close it, delete it. */
+
+  mark_point();
+  fh = pr_fsio_open(path, O_CREAT|O_EXCL);
+  fail_unless(fh == NULL, "Failed to handle invalid flags");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  mark_point();
+  fh = pr_fsio_open(path, O_RDONLY);
+  fail_unless(fh == NULL, "Failed to handle nonexistent path '%s'", path);
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  mark_point();
+  res = create_local_file(p, path);
+  fail_unless(res == 0, "Failed to create local path '%s': %s", path,
+    strerror(errno));
+
+  mark_point();
+  fh = pr_fsio_open(path, O_RDONLY);
+  fail_unless(fh == NULL,
+    "Failed to handle nonexistent S3 object for path '%s': %s", path,
+    strerror(errno));
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  text = "Hello, World!\n";
+  text_len = strlen(text);
+
+  res = create_s3_object(p, s3, path, text, text_len);
+  fail_unless(res == 0, "Failed to create S3 object for path '%s': %s", path,
+    strerror(errno));
+
+  res = create_local_file(p, path);
+  fail_unless(res == 0, "Failed to create local path '%s': %s", path,
+    strerror(errno));
+
+  mark_point();
+  fh = pr_fsio_open(path, O_RDONLY);
+  fail_unless(fh != NULL, "Failed to open path '%s' for reading: %s", path,
+    strerror(errno));
+
+  res = pr_fsio_close(fh);
+  fail_unless(res == 0, "Failed to close path '%s': %s", path, strerror(errno));
+
+  /* Now open the file again, with the S3 object there but no local shadow. */
+  (void) unlink(path);
+
+  mark_point();
+  fh = pr_fsio_open(path, O_RDONLY);
+  fail_unless(fh != NULL, "Failed to open path '%s' for reading: %s", path,
+    strerror(errno));
+
+  res = stat(path, &st);
+  fail_unless(res == 0, "Failed to stat '%s': %s", path, strerror(errno));
+
+  res = pr_fsio_close(fh);
+  fail_unless(res == 0, "Failed to close path '%s': %s", path, strerror(errno));
+
+  (void) delete_s3_object(p, s3, path);
+  (void) unlink(path);
+
+  unregister_s3fs(p, s3);
+}
+END_TEST
+
+START_TEST (s3_fsio_open_wronly_creat_excl_test) {
+  int res;
+  pr_fh_t *fh;
+  const char *path;
+  char *text;
+  size_t text_len;
+  struct s3_conn *s3;
+  struct stat st;
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
+
+  register_s3fs(p, s3);
+
+  path = pdircat(p, fsio_mount_point, "test.dat", NULL);
+  (void) unlink(path);
+  (void) delete_s3_object(p, s3, path);
+
+  /* Create an exclusive file for writing, close it, delete it. */
+
+/* XXX no local shadow or S3 object */
+
+  mark_point();
+  fh = pr_fsio_open(path, O_WRONLY|O_CREAT|O_EXCL);
+  fail_unless(fh == NULL, "Failed to handle nonexistent S3 object");
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+/* XXX local shadow, no S3 object */
+
+/* XXX S3 object, no local shadow */
+
+/* XXX S3 object AND local shadow */
+
+  (void) delete_s3_object(p, s3, path);
+  (void) unlink(path);
+
+  unregister_s3fs(p, s3);
+}
+END_TEST
+
+START_TEST (s3_fsio_open_wronly_creat_test) {
+}
+END_TEST
+
+START_TEST (s3_fsio_open_wronly_test) {
+  int res;
+  pr_fh_t *fh;
+  const char *path = NULL;
+  char *text;
+  size_t text_len;
+  struct s3_conn *s3;
+  struct stat st;
+
+  s3 = get_s3(p);
+  fail_unless(s3 != NULL, "Failed to get S3 connection: %s", strerror(errno));
+
+  register_s3fs(p, s3);
+
+  path = pdircat(p, fsio_mount_point, "test.dat", NULL);
+  (void) delete_s3_object(p, s3, path);
+
+  /* Open a file for writing, close it, delete it. */
+  mark_point();
+  fh = pr_fsio_open(path, O_WRONLY);
+  fail_unless(fh == NULL, "Failed to handle nonexistent path '%s'", path);
+  fail_unless(errno == ENOENT, "Expected ENOENT (%d), got %s (%d)", ENOENT,
+    strerror(errno), errno);
+
+  mark_point();
+  res = create_local_file(p, path);
+  fail_unless(res == 0, "Failed to create local path '%s': %s", path,
+    strerror(errno));
+
+  mark_point();
+  fh = pr_fsio_open(path, O_WRONLY);
+  fail_unless(fh == NULL,
+    "Failed to handle nonexistent S3 object for path '%s': %s", path,
+    strerror(errno));
+
+  text = "Hello, World!\n";
+  text_len = strlen(text);
+
+  res = create_s3_object(p, s3, path, text, text_len);
+  fail_unless(res == 0, "Failed to create S3 object for path '%s': %s", path,
+    strerror(errno));
+
+  mark_point();
+  fh = pr_fsio_open(path, O_WRONLY);
+  fail_unless(fh != NULL, "Failed to open path '%s' for writing: %s", path,
+    strerror(errno));
+
+  res = pr_fsio_close(fh);
+  fail_unless(res == 0, "Failed to close path '%s': %s", path, strerror(errno));
+
+  (void) unlink(path);
+  mark_point();
+
+  /* Now open the file again, make sure the local shadow is created. */
+
+  fh = pr_fsio_open(path, O_WRONLY);
+  fail_unless(fh != NULL, "Failed to open path '%s' for writing: %s", path,
+    strerror(errno));
+
+  res = stat(path, &st);
+  fail_unless(res == 0, "Failed to stat '%s': %s", path, strerror(errno));
+
+  res = pr_fsio_close(fh);
+  fail_unless(res == 0, "Failed to close path '%s': %s", path, strerror(errno));
+
+  (void) delete_s3_object(p, s3, path);
+  (void) unlink(path);
+
+  unregister_s3fs(p, s3);
+}
+END_TEST
+
+START_TEST (s3_fsio_open_rdwr_test) {
 }
 END_TEST
 
@@ -486,18 +775,23 @@ Suite *tests_get_s3_fsio_suite(void) {
   tcase_add_test(testcase, s3_fsio_table2stat_test);
   tcase_add_test(testcase, s3_fsio_get_fs_test);
 
-  if (getenv("TRAVIS_CI") != NULL) {
+  if (getenv("TRAVIS") != NULL) {
     suite_add_tcase(suite, testcase);
     return suite;
   }
 
-  tcase_add_test(testcase, s3_fsio_open_test);
-  tcase_add_test(testcase, s3_fsio_close_test);
+#if 0
   tcase_add_test(testcase, s3_fsio_unlink_test);
+  tcase_add_test(testcase, s3_fsio_open_rdonly_test);
+#endif
+  tcase_add_test(testcase, s3_fsio_open_wronly_creat_excl_test);
+#if 0
+  tcase_add_test(testcase, s3_fsio_open_wronly_creat_test);
+  tcase_add_test(testcase, s3_fsio_open_wronly_test);
+  tcase_add_test(testcase, s3_fsio_open_rdwr_test);
   tcase_add_test(testcase, s3_fsio_stat_test);
   tcase_add_test(testcase, s3_fsio_fstat_test);
   tcase_add_test(testcase, s3_fsio_lstat_test);
-#if 0
   tcase_add_test(testcase, s3_fsio_rename_test);
   tcase_add_test(testcase, s3_fsio_read_test);
   tcase_add_test(testcase, s3_fsio_write_test);
