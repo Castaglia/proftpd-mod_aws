@@ -147,8 +147,9 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
 
   res = aws_sign_v4_generate(p,
     ec2->credentials->access_key_id, ec2->credentials->secret_access_key,
-    ec2->credentials->session_token, ec2->region, aws_service, http, method_name, path,
-    query_params, http_headers, request_body, request_time);
+    ec2->credentials->session_token, ec2->region, aws_service, http,
+    method_name, path, query_params, http_headers, request_body, 0,
+    request_time);
   if (res < 0) {
     int xerrno = errno;
 
@@ -189,7 +190,8 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
        * the response is XML.  (Thanks, AWS.)
        */
       if (content_type == NULL ||
-          strstr(content_type, AWS_HTTP_CONTENT_TYPE_XML) != NULL) {
+          (strstr(content_type, AWS_HTTP_CONTENT_TYPE_TEXT_XML) != NULL ||
+           strstr(content_type, AWS_HTTP_CONTENT_TYPE_APPLICATION_XML) != NULL)) {
         struct aws_error *err;
 
         err = aws_error_parse_xml(p, ec2->resp, ec2->respsz);
@@ -216,7 +218,7 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
      * an unexpected error.
      */
     if (content_type != NULL &&
-        strstr(content_type, AWS_HTTP_CONTENT_TYPE_HTML) != NULL) {
+        strstr(content_type, AWS_HTTP_CONTENT_TYPE_TEXT_HTML) != NULL) {
       (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
         "received unexpected HTML response for '%s'", url);
       errno = EINVAL;

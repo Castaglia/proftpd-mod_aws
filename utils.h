@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws utilities
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,9 @@
 array_header *aws_utils_table2array(pool *p, pr_table_t *tab);
 
 /* Converts the given numbers to strings, allocated out of the given pool. */
+char *aws_utils_str_d2s(pool *p, double n);
 char *aws_utils_str_n2s(pool *p, int n);
+char *aws_utils_str_off2s(pool *p, off_t n);
 char *aws_utils_str_ul2s(pool *p, unsigned long n);
 
 /* Trim any leading/trailing whitespace from the given string.

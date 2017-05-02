@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws AWS Errors
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -102,6 +102,12 @@ struct aws_error {
 
   unsigned int err_code;
   const char *err_msg;
+
+  /* Some errors (e.g. S3) might have extra elements in their errors
+   * (e.g. <Resource>); this is the space for that data.
+   */
+  const char *err_extra;
+
   const char *req_id;
 };
 

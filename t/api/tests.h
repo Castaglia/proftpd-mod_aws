@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws API testsuite
- * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2016-2017 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,6 +37,12 @@
 #include "sign.h"
 #include "utils.h"
 
+/* CloudWatch API tests */
+#include "cloudwatch/conn.h"
+#include "cloudwatch/error.h"
+#include "cloudwatch/dimension.h"
+#include "cloudwatch/metric.h"
+
 #ifdef HAVE_CHECK_H
 # include <check.h>
 #else
@@ -50,6 +56,12 @@ Suite *tests_get_instance_suite(void);
 Suite *tests_get_creds_suite(void);
 Suite *tests_get_sign_suite(void);
 Suite *tests_get_utils_suite(void);
+
+/* CloudWatch API tests */
+Suite *tests_get_cloudwatch_conn_suite(void);
+Suite *tests_get_cloudwatch_error_suite(void);
+Suite *tests_get_cloudwatch_dimension_suite(void);
+Suite *tests_get_cloudwatch_metric_suite(void);
 
 unsigned int recvd_signal_flags;
 extern pid_t mpid;

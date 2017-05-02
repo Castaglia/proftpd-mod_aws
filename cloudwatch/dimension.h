@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_aws AWS signatures
- * Copyright (c) 2016-2017 TJ Saunders
+ * ProFTPD - mod_aws CloudWatch Dimension API
+ * Copyright (c) 2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,15 +22,19 @@
  * source distribution.
  */
 
+#ifndef MOD_AWS_CLOUDWATCH_DIMENSION_H
+#define MOD_AWS_CLOUDWATCH_DIMENSION_H
+
 #include "mod_aws.h"
+#include "instance.h"
 
-#ifndef MOD_AWS_SIGN_H
-#define MOD_AWS_SIGN_H
+#define AWS_CLOUDWATCH_MAX_DIMENSIONS		10
 
-int aws_sign_v4_generate(pool *p, const char *access_key_id,
-  const char *secret_access_key, const char *token, const char *region,
-  const char *service, void *http, const char *http_method,
-  const char *http_path, array_header *query_params, pr_table_t *http_headers,
-  const char *http_body, off_t http_bodysz, time_t request_time);
+#define AWS_CLOUDWATCH_DIMENSION_PROTOCOL	0x0001
+#define AWS_CLOUDWATCH_DIMENSION_INSTANCE_ID	0x0002
+#define AWS_CLOUDWATCH_DIMENSION_AVAIL_ZONE	0x0004
 
-#endif /* MOD_AWS_SIGN_H */
+array_header *aws_cloudwatch_dimension_get(pool *p, unsigned long dimensions,
+  const struct aws_info *info);
+
+#endif /* MOD_AWS_CLOUDWATCH_DIMENSION_H */

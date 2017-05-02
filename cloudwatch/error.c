@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_aws AWS Errors
- * Copyright (c) 2016 TJ Saunders
+ * ProFTPD - mod_aws CloudWatch Error API
+ * Copyright (c) 2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,8 +25,9 @@
 #include "mod_aws.h"
 #include "error.h"
 #include "xml.h"
+#include "cloudwatch/error.h"
 
-static const char *trace_channel = "aws.error";
+static const char *trace_channel = "aws.cloudwatch.error";
 
 struct err_info {
   const char *err_name;
@@ -38,74 +39,72 @@ struct err_info {
    */
 };
 
-/* XXX How can/should we keep the error strings for the different AWS services
- * separate?  For example, both EC2 and something else might use
- * "InvalidGroup.NotFound".  The _caller_ knows which service they contacted
- * to receive the error, but that information is not currently provided to
- * this Error API for looking up the corresponding code.
+/* The errors below are for CloudWatch:
  *
- * Could do this by having service-specific error get_code/get_name
- * functions, such as "aws_ec2_error_get_code".  That function would first
- * do the lookup of EC2-specific error strings, and only then fallback to
- * this general Error API.
- *
- * The errors below are, for example, EC2-specific:
- *
- *  http://docs.aws.amazon.com/AWSEC2/latest/APIReference/errors-overview.html
- *
- * SQS provides errrors with code, message, detail, and type:
- *
- *  http://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/UnderstandingResponses.html#UnderstandingResponses-structure-of-an-error-response
- *
- * And Route53's error might look different, too.
+ *  http://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/CommonErrors.html
  */
 
 static struct err_info errs[] = {
+  { "IncompleteSignature", 19,
+    AWS_CLOUDWATCH_ERROR_CODE_INCOMPLETE_SIGNATURE },
 
-  /* General client errors */
+  { "InternalFailure", 15,
+    AWS_CLOUDWATCH_ERROR_CODE_INTERNAL_FAILURE },
 
-  { "AuthFailure", 12,
-    AWS_ERROR_CODE_AUTH_FAILURE },
+  { "InvalidAction", 13,
+    AWS_CLOUDWATCH_ERROR_CODE_BAD_ACTION },
 
-  { "IncompleteSignature", 20,
-    AWS_ERROR_CODE_INCOMPLETE_SIGNATURE },
+  { "InvalidClientTokenId", 20,
+    AWS_CLOUDWATCH_ERROR_CODE_BAD_CLIENT_TOKEN_ID },
 
-  { "InvalidParameterValue", 22,
-    AWS_ERROR_CODE_INVALID_PARAMETER_VALUE },
+  { "InvalidParameterCombination", 27,
+    AWS_CLOUDWATCH_ERROR_CODE_BAD_PARAM_COMBINATION },
 
-  { "MissingAction", 14,
-    AWS_ERROR_CODE_MISSING_ACTION },
+  { "InvalidParameterValue", 21,
+    AWS_CLOUDWATCH_ERROR_CODE_BAD_PARAM_VALUE },
 
-  { "MissingAuthenticationToken", 27,
-    AWS_ERROR_CODE_MISSING_AUTH_TOKEN },
+  { "InvalidQueryParameter", 21,
+    AWS_CLOUDWATCH_ERROR_CODE_BAD_QUERY_PARAM },
 
-  { "MissingParameter", 17,
-    AWS_ERROR_CODE_MISSING_PARAMETER },
+  { "MalformedQueryString", 20,
+    AWS_CLOUDWATCH_ERROR_CODE_BAD_QUERY_STRING },
 
-  { "UnknownParameter", 17,
-    AWS_ERROR_CODE_UNKNOWN_PARAMETER },
+  { "MissingAction", 13,
+    AWS_CLOUDWATCH_ERROR_CODE_MISSING_ACTION },
 
-  /* General server errors */
+  { "MissingAuthenticationToken", 26,
+    AWS_CLOUDWATCH_ERROR_CODE_MISSING_AUTH_TOKEN },
 
-  /* EC2 error codes */
+  { "MissingParameter", 16,
+    AWS_CLOUDWATCH_ERROR_CODE_MISSING_PARAM },
 
-  { "DryRunOperation", 15,
-    AWS_ERROR_CODE_DRY_RUN_OPERATION },
+  { "OptInRequired", 13,
+    AWS_CLOUDWATCH_ERROR_CODE_OPT_IN_REQUIRED },
 
-  { "InvalidGroup.NotFound", 22,
-    AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND },
+  { "RequestExpired", 14,
+    AWS_CLOUDWATCH_ERROR_CODE_REQUEST_EXPIRED },
+
+  { "ServiceUnavailable", 18,
+    AWS_CLOUDWATCH_ERROR_CODE_SERVICE_UNAVAIL },
+
+  { "Throttling", 10,
+    AWS_CLOUDWATCH_ERROR_CODE_THROTTLING },
+
+  { "ValidationError", 15,
+    AWS_CLOUDWATCH_ERROR_CODE_VALIDATION_ERROR },
 
   /* Sentinel */
   { NULL, 0, 0 }
 };
 
-unsigned int aws_error_get_code(pool *p, const char *err_name) {
+unsigned int aws_cloudwatch_error_get_code(pool *p, const char *err_name) {
   register unsigned int i;
   unsigned int err_code;
 
   err_code = AWS_ERROR_CODE_UNKNOWN;
 
-  if (err_name == NULL) {
+  if (p == NULL ||
+      err_name == NULL) {
     return err_code;
   }
 
@@ -122,14 +121,17 @@ unsigned int aws_error_get_code(pool *p, const char *err_name) {
     }
   }
 
+  /* If not found, try one of the general error codes. */
+  if (err_code == AWS_ERROR_CODE_UNKNOWN) {
+    err_code = aws_error_get_code(p, err_name);
+  }
+
   return err_code;
 }
 
-const char *aws_error_get_name(unsigned int err_code) {
+const char *aws_cloudwatch_error_get_name(unsigned int err_code) {
   register unsigned int i;
-  const char *err_name;
-
-  err_name = "<unknown>";
+  const char *err_name = NULL;
 
   for (i = 0; errs[i].err_name != NULL; i++) {
     if (errs[i].err_code == err_code) {
@@ -138,15 +140,19 @@ const char *aws_error_get_name(unsigned int err_code) {
     }
   }
 
+  /* If not found, try one of the general error names. */
+  if (err_name == NULL) {
+    err_name = aws_error_get_name(err_code);
+  }
+
   return err_name;
 }
 
-struct aws_error *aws_error_parse_xml(pool *p, const char *data,
+struct aws_error *aws_cloudwatch_error_parse_xml(pool *p, const char *data,
     size_t datasz) {
-  void *doc, *root, *errors, *error, *elt, *req_id;
+  void *doc, *root, *error, *elt, *req_id;
   pool *err_pool;
   struct aws_error *err;
-  unsigned long count;
   const char *elt_name;
   size_t elt_namelen;
 
@@ -175,54 +181,28 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
   }
 
   elt_name = aws_xml_elt_get_name(p, root, &elt_namelen);
-  if (elt_namelen != 8 ||
-      strncmp(elt_name, "Response", elt_namelen + 1) != 0) {
+  if (elt_namelen != 13 ||
+      strncmp(elt_name, "ErrorResponse", elt_namelen + 1) != 0) {
     aws_xml_doc_free(p, doc);
 
     pr_trace_msg(trace_channel, 9,
-      "malformed XML: root element lacks <Response> element (found <%.*s>)",
-      (int) elt_namelen, elt_name);
+      "malformed XML: root element lacks <ErrorResponse> "
+      "element (found <%.*s>)", (int) elt_namelen, elt_name);
     errno = EINVAL;
     return NULL;
   }
 
-  /* We expect only 2 child elements: <Errors> and <RequestID> */
-  (void) aws_xml_elt_get_child_count(p, root, &count);
-  if (count != 2) {
-    pr_trace_msg(trace_channel, 2,
-      "unexpected count of <Response> child elements (%lu != 2)", count);
-
-    aws_xml_doc_free(p, doc);
-
-    errno = EINVAL;
-    return NULL;
-  }
-
-  errors = aws_xml_elt_get_child(p, root, "Errors", 6);
-  if (errors == NULL) {
+  elt = aws_xml_elt_get_child(p, root, "Error", 5);
+  if (elt == NULL) {
     aws_xml_doc_free(p, doc);
 
     pr_trace_msg(trace_channel, 9,
-      "malformed XML: <Response> element lacks <Errors> element");
+      "malformed XML: <ErrorResponse> element lacks <Error> element");
     errno = EINVAL;
     return NULL;
   }
 
-  (void) aws_xml_elt_get_child_count(p, errors, &count);
-  if (count != 1) {
-    pr_trace_msg(trace_channel, 5,
-      "expected 1 error element, found %lu", count);
-  }
-
-  error = aws_xml_elt_get_child(p, errors, "Error", 5);
-  if (error == NULL) {
-    aws_xml_doc_free(p, doc);
-
-    pr_trace_msg(trace_channel, 9,
-      "malformed XML: <Errors> element lacks <Error> element");
-    errno = EINVAL;
-    return NULL;
-  }
+  error = elt;
 
   elt = aws_xml_elt_get_child(p, error, "Code", 4);
   if (elt == NULL) {
@@ -235,11 +215,11 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
   }
 
   err_pool = make_sub_pool(p);
-  pr_pool_tag(err_pool, "AWS Error Pool");
+  pr_pool_tag(err_pool, "AWS CloudWatch Error Pool");
   err = pcalloc(err_pool, sizeof(struct aws_error));
   err->pool = err_pool;
 
-  err->err_code = aws_error_get_code(err->pool,
+  err->err_code = aws_cloudwatch_error_get_code(err->pool,
     aws_xml_elt_get_text(err->pool, elt));
 
   elt = aws_xml_elt_get_child(p, error, "Message", 7);
@@ -255,13 +235,18 @@ struct aws_error *aws_error_parse_xml(pool *p, const char *data,
 
   err->err_msg = aws_xml_elt_get_text(err->pool, elt);
 
-  req_id = aws_xml_elt_get_child(p, root, "RequestID", 9);
+  elt = aws_xml_elt_get_child(p, error, "Resource", 8);
+  if (elt != NULL) {
+    err->err_extra = aws_xml_elt_get_text(err->pool, elt);
+  }
+
+  req_id = aws_xml_elt_get_child(p, root, "RequestId", 9);
   if (req_id == NULL) {
     destroy_pool(err->pool);
     aws_xml_doc_free(p, doc);
 
     pr_trace_msg(trace_channel, 9,
-      "malformed XML: <Response> element lacks <RequestID> element");
+      "malformed XML: <ErrorResponse> element lacks <RequestId> element");
     errno = EINVAL;
     return NULL;
   }

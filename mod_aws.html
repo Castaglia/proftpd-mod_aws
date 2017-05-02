@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
 <head>
 <title>ProFTPD module mod_aws</title>
@@ -50,6 +51,8 @@ questions, concerns, or suggestions regarding this module.
 <ul>
   <li><a href="#AWSAdjustments">AWSAdjustments</a>
   <li><a href="#AWSCACertificateFile">AWSCACertificateFile</a>
+  <li><a href="#AWSCloudWatchDimensions">AWSCloudWatchDimensions</a>
+  <li><a href="#AWSCloudWatchNamespace">AWSCloudWatchNamespace</a>
   <li><a href="#AWSCredentials">AWSCredentials</a>
   <li><a href="#AWSEngine">AWSEngine</a>
   <li><a href="#AWSHealthCheck">AWSHealthCheck</a>
@@ -57,6 +60,7 @@ questions, concerns, or suggestions regarding this module.
   <li><a href="#AWSOptions">AWSOptions</a>
   <li><a href="#AWSProfile">AWSProfile</a>
   <li><a href="#AWSSecurityGroup">AWSSecurityGroup</a>
+  <li><a href="#AWSServices">AWSServices</a>
   <li><a href="#AWSTimeoutConnect">AWSTimeoutConnect</a>
   <li><a href="#AWSTimeoutRequest">AWSTimeoutRequest</a>
 </ul>
@@ -133,6 +137,56 @@ The <code>mod_aws</code> source code comes with a prepared
 <code>aws-cacerts.pem</code> file which should be sufficient.  Use you
 find you need to update those certificates, use this directive to
 configure the path to the file containing the new certificates.
+
+<p>
+<hr>
+<h3><a name="AWSCloudWatchDimensions">AWSCloudWatchDimensions</a></h3>
+<strong>Syntax:</strong> AWSCloudWatchDimensions <em>dimension ...</em><br>
+<strong>Default:</strong> None<br>
+<strong>Context:</strong> server config, <code>&lt;VirtualHost&gt;</code>, <code>&lt;Global&gt;</code><br>
+<strong>Module:</strong> mod_aws<br>
+<strong>Compatibility:</strong> 1.3.6rc2 and later
+
+<p>
+The <code>AWSCloudWatchDimensions</code> directive configures a list of
+<em>dimensions</i>, up to a maximum of 10.  The AWS CloudWatch API imposes
+this limit on the number of dimensions recorded per metric.  See the
+AWS CloudWatch documentation for more information.
+
+<p>
+The currently supported dimensions are:
+<pre>
+  <li>AvailabilityZone
+  <li>InstanceId
+  <li>Protocol
+</pre>
+
+<p>
+Example:
+<pre>
+  AWSCloudWatchDimensions Protocol InstanceId AvailabilityZone
+</pre>
+
+<p>
+<hr>
+<h3><a name="AWSCloudWatchNamespace">AWSCloudWatchNamespace</a></h3>
+<strong>Syntax:</strong> AWSCloudWatchNamespace <em>namespace</em><br>
+<strong>Default:</strong> AWSCloudWatchNamespace proftpd<br>
+<strong>Context:</strong> server config, <code>&lt;VirtualHost&gt;</code>, <code>&lt;Global&gt;</code><br>
+<strong>Module:</strong> mod_aws<br>
+<strong>Compatibility:</strong> 1.3.6rc2 and later
+
+<p>
+The <code>AWSCloudWatchNamespace</code> directive configures a
+<em>namespace</em> to use for grouping all metrics together.  Aggregation
+<i>across</i> CloudWatch namespaces is <b>not</b> possible.  See the
+AWS CloudWatch documentation for more details.
+
+<p>
+Example:
+<pre>
+  AWSCloudWatchNamespace proftpd/production
+</pre>
 
 <p>
 <hr>
@@ -264,6 +318,23 @@ See also: <a href="#AWSAdjustments"><code>AWSAdjustments</code></a>
 
 <p>
 <hr>
+<h3><a name="AWSServices">AWSServices</a></h3>
+<strong>Syntax:</strong> AWSServices <em>service ...</em><br>
+<strong>Default:</strong> None<br>
+<strong>Context:</strong> server config<br>
+<strong>Module:</strong> mod_aws<br>
+<strong>Compatibility:</strong> 1.3.6rc2 and later
+
+<p>
+The <code>AWSServices</code> directive enables selective use of the myriad
+AWS services by the <code>mod_aws</code> module.  The following services
+are currently supported:
+<ul>
+  <li>CloudWatch
+</ul>
+
+<p>
+<hr>
 <h3><a name="AWSTimeoutConnect">AWSTimeoutConnect</a></h3>
 <strong>Syntax:</strong> AWSTimeoutConnect <em>timeout</em><br>
 <strong>Default:</strong> 3sec<br>
@@ -339,6 +410,10 @@ For debugging purposes, the module also uses
 via the module-specific channels:
 <ul>
   <li>aws
+  <li>aws.cloudwatch.conn
+  <li>aws.cloudwatch.dimension
+  <li>aws.cloudwatch.error
+  <li>aws.cloudwatch.metric
   <li>aws.ec2
   <li>aws.error
   <li>aws.http
@@ -353,6 +428,23 @@ your <code>proftpd.conf</code>:
 </pre>
 This trace logging can generate large files; it is intended for debugging
 use only, and should be removed from any production configuration.
+
+<p><a name="CloudWatch"></a>
+<b>CloudWatch</b><br>
+
+<p>
+Example configuration:
+<pre>
+  &lt;IfModule mod_aws.c&gt;
+    AWSEngine on
+    AWSLog /var/log/ftpd/aws.log
+
+    # Enable use of CloudWatch for metrics
+    AWSServices CloudWatch
+    AWSCloudWatchDimensions Protocol InstanceId AvailabilityZone
+    AWSCloudWatchNamespace proftpd/production
+  &lt;/IfModule&gt;
+</pre>
 
 <p><a name="FAQ">
 <b>Frequently Asked Questions</b><br>
@@ -394,7 +486,7 @@ development libraries/headers <b>must</b> be installed for building
 <hr>
 
 <font size=2><b><i>
-&copy; Copyright 2016 TJ Saunders<br>
+&copy; Copyright 2016-2017 TJ Saunders<br>
  All Rights Reserved<br>
 </i></b></font>
 
