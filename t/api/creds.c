@@ -508,7 +508,8 @@ START_TEST (creds_from_iam_test) {
   mark_point();
   res = aws_creds_from_iam(p, iam_role, &creds);
   fail_unless(res < 0, "Failed to handle non-AWS environment");
-  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+  fail_unless(errno == EPERM || errno == ENOENT,
+    "Expected EPERM (%d) or ENOENT (%d), got %s (%d)", EPERM, ENOENT,
     strerror(errno), errno);
 }
 END_TEST
