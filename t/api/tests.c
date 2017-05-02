@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws API testsuite
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,6 +37,12 @@ static struct testsuite_info suites[] = {
   { "creds",		tests_get_creds_suite },
   { "sign",		tests_get_sign_suite },
   { "utils",		tests_get_utils_suite },
+
+  /* CloudWatch */
+  { "cloudwatch.conn",		tests_get_cloudwatch_conn_suite },
+  { "cloudwatch.error",		tests_get_cloudwatch_error_suite },
+  { "cloudwatch.dimension",	tests_get_cloudwatch_dimension_suite },
+  { "cloudwatch.metric",	tests_get_cloudwatch_metric_suite },
 
   { NULL, NULL }
 };

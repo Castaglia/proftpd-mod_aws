@@ -16,6 +16,11 @@ LDFLAGS=-L$(top_srcdir)/lib @LIBDIRS@
 
 EXEEXT=@EXEEXT@
 
+TEST_CLOUDWATCH_DEPS=$(module_srcdir)/cloudwatch/conn.o \
+  $(module_srcdir)/cloudwatch/error.o \
+  $(module_srcdir)/cloudwatch/dimension.o \
+  $(module_srcdir)/cloudwatch/metric.o
+
 TEST_API_DEPS=\
   $(top_srcdir)/src/pool.o \
   $(top_srcdir)/src/privs.o \
@@ -46,9 +51,15 @@ TEST_API_DEPS=\
   $(module_srcdir)/instance.o \
   $(module_srcdir)/creds.o \
   $(module_srcdir)/sign.o \
-  $(module_srcdir)/utils.o
+  $(module_srcdir)/utils.o \
+  $(TEST_CLOUDWATCH_DEPS)
 
 TEST_API_LIBS=-lcheck
+
+TEST_CLOUDWATCH_OBJS=api/cloudwatch/conn.o \
+  api/cloudwatch/error.o \
+  api/cloudwatch/dimension.o \
+  api/cloudwatch/metric.o
 
 TEST_API_OBJS=\
   api/error.o \
@@ -58,6 +69,7 @@ TEST_API_OBJS=\
   api/creds.o \
   api/sign.o \
   api/utils.o \
+  $(TEST_CLOUDWATCH_OBJS) \
   api/stubs.o \
   api/tests.o
 

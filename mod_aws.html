@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
 <head>
 <title>ProFTPD module mod_aws</title>
@@ -50,6 +51,8 @@ questions, concerns, or suggestions regarding this module.
 <ul>
   <li><a href="#AWSAdjustments">AWSAdjustments</a>
   <li><a href="#AWSCACertificateFile">AWSCACertificateFile</a>
+  <li><a href="#AWSCloudWatchDimensions">AWSCloudWatchDimensions</a>
+  <li><a href="#AWSCloudWatchNamespace">AWSCloudWatchNamespace</a>
   <li><a href="#AWSCredentials">AWSCredentials</a>
   <li><a href="#AWSEngine">AWSEngine</a>
   <li><a href="#AWSHealthCheck">AWSHealthCheck</a>
@@ -57,6 +60,7 @@ questions, concerns, or suggestions regarding this module.
   <li><a href="#AWSOptions">AWSOptions</a>
   <li><a href="#AWSProfile">AWSProfile</a>
   <li><a href="#AWSSecurityGroup">AWSSecurityGroup</a>
+  <li><a href="#AWSServices">AWSServices</a>
   <li><a href="#AWSTimeoutConnect">AWSTimeoutConnect</a>
   <li><a href="#AWSTimeoutRequest">AWSTimeoutRequest</a>
 </ul>
@@ -133,6 +137,56 @@ The <code>mod_aws</code> source code comes with a prepared
 <code>aws-cacerts.pem</code> file which should be sufficient.  Use you
 find you need to update those certificates, use this directive to
 configure the path to the file containing the new certificates.
+
+<p>
+<hr>
+<h3><a name="AWSCloudWatchDimensions">AWSCloudWatchDimensions</a></h3>
+<strong>Syntax:</strong> AWSCloudWatchDimensions <em>dimension ...</em><br>
+<strong>Default:</strong> None<br>
+<strong>Context:</strong> server config, <code>&lt;VirtualHost&gt;</code>, <code>&lt;Global&gt;</code><br>
+<strong>Module:</strong> mod_aws<br>
+<strong>Compatibility:</strong> 1.3.6rc2 and later
+
+<p>
+The <code>AWSCloudWatchDimensions</code> directive configures a list of
+<em>dimensions</i>, up to a maximum of 10.  The AWS CloudWatch API imposes
+this limit on the number of dimensions recorded per metric.  See the
+AWS CloudWatch documentation for more information.
+
+<p>
+The currently supported dimensions are:
+<pre>
+  <li>AvailabilityZone
+  <li>InstanceId
+  <li>Protocol
+</pre>
+
+<p>
+Example:
+<pre>
+  AWSCloudWatchDimensions Protocol InstanceId AvailabilityZone
+</pre>
+
+<p>
+<hr>
+<h3><a name="AWSCloudWatchNamespace">AWSCloudWatchNamespace</a></h3>
+<strong>Syntax:</strong> AWSCloudWatchNamespace <em>namespace</em><br>
+<strong>Default:</strong> AWSCloudWatchNamespace proftpd<br>
+<strong>Context:</strong> server config, <code>&lt;VirtualHost&gt;</code>, <code>&lt;Global&gt;</code><br>
+<strong>Module:</strong> mod_aws<br>
+<strong>Compatibility:</strong> 1.3.6rc2 and later
+
+<p>
+The <code>AWSCloudWatchNamespace</code> directive configures a
+<em>namespace</em> to use for grouping all metrics together.  Aggregation
+<i>across</i> CloudWatch namespaces is <b>not</b> possible.  See the
+AWS CloudWatch documentation for more details.
+
+<p>
+Example:
+<pre>
+  AWSCloudWatchNamespace proftpd/production
+</pre>
 
 <p>
 <hr>
@@ -264,6 +318,23 @@ See also: <a href="#AWSAdjustments"><code>AWSAdjustments</code></a>
 
 <p>
 <hr>
+<h3><a name="AWSServices">AWSServices</a></h3>
+<strong>Syntax:</strong> AWSServices <em>service ...</em><br>
+<strong>Default:</strong> None<br>
+<strong>Context:</strong> server config<br>
+<strong>Module:</strong> mod_aws<br>
+<strong>Compatibility:</strong> 1.3.6rc2 and later
+
+<p>
+The <code>AWSServices</code> directive enables selective use of the myriad
+AWS services by the <code>mod_aws</code> module.  The following services
+are currently supported:
+<ul>
+  <li>CloudWatch
+</ul>
+
+<p>
+<hr>
 <h3><a name="AWSTimeoutConnect">AWSTimeoutConnect</a></h3>
 <strong>Syntax:</strong> AWSTimeoutConnect <em>timeout</em><br>
 <strong>Default:</strong> 3sec<br>
@@ -339,6 +410,10 @@ For debugging purposes, the module also uses
 via the module-specific channels:
 <ul>
   <li>aws
+  <li>aws.cloudwatch.conn
+  <li>aws.cloudwatch.dimension
+  <li>aws.cloudwatch.error
+  <li>aws.cloudwatch.metric
   <li>aws.ec2
   <li>aws.error
   <li>aws.http
@@ -353,6 +428,195 @@ your <code>proftpd.conf</code>:
 </pre>
 This trace logging can generate large files; it is intended for debugging
 use only, and should be removed from any production configuration.
+
+<p><a name="CloudWatch"></a>
+<b>CloudWatch</b><br>
+
+<p>
+Example configuration:
+<pre>
+  &lt;IfModule mod_aws.c&gt;
+    AWSEngine on
+    AWSLog /var/log/ftpd/aws.log
+
+    # Enable use of CloudWatch for metrics
+    AWSServices CloudWatch
+    AWSCloudWatchDimensions Protocol InstanceId AvailabilityZone
+    AWSCloudWatchNamespace proftpd/production
+  &lt;/IfModule&gt;
+</pre>
+
+<p>
+The following metrics are logged to CloudWatch:
+<table border=1 summary="Cloudwatch Metrics">
+  <tr>
+    <td><b>Metric</b></td>
+    <td><b>Units</b></td>
+    <td><b>Description</b></td>
+  </tr>
+
+  <tr>
+    <td><code>Connection</code></td>
+    <td><code>Count</code></td>
+    <td><b>Any</b> connection the server</td>
+  </tr>
+
+  <tr>
+    <td><code>Connection.FTP</code></td>
+    <td><code>Count</code></td>
+    <td>FTP session</td>
+  </tr>
+
+  <tr>
+    <td><code>Connection.FTPS</code></td>
+    <td><code>Count</code></td>
+    <td>FTPS session</td>
+  </tr>
+
+  <tr>
+    <td><code>Connection.SCP</code></td>
+    <td><code>Count</code></td>
+    <td>SCP session</td>
+  </tr>
+
+  <tr>
+    <td><code>Connection.SFTP</code></td>
+    <td><code>Count</code></td>
+    <td>SCP session</td>
+  </tr>
+
+  <tr>
+    <td><code>Connection.SQL</code></td>
+    <td><code>Count</code></td>
+    <td>Database connection</td>
+  </tr>
+
+  <tr>
+    <td><code>DirectoryList.Elapsed</code></td>
+    <td><code>Milliseconds</code></td>
+    <td>Directory listing duration</td>
+  </tr>
+
+  <tr>
+    <td><code>DirectoryList.Failed</code></td>
+    <td><code>Count</code></td>
+    <td>Failed directory listing</td>
+  </tr>
+
+  <tr>
+    <td><code>DirectoryList.Success</code></td>
+    <td><code>Count</code></td>
+    <td>Successful directory listing</td>
+  </tr>
+
+  <tr>
+    <td><code>Error.SQL</code></td>
+    <td><code>Count</code></td>
+    <td>Database error</td>
+  </tr>
+
+  <tr>
+    <td><code>FileDownload.Elapsed</code></td>
+    <td><code>Milliseconds</code></td>
+    <td>File download duration</td>
+  </tr>
+
+  <tr>
+    <td><code>FileDownload.Failed</code></td>
+    <td><code>Count</code></td>
+    <td>Failed download</td>
+  </tr>
+
+  <tr>
+    <td><code>FileDownload.Success</code></td>
+    <td><code>Count</code></td>
+    <td>Successful download</td>
+  </tr>
+
+  <tr>
+    <td><code>FileUpload.Elapsed</code></td>
+    <td><code>Milliseconds</code></td>
+    <td>File download duration</td>
+  </tr>
+
+  <tr>
+    <td><code>FileUpload.Failed</code></td>
+    <td><code>Count</code></td>
+    <td>Failed upload</td>
+  </tr>
+
+  <tr>
+    <td><code>FileUpload.Success</code></td>
+    <td><code>Count</code></td>
+    <td>Successful upload</td>
+  </tr>
+
+  <tr>
+    <td><code>Login.Elapsed</code></td>
+    <td><code>Milliseconds</code></td>
+    <td>Login duration</td>
+  </tr>
+
+  <tr>
+    <td><code>Login.Failed</code></td>
+    <td><code>Count</code></td>
+    <td>Failed login</td>
+  </tr>
+
+  <tr>
+    <td><code>Login.Success</code></td>
+    <td><code>Count</code></td>
+    <td>Successful login</td>
+  </tr>
+
+  <tr>
+    <td><code>TimeoutIdle</code></td>
+    <td><code>Count</code></td>
+    <td>Timeout</td>
+  </tr>
+
+  <tr>
+    <td><code>TimeoutLogin</code></td>
+    <td><code>Count</code></td>
+    <td>Timeout</td>
+  </tr>
+
+  <tr>
+    <td><code>TimeoutNoTransfer</code></td>
+    <td><code>Count</code></td>
+    <td>Timeout</td>
+  </tr>
+
+  <tr>
+    <td><code>TimeoutSession</code></td>
+    <td><code>Count</code></td>
+    <td>Timeout</td>
+  </tr>
+
+  <tr>
+    <td><code>TimeoutStalled</code></td>
+    <td><code>Count</code></td>
+    <td>Timeout</td>
+  </tr>
+
+  <tr>
+    <td><code>TLSCipher.*</code></td>
+    <td><code>Count</code></td>
+    <td>Count by specific TLS ciphersuite</td>
+  </tr>
+
+  <tr>
+    <td><code>TLSHandshake.Error</code></td>
+    <td><code>Count</code></td>
+    <td>TLS handshake error</td>
+  </tr>
+
+  <tr>
+    <td><code>TLSProtocol.*</code></td>
+    <td><code>Count</code></td>
+    <td>Count by specific TLS protocol version</td>
+  </tr>
+</table>
 
 <p><a name="FAQ">
 <b>Frequently Asked Questions</b><br>
@@ -394,7 +658,7 @@ development libraries/headers <b>must</b> be installed for building
 <hr>
 
 <font size=2><b><i>
-&copy; Copyright 2016 TJ Saunders<br>
+&copy; Copyright 2016-2017 TJ Saunders<br>
  All Rights Reserved<br>
 </i></b></font>
 

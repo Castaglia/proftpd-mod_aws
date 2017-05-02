@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2016-2017 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -81,6 +81,38 @@ START_TEST (utils_table2array_test) {
 }
 END_TEST
 
+START_TEST (utils_str_d2s_test) {
+  char *res, *expected;
+  double n;
+
+  res = aws_utils_str_d2s(NULL, 0);
+  fail_unless(res == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  n = 0;
+  expected = "0.000";
+  res = aws_utils_str_d2s(p, n);
+  fail_unless(res != NULL, "Failed to handle %lf: %s", n, strerror(errno));
+  fail_unless(strcmp(res, expected) == 0,
+    "Expected '%s', got '%s'", expected, res);
+
+  n = -1;
+  expected = "-1.000";
+  res = aws_utils_str_d2s(p, n);
+  fail_unless(res != NULL, "Failed to handle %d: %lf", n, strerror(errno));
+  fail_unless(strcmp(res, expected) == 0,
+    "Expected '%s', got '%s'", expected, res);
+
+  n = 7;
+  expected = "7.000";
+  res = aws_utils_str_d2s(p, n);
+  fail_unless(res != NULL, "Failed to handle %lf: %s", n, strerror(errno));
+  fail_unless(strcmp(res, expected) == 0,
+    "Expected '%s', got '%s'", expected, res);
+}
+END_TEST
+
 START_TEST (utils_str_n2s_test) {
   char *res, *expected;
   int n;
@@ -108,6 +140,41 @@ START_TEST (utils_str_n2s_test) {
   expected = "7";
   res = aws_utils_str_n2s(p, n);
   fail_unless(res != NULL, "Failed to handle %d: %s", n, strerror(errno));
+  fail_unless(strcmp(res, expected) == 0,
+    "Expected '%s', got '%s'", expected, res);
+}
+END_TEST
+
+START_TEST (utils_str_off2s_test) {
+  char *res, *expected;
+  off_t n;
+
+  res = aws_utils_str_off2s(NULL, 0);
+  fail_unless(res == NULL, "Failed to handle null pool");
+  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+    strerror(errno), errno);
+
+  n = 0;
+  expected = "0";
+  res = aws_utils_str_off2s(p, n);
+  fail_unless(res != NULL, "Failed to handle %" PR_LU ": %s", (pr_off_t) n,
+    strerror(errno));
+  fail_unless(strcmp(res, expected) == 0,
+    "Expected '%s', got '%s'", expected, res);
+
+  n = 7;
+  expected = "7";
+  res = aws_utils_str_off2s(p, n);
+  fail_unless(res != NULL, "Failed to handle %" PR_LU ": %s", (pr_off_t) n,
+    strerror(errno));
+  fail_unless(strcmp(res, expected) == 0,
+    "Expected '%s', got '%s'", expected, res);
+
+  n = (off_t) -1;
+  expected = "18446744073709551615";
+  res = aws_utils_str_off2s(p, n);
+  fail_unless(res != NULL, "Failed to handle %" PR_LU ": %s", (pr_off_t) n,
+    strerror(errno));
   fail_unless(strcmp(res, expected) == 0,
     "Expected '%s', got '%s'", expected, res);
 }
@@ -252,7 +319,9 @@ Suite *tests_get_utils_suite(void) {
   tcase_add_checked_fixture(testcase, set_up, tear_down);
 
   tcase_add_test(testcase, utils_table2array_test);
+  tcase_add_test(testcase, utils_str_d2s_test);
   tcase_add_test(testcase, utils_str_n2s_test);
+  tcase_add_test(testcase, utils_str_off2s_test);
   tcase_add_test(testcase, utils_str_ul2s_test);
   tcase_add_test(testcase, utils_str_trim_test);
   tcase_add_test(testcase, utils_strn_trim_test);

@@ -1,4 +1,3 @@
-env: TRAVIS_CI=true
 language: c
 
 compiler:
@@ -34,6 +33,8 @@ script:
   - git clone https://github.com/proftpd/proftpd.git
   - mkdir -p proftpd/contrib/mod_aws/
   - cp *.[ch] proftpd/contrib/mod_aws/
+  - mkdir -p proftpd/contrib/mod_aws/cloudwatch/
+  - cp cloudwatch/*.[ch] proftpd/contrib/mod_aws/cloudwatch/
   - cp mod_aws.* proftpd/contrib/mod_aws/
   - cp Makefile.in proftpd/contrib/mod_aws/
   - cp config* proftpd/contrib/mod_aws/

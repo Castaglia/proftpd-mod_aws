@@ -1,0 +1,36 @@
+
+For each metric, add the following "dimensions":
+
+  instanceID
+  instanceType
+  availabilityZone
+
+Ideally these would be configurable.
+
+  AWSCloudWatch
+
+  AWSCloudWatchDimensions
+    InstanceId ...
+    AvailabilityZone ...
+    VPC ...
+    Protocol ...
+    Sampling ...
+    (max: 10)
+
+events:
+  connections (count, timing)
+  logins (success/failure)
+  directory listings (success/failure, timing)
+  file uploads (success/failure, timing)
+  file downloads (success/failure, timing)
+  timeouts (count)
+
+  tls protocol version (count)
+  tls cipher (count)
+
+* Protocol as a dimension, not a namespace, so that aggregation can be done
+  across protocols easily.
+
+TODO:
+  AWSCloudWatchExcludeFilter
+  AWSCloudWatchSampling

@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws HTTP requests
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -51,11 +51,14 @@
 
 /* HTTP response codes */
 #define AWS_HTTP_RESPONSE_CODE_OK			200L
+#define AWS_HTTP_RESPONSE_CODE_NO_CONTENT		204L
+#define AWS_HTTP_RESPONSE_CODE_PARTIAL_CONTENT		206L
 
 #define AWS_HTTP_RESPONSE_CODE_BAD_REQUEST		400L
 #define AWS_HTTP_RESPONSE_CODE_UNAUTHORIZED		401L
 #define AWS_HTTP_RESPONSE_CODE_FORBIDDEN		403L
 #define AWS_HTTP_RESPONSE_CODE_NOT_FOUND		404L
+#define AWS_HTTP_RESPONSE_CODE_METHOD_NOT_ALLOWED	405L
 #define AWS_HTTP_RESPONSE_CODE_PRECONDITION_FAILED	412L
 #define AWS_HTTP_RESPONSE_CODE_TOO_MANY_REQUESTS	429L
 
@@ -65,8 +68,9 @@
 #define AWS_HTTP_RESPONSE_CODE_GATEWAY_TIMEOUT		504L
 
 /* HTTP content types */
-#define AWS_HTTP_CONTENT_TYPE_HTML			"text/html"
-#define AWS_HTTP_CONTENT_TYPE_XML			"application/xml"
+#define AWS_HTTP_CONTENT_TYPE_TEXT_HTML			"text/html"
+#define AWS_HTTP_CONTENT_TYPE_TEXT_XML			"text/xml"
+#define AWS_HTTP_CONTENT_TYPE_APPLICATION_XML		"application/xml"
 
 /* HTTP Date format buffer size; contains space for 16 characters
  * (YYYYMMDDThhmmssZ) plus the trailing NUL.

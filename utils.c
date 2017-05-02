@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws utilities
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,6 +59,22 @@ array_header *aws_utils_table2array(pool *p, pr_table_t *tab) {
   return list;
 }
 
+char *aws_utils_str_d2s(pool *p, double n) {
+  char buf[256], *num;
+  int len;
+
+  if (p == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  memset(buf, '\0', sizeof(buf));
+  len = snprintf(buf, sizeof(buf)-1, "%.3lf", n);
+  num = pstrndup(p, buf, len);
+
+  return num;
+}
+
 char *aws_utils_str_n2s(pool *p, int n) {
   char buf[256], *num;
   int len;
@@ -70,6 +86,22 @@ char *aws_utils_str_n2s(pool *p, int n) {
 
   memset(buf, '\0', sizeof(buf));
   len = snprintf(buf, sizeof(buf)-1, "%d", n);
+  num = pstrndup(p, buf, len);
+
+  return num;
+}
+
+char *aws_utils_str_off2s(pool *p, off_t n) {
+  char buf[256], *num;
+  int len;
+
+  if (p == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+
+  memset(buf, '\0', sizeof(buf));
+  len = snprintf(buf, sizeof(buf)-1, "%" PR_LU, (pr_off_t) n);
   num = pstrndup(p, buf, len);
 
   return num;

@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws AWS signatures
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -251,11 +251,11 @@ static const char *create_signed_headers(pool *p, pr_table_t *headers) {
 
 static const char *create_canon_request(pool *p, void *http,
     const char *http_method, const char *http_path, array_header *query_params,
-    pr_table_t *http_headers, const char *http_body,
+    pr_table_t *http_headers, const char *http_body, off_t http_bodysz,
     const char **signed_headers, const char **canon_request_hash) {
   char *canon_request;
   unsigned char buf[SHA256_DIGEST_LENGTH];
-  size_t canon_requestlen, http_bodylen;
+  size_t canon_requestlen;
   const char *canon_uri, *canon_query, *canon_headers, *payload_hash;
 
   canon_uri = create_canon_uri(p, http, http_path);
@@ -277,8 +277,7 @@ static const char *create_canon_request(pool *p, void *http,
    * callers load it all into memory.
    */
 
-  http_bodylen = strlen(http_body);
-  if (SHA256((unsigned char *) http_body, http_bodylen, buf) == NULL) {
+  if (SHA256((unsigned char *) http_body, (size_t) http_bodysz, buf) == NULL) {
     pr_trace_msg(trace_channel, 2,
       "error calculating SHA256 digest of request payload: %s", get_errors(p));
     errno = EINVAL;
@@ -464,7 +463,7 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
     const char *region, const char *service,
     void *http, const char *http_method, const char *http_path,
     array_header *query_params, pr_table_t *http_headers,
-    const char *http_body, time_t request_time) {
+    const char *http_body, off_t http_bodysz, time_t request_time) {
   int res;
   const char *credential_scope, *canon_request, *canon_request_hash;
   const char *signature, *signed_headers;
@@ -486,10 +485,16 @@ int aws_sign_v4_generate(pool *p, const char *access_key_id,
 
   if (http_body == NULL) {
     http_body = "";
+    http_bodysz = 0;
+
+  } else {
+    if (http_bodysz == 0) {
+      http_bodysz = strlen(http_body);
+    }
   }
 
   canon_request = create_canon_request(p, http, http_method, http_path,
-    query_params, http_headers, http_body, &signed_headers,
+    query_params, http_headers, http_body, http_bodysz, &signed_headers,
     &canon_request_hash);
   if (canon_request == NULL) {
     int xerrno = errno;

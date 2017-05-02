@@ -100,10 +100,7 @@ static int route53_get(pool *p, void *http, const char *path,
   struct tm *gmt_tm;
 
   if (route53->credentials == NULL) {
-    int res;
-
     /* Need to get the temporary IAM credentials for signing. */
-
     res = aws_creds_from_chain(route53->pool, route53->credential_providers,
       route53->credential_info, &(route53->credentials));
     if (res < 0) {
@@ -154,7 +151,7 @@ static int route53_get(pool *p, void *http, const char *path,
     route53->credentials->access_key_id,
     route53->credentials->secret_access_key,
     route53->credentials->session_token, aws_region, aws_service, http, "GET",
-    path, query_params, http_headers, "", request_time);
+    path, query_params, http_headers, "", 0, request_time);
   if (res < 0) {
     int xerrno = errno;
 
@@ -189,7 +186,8 @@ static int route53_get(pool *p, void *http, const char *path,
        * the response is XML.  (Thanks, AWS.)
        */
       if (content_type == NULL ||
-          strstr(content_type, AWS_HTTP_CONTENT_TYPE_XML) != NULL) {
+          (strstr(content_type, AWS_HTTP_CONTENT_TYPE_TEXT_XML) != NULL ||
+           strstr(content_type, AWS_HTTP_CONTENT_TYPE_APPLICATION_XML) != NULL)) {
         struct aws_error *err;
 
         err = aws_error_parse_xml(p, route53->resp, route53->respsz);
@@ -217,7 +215,7 @@ static int route53_get(pool *p, void *http, const char *path,
      * an unexpected error.
      */
     if (content_type != NULL &&
-        strstr(content_type, AWS_HTTP_CONTENT_TYPE_HTML) != NULL) {
+        strstr(content_type, AWS_HTTP_CONTENT_TYPE_TEXT_HTML) != NULL) {
       (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
         "received unexpected HTML response for '%s'", url);
       errno = EINVAL;

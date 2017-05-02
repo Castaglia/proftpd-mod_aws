@@ -1,6 +1,6 @@
 /*
- * ProFTPD - mod_aws AWS signatures
- * Copyright (c) 2016-2017 TJ Saunders
+ * ProFTPD - mod_aws CloudWatch Metric API
+ * Copyright (c) 2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,15 +22,16 @@
  * source distribution.
  */
 
+#ifndef MOD_AWS_CLOUDWATCH_METRIC_H
+#define MOD_AWS_CLOUDWATCH_METRIC_H
+
 #include "mod_aws.h"
+#include "cloudwatch/conn.h"
 
-#ifndef MOD_AWS_SIGN_H
-#define MOD_AWS_SIGN_H
+int aws_cloudwatch_metric_counter(pool *p, struct cloudwatch_conn *cw,
+  const char *name, double incr, array_header *dimensions, int flags);
 
-int aws_sign_v4_generate(pool *p, const char *access_key_id,
-  const char *secret_access_key, const char *token, const char *region,
-  const char *service, void *http, const char *http_method,
-  const char *http_path, array_header *query_params, pr_table_t *http_headers,
-  const char *http_body, off_t http_bodysz, time_t request_time);
+int aws_cloudwatch_metric_timer(pool *p, struct cloudwatch_conn *cw,
+  const char *name, double ms, array_header *dimensions, int flags);
 
-#endif /* MOD_AWS_SIGN_H */
+#endif /* MOD_AWS_CLOUDWATCH_METRIC_H */
