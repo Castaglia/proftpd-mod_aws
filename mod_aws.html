@@ -149,21 +149,22 @@ configure the path to the file containing the new certificates.
 
 <p>
 The <code>AWSCloudWatchDimensions</code> directive configures a list of
-<em>dimensions</i>, up to a maximum of 10.  The AWS CloudWatch API imposes
+<em>dimensions</em>, up to a maximum of 10.  The AWS CloudWatch API imposes
 this limit on the number of dimensions recorded per metric.  See the
 AWS CloudWatch documentation for more information.
 
 <p>
 The currently supported dimensions are:
-<pre>
+<ul>
   <li>AvailabilityZone
   <li>InstanceId
   <li>Protocol
-</pre>
+</ul>
 
 <p>
 Example:
 <pre>
+  # Use the set of available dimensions
   AWSCloudWatchDimensions Protocol InstanceId AvailabilityZone
 </pre>
 
@@ -236,6 +237,7 @@ use of AWS services is disabled.
 <strong>Module:</strong> mod_aws<br>
 <strong>Compatibility:</strong> 1.3.6rc2 and later
 
+<p>
 The <code>AWSHealthCheck</code> directive is used to configure the address,
 port, and URI that <code>mod_aws</code> should use, when listening for HTTP
 health check requests from <i>e.g.</i> AWS Route53 or AWS ELBs.
@@ -287,7 +289,7 @@ The currently implemented options are:
 <hr>
 <h3><a name="AWSProfile">AWSProfile</a></h3>
 <strong>Syntax:</strong> AWSProfile <em>name</em><br>
-<strong>Default:</strong> <em>AWSProfile default</em><br>
+<strong>Default:</strong> AWSProfile default<br>
 <strong>Context:</strong> server config, <code>&lt;VirtualHost&gt;</code>, <code>&lt;Global&gt;</code><br>
 <strong>Module:</strong> mod_aws<br>
 <strong>Compatibility:</strong> 1.3.6rc2 and later
@@ -314,6 +316,7 @@ needs to automatically adjust a security group for ingress rules.  An EC2
 instance may have multiple applicable security groups; use the
 <code>AWSSecurityGroup</code> directive to specify which one to use.
 
+<p>
 See also: <a href="#AWSAdjustments"><code>AWSAdjustments</code></a>
 
 <p>
@@ -448,7 +451,7 @@ Example configuration:
 
 <p>
 The following metrics are logged to CloudWatch:
-<table border=1 summary="Cloudwatch Metrics">
+<table border=0 summary="Cloudwatch Metrics">
   <tr>
     <td><b>Metric</b></td>
     <td><b>Units</b></td>
