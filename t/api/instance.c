@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2016-2017 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -55,26 +55,14 @@ static void tear_down(void) {
   } 
 }
 
-START_TEST (instance_get_iam_credentials_test) {
-  struct iam_info *iam;
-  const char *iam_role;
+START_TEST (instance_get_info_test) {
+  struct aws_info *info;
 
-  iam = aws_instance_get_iam_credentials(NULL, NULL);
-  fail_unless(iam == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
-
-  iam = aws_instance_get_iam_credentials(p, NULL);
-  fail_unless(iam == NULL, "Failed to handle null role");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
-    strerror(errno), errno);
-
-  iam_role = "foo";
-  iam = aws_instance_get_iam_credentials(p, iam_role);
-  fail_unless(iam == NULL, "Failed to handle unavailable creds for role");
-  fail_unless(errno == ENOENT || errno == ETIMEDOUT,
-    "Expected ENOENT (%d) or ETIMEDOUT (%d), got %s (%d)", ENOENT, ETIMEDOUT,
-    strerror(errno), errno);
+  mark_point();
+  info = aws_instance_get_info(p);
+  fail_unless(info != NULL, "Failed to handle non-AWS environment");
+  fail_unless(info->account_id == NULL, "Expected null account ID, got '%s'",
+    info->account_id);
 }
 END_TEST
 
@@ -86,8 +74,9 @@ Suite *tests_get_instance_suite(void) {
   testcase = tcase_create("base");
 
   tcase_add_checked_fixture(testcase, set_up, tear_down);
+  tcase_set_timeout(testcase, 10);
 
-  tcase_add_test(testcase, instance_get_iam_credentials_test);
+  tcase_add_test(testcase, instance_get_info_test);
 
   suite_add_tcase(suite, testcase);
   return suite;

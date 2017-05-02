@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws Route53 API
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
  */
 
 #include "mod_aws.h"
-#include "instance.h"
+#include "creds.h"
 
 #ifndef MOD_AWS_ROUTE53_H
 #define MOD_AWS_ROUTE53_H
@@ -36,8 +36,9 @@ struct route53_conn {
   const char *domain;
 
   /* To be refreshed whenever the credentials are deemed too old. */
-  const char *iam_role;
-  struct iam_info *iam_info;
+  const array_header *credential_providers;
+  const struct aws_credential_info *credential_info;
+  struct aws_credentials *credentials;
 
   /* For handling request/response documents. */
   pool *req_pool;
@@ -74,7 +75,9 @@ struct route53_rrset {
 
 struct route53_conn *aws_route53_conn_alloc(pool *p,
   unsigned long max_connect_secs, unsigned long max_request_secs,
-  const char *cacerts, const char *domain, const char *iam_role);
+  const char *cacerts, const char *domain,
+  const array_header *credential_providers,
+  const struct aws_credential_info *credential_info);
 int aws_route53_conn_destroy(pool *p, struct route53_conn *route53);
 
 /* Returns a list of ACLs comprising the IP address ranges from which Route53

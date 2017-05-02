@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws AWS credentials
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,18 +24,17 @@
 
 #include "mod_aws.h"
 #include "creds.h"
-#include "instance.h"
+#include "http.h"
+#include "json.h"
 #include "utils.h"
 
 static const char *trace_channel = "aws.creds";
 
-int aws_creds_from_env(pool *p, char **access_key_id,
-    char **secret_access_key, char **session_token) {
-  const char *k, *id, *secret;
+int aws_creds_from_env(pool *p, struct aws_credentials **creds) {
+  const char *k, *id, *secret, *token;
 
   if (p == NULL ||
-      access_key_id == NULL ||
-      secret_access_key == NULL) {
+      creds == NULL) {
     errno = EINVAL;
     return -1;
   }
@@ -56,11 +55,14 @@ int aws_creds_from_env(pool *p, char **access_key_id,
     return -1;
   }
 
-  *access_key_id = pstrdup(p, id);
-  *secret_access_key = pstrdup(p, secret);
+  *creds = pcalloc(p, sizeof(struct aws_credentials));
+  (*creds)->access_key_id = pstrdup(p, id);
+  (*creds)->secret_access_key = pstrdup(p, secret);
 
-  if (session_token != NULL) {
-    *session_token = NULL;
+  k = "AWS_SESSION_TOKEN";
+  token = pr_env_get(p, k);
+  if (token != NULL) {
+    (*creds)->session_token = pstrdup(p, token);
   }
 
   return 0;
@@ -274,8 +276,8 @@ static int creds_from_profile_props(pool *p, pr_fh_t *fh, const char *profile,
   return -1;
 }
 
-int aws_creds_from_file(pool *p, const char *path, const char *profile,
-    char **access_key_id, char **secret_access_key, char **session_token) {
+int aws_creds_from_file(pool *p, const char *creds_path, const char *profile,
+    struct aws_credentials **creds) {
   int res, xerrno;
   char *id, *key, *token;
   pr_fh_t *fh;
@@ -283,9 +285,8 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
   pool *sub_pool;
 
   if (p == NULL ||
-      path == NULL ||
-      access_key_id == NULL ||
-      secret_access_key == NULL) {
+      creds_path == NULL ||
+      creds == NULL) {
     errno = EINVAL;
     return -1;
   }
@@ -293,12 +294,12 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
   sub_pool = make_sub_pool(p);
   pr_pool_tag(sub_pool, "AWS file credentials pool");
 
-  fh = pr_fsio_open(path, O_RDONLY);
+  fh = pr_fsio_open(creds_path, O_RDONLY);
   if (fh == NULL) {
     xerrno = errno;
 
     pr_trace_msg(trace_channel, 9,  "unable to read credentials from '%s': %s",
-      path, strerror(xerrno));
+      creds_path, strerror(xerrno));
 
     destroy_pool(sub_pool);
     errno = xerrno;
@@ -309,7 +310,7 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
     xerrno = errno;
 
     pr_trace_msg(trace_channel, 9,  "fstat(2) error on '%s': %s",
-      path, strerror(xerrno));
+      creds_path, strerror(xerrno));
 
     (void) pr_fsio_close(fh);
     destroy_pool(sub_pool);
@@ -327,13 +328,7 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
   id = key = token = NULL;
 
   if (profile != NULL) {
-    char **token_ptr = NULL;
-
-    if (session_token != NULL) {
-      token_ptr = &token;
-    }
-
-    res = creds_from_profile_props(sub_pool, fh, profile, &id, &key, token_ptr);
+    res = creds_from_profile_props(sub_pool, fh, profile, &id, &key, &token);
 
   } else {
     res = creds_from_props(sub_pool, fh, &id, &key);
@@ -342,12 +337,10 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
   xerrno = errno;
 
   if (res == 0) {
-    *access_key_id = pstrdup(p, id);
-    *secret_access_key = pstrdup(p, key);
-
-    if (session_token != NULL) {
-      *session_token = pstrdup(p, token);
-    }
+    *creds = pcalloc(p, sizeof(struct aws_credentials));
+    (*creds)->access_key_id = pstrdup(p, id);
+    (*creds)->secret_access_key = pstrdup(p, key);
+    (*creds)->session_token = pstrdup(p, token);
   }
 
   (void) pr_fsio_close(fh);
@@ -357,47 +350,225 @@ int aws_creds_from_file(pool *p, const char *path, const char *profile,
   return res;
 }
 
-static int creds_from_iam(pool *p, const char *iam_role,
-    char **access_key_id, char **secret_access_key, char **session_token) {
-  struct iam_info *iam;
+struct iam_info {
+  pool *pool;
 
-  iam = aws_instance_get_iam_credentials(p, iam_role);
-  if (iam == NULL) {
-    if (iam_role != NULL) {
-      pr_trace_msg(trace_channel, 9,
-        "unable to obtain credentials for IAM role '%s' via instance: %s",
-        iam_role, strerror(errno));
+  const char *iam_role;
 
-    } else {
-      pr_trace_msg(trace_channel, 9,
-        "unable to obtain credentials via instance: %s", strerror(errno));
-    }
+  /* http://169.254.169.254/latest/meta-data/iam/security-credentials/{role} */
+  char *creds_doc;
+  size_t creds_docsz;
 
-    errno = ENOENT;
+  /* See security credentials doc "AccessKeyId" key. */
+  const char *access_key_id;
+
+  /* See security credentials doc "SecretAccessKey" key. */
+  const char *secret_access_key;
+
+  /* See security credentials doc "Token" key. */
+  const char *session_token;
+};
+
+static int get_metadata(pool *p, void *http, const char *url,
+    size_t (*resp_body)(char *, size_t, size_t, void *),
+    void *user_data) {
+  int res;
+  long resp_code;
+
+  res = aws_http_get(p, http, url, NULL, resp_body, user_data, &resp_code,
+    NULL);
+  if (res < 0) {
     return -1;
+  }
+
+  /* Note: should we handle other response codes? */
+  switch (resp_code) {
+    case AWS_HTTP_RESPONSE_CODE_OK:
+      break;
+
+    case AWS_HTTP_RESPONSE_CODE_BAD_REQUEST:
+      pr_trace_msg(trace_channel, 2,
+        "received %ld response code for '%s' request", resp_code, url);
+      errno = EINVAL;
+      return -1;
+
+    case AWS_HTTP_RESPONSE_CODE_NOT_FOUND:
+      pr_trace_msg(trace_channel, 2,
+        "received %ld response code for '%s' request", resp_code, url);
+      errno = ENOENT;
+      return -1;
+
+    default:
+      pr_trace_msg(trace_channel, 2,
+        "received %ld response code for '%s' request", resp_code, url);
+      errno = EPERM;
+      return -1;
   }
 
   return 0;
 }
 
-int aws_creds_from_chain(pool *p, array_header *providers,
-    char **access_key_id, char **secret_access_key, char **session_token,
-    const char *iam_role, const char *profile, const char *path) {
+/* Security credentials doc */
+static size_t iam_creds_cb(char *data, size_t item_sz, size_t item_count,
+    void *user_data) {
+  struct iam_info *info;
+  size_t datasz;
+  char *ptr;
+
+  info = user_data;
+  datasz = item_sz * item_count;
+
+  if (datasz == 0) {
+    return 0;
+  }
+
+  if (info->creds_docsz == 0) {
+    info->creds_docsz = datasz;
+    ptr = info->creds_doc = palloc(info->pool, info->creds_docsz);
+
+  } else {
+    ptr = info->creds_doc;
+    info->creds_doc = palloc(info->pool, info->creds_docsz + datasz);
+    memcpy(info->creds_doc, ptr, info->creds_docsz);
+
+    ptr = info->creds_doc + info->creds_docsz;
+    info->creds_docsz += datasz;
+  }
+
+  memcpy(ptr, data, datasz);
+  return datasz;
+}
+
+static int get_iam_info(pool *p, void *http, struct iam_info *info) {
+  int res;
+  const char *url;
+
+  url = pstrcat(p, AWS_INSTANCE_METADATA_URL, "/iam/security-credentials/",
+    info->iam_role, NULL);
+
+  res = get_metadata(p, http, url, iam_creds_cb, info);
+  if (res == 0) {
+    const char *text;
+    pr_json_object_t *json;
+
+    text = pstrndup(info->pool, info->creds_doc, info->creds_docsz);
+    json = pr_json_object_from_text(info->pool, text);
+    if (json != NULL) {
+      const char *key;
+      char *val = NULL;
+
+      key = "AccessKeyId";
+      if (pr_json_object_get_string(info->pool, json, key, &val) == 0) {
+        info->access_key_id = pstrdup(info->pool, val);
+
+      } else {
+        pr_trace_msg(trace_channel, 3, "no '%s' string found in '%s'", key,
+          text);
+      }
+
+      key = "SecretAccessKey";
+      val = NULL;
+      if (pr_json_object_get_string(info->pool, json, key, &val) == 0) {
+        info->secret_access_key = pstrdup(info->pool, val);
+
+      } else {
+        pr_trace_msg(trace_channel, 3, "no '%s' string found in '%s'", key,
+          text);
+      }
+
+      key = "Token";
+      val = NULL;
+      if (pr_json_object_get_string(info->pool, json, key, &val) == 0) {
+        info->session_token = pstrdup(info->pool, val);
+
+      } else {
+        pr_trace_msg(trace_channel, 3, "no '%s' string found in '%s'", key,
+          text);
+      }
+
+      pr_json_object_free(json);
+
+    } else {
+      pr_trace_msg(trace_channel, 3,
+        "'%s' JSON failed validation, ignoring", url);
+
+      info->creds_docsz = 0;
+      info->creds_doc = NULL;
+
+      errno = ENOENT;
+      return -1;
+    }
+
+  } else if (res < 0 &&
+             errno == ENOENT) {
+    /* Clear the response data for 404 responses. */
+    info->creds_docsz = 0;
+    info->creds_doc = NULL;
+  }
+
+  return res;
+}
+
+int aws_creds_from_iam(pool *p, const char *iam_role,
+    struct aws_credentials **creds) {
+  int res, xerrno = 0;
+  pool *iam_pool;
+  void *http;
+  struct iam_info *info;
+
+  if (p == NULL ||
+      iam_role == NULL ||
+      creds == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  http = aws_http_alloc(p, 1UL, 1UL, NULL);
+  if (http == NULL) {
+    return -1;
+  }
+
+  iam_pool = make_sub_pool(p);
+  pr_pool_tag(iam_pool, "AWS IAM credentials pool");
+
+  info = palloc(iam_pool, sizeof(struct iam_info));
+  info->pool = iam_pool;
+  info->iam_role = iam_role;
+
+  res = get_iam_info(p, http, info);
+  xerrno = errno;
+
+  aws_http_destroy(p, http);
+
+  if (res == 0) {
+    *creds = pcalloc(p, sizeof(struct aws_credentials));
+    (*creds)->access_key_id = pstrdup(p, info->access_key_id);
+    (*creds)->secret_access_key = pstrdup(p, info->secret_access_key);
+    (*creds)->session_token = pstrdup(p, info->session_token);
+  }
+
+  destroy_pool(iam_pool);
+
+  xerrno = errno;
+  return res;
+}
+
+int aws_creds_from_chain(pool *p, const array_header *providers,
+    const struct aws_credential_info *info, struct aws_credentials **creds) {
   register unsigned int i;
   int res;
   pool *sub_pool;
 
   if (p == NULL ||
-      access_key_id == NULL ||
-      secret_access_key == NULL) {
+      info == NULL ||
+      creds == NULL) {
     errno = EINVAL;
     return -1;
   }
 
   if (providers == NULL) {
     /* Default to just the "IAM" provider */
-    res = creds_from_iam(p, iam_role, access_key_id, secret_access_key,
-      session_token);
+    res = aws_creds_from_iam(p, info->iam_role, creds);
     return res;
   }
 
@@ -408,8 +579,7 @@ int aws_creds_from_chain(pool *p, array_header *providers,
     provider = ((char **) providers->elts)[i];
 
     if (strcmp(provider, AWS_CREDS_PROVIDER_NAME_IAM) == 0) {
-      res = creds_from_iam(p, iam_role, access_key_id, secret_access_key,
-        session_token);
+      res = aws_creds_from_iam(p, info->iam_role, creds);
 
     } else if (strcmp(provider, AWS_CREDS_PROVIDER_NAME_PROFILE) == 0) {
       const char *default_path;
@@ -429,18 +599,15 @@ int aws_creds_from_chain(pool *p, array_header *providers,
         }
       }
 
-      if (profile_path  != NULL) {
-        res = aws_creds_from_file(p, profile_path, profile, access_key_id,
-          secret_access_key, session_token);
+      if (profile_path != NULL) {
+        res = aws_creds_from_file(p, profile_path, info->profile, creds);
       }
 
     } else if (strcmp(provider, AWS_CREDS_PROVIDER_NAME_PROPERTIES) == 0) {
-      res = aws_creds_from_file(p, path, NULL, access_key_id,
-        secret_access_key, session_token);
+      res = aws_creds_from_file(p, info->creds_path, NULL, creds);
 
     } else if (strcmp(provider, AWS_CREDS_PROVIDER_NAME_ENVIRONMENT) == 0) {
-      res = aws_creds_from_env(p, access_key_id, secret_access_key,
-        session_token);
+      res = aws_creds_from_env(p, creds);
 
     } else {
       pr_trace_msg(trace_channel, 4,
@@ -458,13 +625,12 @@ int aws_creds_from_chain(pool *p, array_header *providers,
   return res;
 }
 
-int aws_creds_from_sql(pool *p, const char *query, char **access_key_id,
-    char **secret_access_key, char **session_token) {
+int aws_creds_from_sql(pool *p, const char *query,
+    struct aws_credentials **creds) {
 
   if (p == NULL ||
       query == NULL ||
-      access_key_id == NULL ||
-      secret_access_key == NULL) {
+      creds == NULL) {
     errno = EINVAL;
     return -1;
   }

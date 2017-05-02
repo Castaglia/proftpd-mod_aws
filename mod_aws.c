@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1161,17 +1161,21 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
    */
   if (instance_info->iam_role != NULL) {
     const char *domain, *iam_role;
+    struct aws_credential_info *cred_info = NULL;
 
     domain = pstrndup(aws_pool, instance_info->domain, instance_info->domainsz);
     iam_role = pstrndup(aws_pool, instance_info->iam_role,
       instance_info->iam_rolesz);
 
+    cred_info = pcalloc(aws_pool, sizeof(struct aws_credential_info));
+    cred_info->iam_role = iam_role;
+
     ec2 = aws_ec2_conn_alloc(aws_pool, aws_connect_timeout_secs,
       aws_request_timeout_secs, aws_cacerts, instance_info->region, domain,
-      iam_role);
+      NULL, cred_info);
 
     route53 = aws_route53_conn_alloc(aws_pool, aws_connect_timeout_secs,
-      aws_request_timeout_secs, aws_cacerts, domain, iam_role);
+      aws_request_timeout_secs, aws_cacerts, domain, NULL, cred_info);
 
     if (instance_info->security_groups != NULL) {
       const char *vpc_id = NULL;

@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws EC2 instance
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,17 @@
 
 #ifndef MOD_AWS_INSTANCE_H
 #define MOD_AWS_INSTANCE_H
+
+/* To discover the EC2 instance metadata for this instance, we query/use the
+ * information available via:
+ *
+ *  http://169.254.169.254/latest/meta-data/
+ *  http://169.254.169.254/latest/dynamic/instance-identity/document
+ *
+ */
+#define AWS_INSTANCE_METADATA_HOST	"169.254.169.254"
+#define AWS_INSTANCE_METADATA_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/meta-data"
+#define AWS_INSTANCE_DYNAMIC_URL	"http://" AWS_INSTANCE_METADATA_HOST "/latest/dynamic"
 
 struct aws_info {
   pool *pool;
@@ -107,28 +118,6 @@ struct aws_info {
   size_t public_hostnamesz;
 };
 
-struct iam_info {
-  pool *pool;
-
-  const char *iam_role;
-
-  /* http://169.254.169.254/latest/meta-data/iam/security-credentials/{role} */
-  char *creds_doc;
-  size_t creds_docsz;
-
-  /* See security credentials doc "AccessKeyId" key. */
-  const char *access_key_id;
-
-  /* See security credentials doc "SecretAccessKey" key. */
-  const char *secret_access_key;
-
-  /* See security credentials doc "Token" key. */
-  const char *token;
-};
-
 struct aws_info *aws_instance_get_info(pool *p);
-
-struct iam_info *aws_instance_get_iam_credentials(pool *p,
-  const char *iam_role);
 
 #endif /* MOD_AWS_INSTANCE_H */
