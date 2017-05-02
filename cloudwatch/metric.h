@@ -1,5 +1,5 @@
 /*
- * ProFTPD - mod_aws CloudWatch Error API
+ * ProFTPD - mod_aws CloudWatch Metric API
  * Copyright (c) 2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,8 +22,8 @@
  * source distribution.
  */
 
-#ifndef MOD_AWS_CLOUDWATCH_ERROR_H
-#define MOD_AWS_CLOUDWATCH_ERROR_H
+#ifndef MOD_AWS_CLOUDWATCH_METRIC_H
+#define MOD_AWS_CLOUDWATCH_METRIC_H
 
 #include "mod_aws.h"
 #include "cloudwatch/conn.h"

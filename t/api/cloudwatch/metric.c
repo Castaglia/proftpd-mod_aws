@@ -25,6 +25,7 @@
 /* CloudWatch Metric API tests. */
 
 #include "../tests.h"
+#include "cloudwatch/metric.h"
 
 static pool *p = NULL;
 
@@ -49,6 +50,7 @@ static void set_up(void) {
     pr_trace_set_levels("aws.cloudwatch.conn", 1, 20);
     pr_trace_set_levels("aws.cloudwatch.error", 1, 20);
     pr_trace_set_levels("aws.cloudwatch.metric", 1, 20);
+    pr_trace_set_levels("aws.creds", 1, 20);
     pr_trace_set_levels("aws.http", 1, 20);
   }
 }
@@ -58,6 +60,7 @@ static void tear_down(void) {
     pr_trace_set_levels("aws.cloudwatch.conn", 0, 0);
     pr_trace_set_levels("aws.cloudwatch.error", 0, 0);
     pr_trace_set_levels("aws.cloudwatch.metric", 0, 0);
+    pr_trace_set_levels("aws.creds", 0, 0);
     pr_trace_set_levels("aws.http", 0, 0);
   }
 
@@ -71,24 +74,18 @@ static void tear_down(void) {
 }
 
 static struct cloudwatch_conn *get_cloudwatch(pool *p) {
-  int res;
-  const char *path, *profile, *cacerts, *region, *domain;
-  char *access_key_id, *secret_access_key, *session_token;
+  const char *cacerts, *region, *domain;
+  array_header *credential_providers;
+  struct aws_credential_info *credential_info;
   struct cloudwatch_conn *cw;
 
-  path = "/Users/tj/.aws/credentials";
-  profile = "default";
-  access_key_id = secret_access_key = session_token = NULL;
+  credential_providers = make_array(p, 1, sizeof(char *));
+  *((char **) push_array(credential_providers)) = pstrdup(p,
+    AWS_CREDS_PROVIDER_NAME_PROFILE);
+  credential_info = pcalloc(p, sizeof(struct aws_credential_info));
+  credential_info->profile = "default";
 
-  mark_point();
-  res = aws_creds_from_file(p, path, profile, &access_key_id,
-    &secret_access_key, &session_token);
-  if (res < 0) {
-    return NULL;
-  }
-
-  fail_unless(res == 0, "Failed to get '%s' creds from '%s': %s", profile,
-    path, strerror(errno));
+  pr_env_set(p, "AWS_CREDENTIAL_PROFILES_FILE", "/Users/tj/.aws/credentials");
 
   /* From the instance metadata. */
   cacerts = "/Users/tj/tmp/proftpd-mod_aws/aws-cacerts.pem";
@@ -97,7 +94,7 @@ static struct cloudwatch_conn *get_cloudwatch(pool *p) {
 
   mark_point();
   cw = aws_cloudwatch_conn_alloc(p, max_connect_secs, max_request_secs, cacerts,
-    region, domain, access_key_id, secret_access_key, session_token, NULL);
+    region, domain, credential_providers, credential_info, NULL);
   return cw;
 }
 

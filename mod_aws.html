@@ -446,6 +446,178 @@ Example configuration:
   &lt;/IfModule&gt;
 </pre>
 
+<p>
+The following metrics are logged to CloudWatch:
+<table border=1 summary="Cloudwatch Metrics">
+  <tr>
+    <td><b>Metric</b></td>
+    <td><b>Units</b></td>
+    <td><b>Description</b></td>
+  </tr>
+
+  <tr>
+    <td><code>Connection</code></td>
+    <td><code>Count</code></td>
+    <td><b>Any</b> connection the server</td>
+  </tr>
+
+  <tr>
+    <td><code>Connection.FTP</code></td>
+    <td><code>Count</code></td>
+    <td>FTP session</td>
+  </tr>
+
+  <tr>
+    <td><code>Connection.FTPS</code></td>
+    <td><code>Count</code></td>
+    <td>FTPS session</td>
+  </tr>
+
+  <tr>
+    <td><code>Connection.SCP</code></td>
+    <td><code>Count</code></td>
+    <td>SCP session</td>
+  </tr>
+
+  <tr>
+    <td><code>Connection.SFTP</code></td>
+    <td><code>Count</code></td>
+    <td>SCP session</td>
+  </tr>
+
+  <tr>
+    <td><code>Connection.SQL</code></td>
+    <td><code>Count</code></td>
+    <td>Database connection</td>
+  </tr>
+
+  <tr>
+    <td><code>DirectoryList.Elapsed</code></td>
+    <td><code>Milliseconds</code></td>
+    <td>Directory listing duration</td>
+  </tr>
+
+  <tr>
+    <td><code>DirectoryList.Failed</code></td>
+    <td><code>Count</code></td>
+    <td>Failed directory listing</td>
+  </tr>
+
+  <tr>
+    <td><code>DirectoryList.Success</code></td>
+    <td><code>Count</code></td>
+    <td>Successful directory listing</td>
+  </tr>
+
+  <tr>
+    <td><code>Error.SQL</code></td>
+    <td><code>Count</code></td>
+    <td>Database error</td>
+  </tr>
+
+  <tr>
+    <td><code>FileDownload.Elapsed</code></td>
+    <td><code>Milliseconds</code></td>
+    <td>File download duration</td>
+  </tr>
+
+  <tr>
+    <td><code>FileDownload.Failed</code></td>
+    <td><code>Count</code></td>
+    <td>Failed download</td>
+  </tr>
+
+  <tr>
+    <td><code>FileDownload.Success</code></td>
+    <td><code>Count</code></td>
+    <td>Successful download</td>
+  </tr>
+
+  <tr>
+    <td><code>FileUpload.Elapsed</code></td>
+    <td><code>Milliseconds</code></td>
+    <td>File download duration</td>
+  </tr>
+
+  <tr>
+    <td><code>FileUpload.Failed</code></td>
+    <td><code>Count</code></td>
+    <td>Failed upload</td>
+  </tr>
+
+  <tr>
+    <td><code>FileUpload.Success</code></td>
+    <td><code>Count</code></td>
+    <td>Successful upload</td>
+  </tr>
+
+  <tr>
+    <td><code>Login.Elapsed</code></td>
+    <td><code>Milliseconds</code></td>
+    <td>Login duration</td>
+  </tr>
+
+  <tr>
+    <td><code>Login.Failed</code></td>
+    <td><code>Count</code></td>
+    <td>Failed login</td>
+  </tr>
+
+  <tr>
+    <td><code>Login.Success</code></td>
+    <td><code>Count</code></td>
+    <td>Successful login</td>
+  </tr>
+
+  <tr>
+    <td><code>TimeoutIdle</code></td>
+    <td><code>Count</code></td>
+    <td>Timeout</td>
+  </tr>
+
+  <tr>
+    <td><code>TimeoutLogin</code></td>
+    <td><code>Count</code></td>
+    <td>Timeout</td>
+  </tr>
+
+  <tr>
+    <td><code>TimeoutNoTransfer</code></td>
+    <td><code>Count</code></td>
+    <td>Timeout</td>
+  </tr>
+
+  <tr>
+    <td><code>TimeoutSession</code></td>
+    <td><code>Count</code></td>
+    <td>Timeout</td>
+  </tr>
+
+  <tr>
+    <td><code>TimeoutStalled</code></td>
+    <td><code>Count</code></td>
+    <td>Timeout</td>
+  </tr>
+
+  <tr>
+    <td><code>TLSCipher.*</code></td>
+    <td><code>Count</code></td>
+    <td>Count by specific TLS ciphersuite</td>
+  </tr>
+
+  <tr>
+    <td><code>TLSHandshake.Error</code></td>
+    <td><code>Count</code></td>
+    <td>TLS handshake error</td>
+  </tr>
+
+  <tr>
+    <td><code>TLSProtocol.*</code></td>
+    <td><code>Count</code></td>
+    <td>Count by specific TLS protocol version</td>
+  </tr>
+</table>
+
 <p><a name="FAQ">
 <b>Frequently Asked Questions</b><br>
 

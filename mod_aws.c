@@ -1101,7 +1101,171 @@ MODRET set_awscloudwatchnamespace(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
-/* Event handlers
+/* Command handlers
+ */
+
+static void log_tls_metrics(pool *p, cmd_rec *cmd, int had_error,
+    uint64_t duration_ms, array_header *dimensions) {
+  if (pr_module_exists("mod_tls.c") != TRUE) {
+    return;
+  }
+
+  if (pr_cmd_cmp(cmd, PR_CMD_AUTH_ID) == 0 &&
+      cmd->argc == 2) {
+    char *tls_mode;
+
+    /* Find out if the args are one of the mod_tls (vs GSSAPI et al) ones. */
+
+    tls_mode = cmd->argv[1];
+    if (strcasecmp(tls_mode, "TLS") == 0 ||
+        strcasecmp(tls_mode, "TLS-C") == 0 ||
+        strcasecmp(tls_mode, "TLS-P") == 0 ||
+        strcasecmp(tls_mode, "SSL") == 0) {
+      if (had_error == FALSE) {
+        char *protocol_env, *cipher_env;
+
+        aws_cloudwatch_metric_counter(p, aws_cloudwatch, "Connection.FTPS", 1.0,
+          dimensions, 0);
+        aws_cloudwatch_metric_timer(p, aws_cloudwatch, "TLSHandshake.Elapsed",
+         (double) duration_ms, dimensions, 0);
+
+        protocol_env = pr_env_get(p, "TLS_PROTOCOL");
+        if (protocol_env != NULL) {
+          char *metric;
+
+          metric = pstrcat(p, "TLSProtocol.", protocol_env, NULL);
+          aws_cloudwatch_metric_counter(p, aws_cloudwatch, metric, 1.0,
+            dimensions, 0);
+        }
+
+        cipher_env = pr_env_get(p, "TLS_CIPHER");
+        if (cipher_env != NULL) {
+          char *metric;
+
+          metric = pstrcat(p, "TLSCipher.", cipher_env, NULL);
+          aws_cloudwatch_metric_counter(p, aws_cloudwatch, metric, 1.0,
+            dimensions, 0);
+        }
+      }
+    }
+  }
+}
+
+static void log_cmd_metrics(cmd_rec *cmd, int had_error) {
+  pool *tmp_pool;
+  array_header *dimensions;
+  const uint64_t *start_ms = NULL;
+  uint64_t now_ms = 0, duration_ms = 0;
+
+  if (aws_cloudwatch == NULL) {
+    return;
+  }
+
+  pr_gettimeofday_millis(&now_ms);
+
+  tmp_pool = make_sub_pool(cmd->tmp_pool);
+  dimensions = aws_cloudwatch_dimension_get(tmp_pool, aws_cloudwatch_dimensions,
+    instance_info);
+
+  start_ms = pr_table_get(cmd->notes, "start_ms", NULL);
+  if (start_ms != NULL) {
+    duration_ms = now_ms - *start_ms;
+  }
+
+  log_tls_metrics(tmp_pool, cmd, had_error, duration_ms, dimensions);
+
+  switch (cmd->cmd_id) {
+    case PR_CMD_LIST_ID:
+    case PR_CMD_MLSD_ID:
+    case PR_CMD_NLST_ID:
+      if (had_error == FALSE) {
+        aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch,
+          "DirectoryList.Success", 1.0, dimensions, 0);
+
+      } else {
+        aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch,
+          "DirectoryList.Failed", 1.0, dimensions, 0);
+      }
+
+      aws_cloudwatch_metric_timer(tmp_pool, aws_cloudwatch, "DirectoryList.Elapsed",
+        (double) duration_ms, dimensions, 0);
+      break;
+
+    case PR_CMD_RETR_ID:
+      if (had_error == FALSE) {
+        aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch,
+          "FileDownload.Success", 1.0, dimensions, 0);
+
+      } else {
+        aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch,
+          "FileDownload.Failed", 1.0, dimensions, 0);
+      }
+
+      aws_cloudwatch_metric_timer(tmp_pool, aws_cloudwatch, "FileDownload.Elapsed",
+        (double) duration_ms, dimensions, 0);
+      break;
+
+    case PR_CMD_APPE_ID:
+    case PR_CMD_STOR_ID:
+    case PR_CMD_STOU_ID:
+      if (had_error == FALSE) {
+        aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch,
+          "FileUpload.Success", 1.0, dimensions, 0);
+
+      } else {
+        aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch,
+          "FileUpload.Failed", 1.0, dimensions, 0);
+      }
+
+      aws_cloudwatch_metric_timer(tmp_pool, aws_cloudwatch, "FileUpload.Elapsed",
+        (double) duration_ms, dimensions, 0);
+      break;
+
+    case PR_CMD_PASS_ID:
+      if (had_error == FALSE) {
+        const char *proto;
+
+        proto = pr_session_get_protocol(0);
+        if (strcmp(proto, "ftp") == 0) {
+          /* At this point in time, we are certain that we have a plain FTP
+           * connection, not FTPS or anything else.
+           */
+          aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch, "Connection.FTP",
+            1.0, dimensions, 0);
+        }
+
+        aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch, "Login.Success",
+          1.0, dimensions, 0);
+
+      } else {
+        aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch, "Login.Failed",
+          1.0, dimensions, 0);
+      }
+
+      aws_cloudwatch_metric_timer(tmp_pool, aws_cloudwatch, "Login.Elapsed",
+        (double) duration_ms, dimensions, 0);
+      break;
+
+    default:
+      /* Ignore */
+      break;
+  }
+
+  aws_cloudwatch_conn_flush(tmp_pool, aws_cloudwatch);
+  destroy_pool(tmp_pool);
+}
+
+MODRET aws_log_any(cmd_rec *cmd) {
+  log_cmd_metrics(cmd, FALSE);
+  return PR_DECLINED(cmd);
+}
+
+MODRET aws_log_any_err(cmd_rec *cmd) {
+  log_cmd_metrics(cmd, TRUE);
+  return PR_DECLINED(cmd);
+}
+
+/* Event listeners
  */
 
 static void aws_exit_ev(const void *event_data, void *user_data) {
@@ -1110,7 +1274,7 @@ static void aws_exit_ev(const void *event_data, void *user_data) {
     array_header *dimensions;
     unsigned char *authenticated;
 
-    metric = "connection";
+    metric = "Connection";
     dimensions = aws_cloudwatch_dimension_get(aws_pool,
       aws_cloudwatch_dimensions, instance_info);
     aws_cloudwatch_metric_counter(aws_pool, aws_cloudwatch, metric, -1.0,
@@ -1217,6 +1381,41 @@ static void aws_shutdown_ev(const void *event_data, void *user_data) {
     (void) close(aws_logfd);
     aws_logfd = -1;
   }
+}
+
+static void incr_metric(const char *metric, double incr) {
+  if (aws_cloudwatch != NULL) {
+    pool *tmp_pool;
+    array_header *dimensions;
+
+    tmp_pool = make_sub_pool(aws_pool);
+    dimensions = aws_cloudwatch_dimension_get(tmp_pool,
+      aws_cloudwatch_dimensions, instance_info);
+    aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch, metric, incr, dimensions,
+      0);
+    aws_cloudwatch_conn_flush(tmp_pool, aws_cloudwatch);
+    destroy_pool(tmp_pool);
+  }
+}
+
+static void aws_ssh2_scp_sess_opened_ev(const void *event_data, void *user_data) {
+  incr_metric("Connection.SCP", 1.0);
+}
+
+static void aws_ssh2_sftp_sess_opened_ev(const void *event_data, void *user_data) {
+  incr_metric("Connection.SFTP", 1.0);
+}
+
+static void aws_sql_db_conn_closed_ev(const void *event_data, void *user_data) {
+  incr_metric("Connection.SQL", -1.0);
+}
+
+static void aws_sql_db_conn_opened_ev(const void *event_data, void *user_data) {
+  incr_metric("Connection.SQL", 1.0);
+}
+
+static void aws_sql_db_error_ev(const void *event_data, void *user_data) {
+  incr_metric("Error.SQL", 1.0);
 }
 
 static void aws_startup_ev(const void *event_data, void *user_data) {
@@ -1336,6 +1535,31 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
   /* XXX Watch out for any fds that should NOT be opened (0, 1, 2), but
    * which may be help open by e.g. libcurl.  If necessary, force-close them.
    */
+}
+
+static void aws_timeout_idle_ev(const void *event_data, void *user_data) {
+  incr_metric("TimeoutIdle", 1.0);
+}
+
+static void aws_timeout_login_ev(const void *event_data, void *user_data) {
+  incr_metric("TimeoutLogin", 1.0);
+}
+
+static void aws_timeout_noxfer_ev(const void *event_data, void *user_data) {
+  incr_metric("TimeoutNoTransfer", 1.0);
+}
+
+static void aws_timeout_session_ev(const void *event_data, void *user_data) {
+  incr_metric("TimeoutSession", 1.0);
+}
+
+static void aws_timeout_stalled_ev(const void *event_data, void *user_data) {
+  incr_metric("TimeoutStalled", 1.0);
+}
+
+static void aws_tls_handshake_error_ev(const void *event_data,
+    void *user_data) {
+  incr_metric("TLSHandshake.Error", 1.0);
 }
 
 /* XXX Do we want to support any Controls/ftpctl actions? */
@@ -1474,7 +1698,8 @@ static int aws_sess_init(void) {
 
   if (aws_services & AWS_SERVICE_CLOUDWATCH) {
     pool *tmp_pool;
-    const char *domain;
+    const char *domain, *iam_role;
+    struct aws_credential_info *cred_info = NULL;
     array_header *dimensions;
 
     c = find_config(main_server->conf, CONF_PARAM, "AWSCloudWatchDimensions",
@@ -1493,9 +1718,14 @@ static int aws_sess_init(void) {
     domain = pstrndup(tmp_pool, instance_info->domain, instance_info->domainsz);
     iam_role = pstrndup(tmp_pool, instance_info->iam_role,
       instance_info->iam_rolesz);
+
+    cred_info = pcalloc(tmp_pool, sizeof(struct aws_credential_info));
+    cred_info->iam_role = iam_role;
+
     aws_cloudwatch = aws_cloudwatch_conn_alloc(aws_pool,
       aws_connect_timeout_secs, aws_request_timeout_secs, aws_cacerts,
-      instance_info->region, domain, iam_role, aws_cloudwatch_namespace);
+      instance_info->region, domain, aws_creds_providers, cred_info,
+      aws_cloudwatch_namespace);
     if (aws_cloudwatch != NULL) {
       pr_event_register(&aws_module, "core.timeout-idle",
         aws_timeout_idle_ev, NULL);
@@ -1515,11 +1745,20 @@ static int aws_sess_init(void) {
           aws_ssh2_scp_sess_opened_ev, NULL);
       }
 
+      if (pr_module_exists("mod_sql.c") == TRUE) {
+        pr_event_register(&aws_module, "mod_sql.db.connection-opened",
+          aws_sql_db_conn_opened_ev, NULL);
+        pr_event_register(&aws_module, "mod_sql.db.connection-closed",
+          aws_sql_db_conn_closed_ev, NULL);
+        pr_event_register(&aws_module, "mod_sql.db.error",
+          aws_sql_db_error_ev, NULL);
+      }
+
       if (pr_module_exists("mod_tls.c") == TRUE) {
         pr_event_register(&aws_module, "mod_tls.ctrl-handshake-failed",
-          aws_tls_ctrl_handshake_error_ev, NULL);
+          aws_tls_handshake_error_ev, NULL);
         pr_event_register(&aws_module, "mod_tls.data-handshake-failed",
-          aws_tls_data_handshake_error_ev, NULL);
+          aws_tls_handshake_error_ev, NULL);
       }
 
       /* We only want to set the session start time once; this function could be
@@ -1532,7 +1771,7 @@ static int aws_sess_init(void) {
 
       dimensions = aws_cloudwatch_dimension_get(tmp_pool,
         aws_cloudwatch_dimensions, instance_info);
-      aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch, "connection", 1.0,
+      aws_cloudwatch_metric_counter(tmp_pool, aws_cloudwatch, "Connection", 1.0,
         dimensions, 0);
       aws_cloudwatch_conn_flush(tmp_pool, aws_cloudwatch);
 
@@ -1573,6 +1812,11 @@ static conftable aws_conftab[] = {
   { NULL }
 };
 
+static cmdtable aws_cmdtab[] = {
+  { LOG_CMD,		C_ANY,	G_NONE,	aws_log_any,		FALSE,	FALSE },
+  { LOG_CMD_ERR,	C_ANY,	G_NONE,	aws_log_any_err,	FALSE,	FALSE },
+};
+
 module aws_module = {
   /* Always NULL */
   NULL, NULL,
@@ -1587,7 +1831,7 @@ module aws_module = {
   aws_conftab,
 
   /* Module command handler table */
-  NULL,
+  aws_cmdtab,
 
   /* Module authentication handler table */
   NULL,

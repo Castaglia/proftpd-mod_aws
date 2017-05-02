@@ -26,7 +26,7 @@
 #define MOD_AWS_CLOUDWATCH_CONN_H
 
 #include "mod_aws.h"
-#include "instance.h"
+#include "creds.h"
 
 /* CloudWatch Connections */
 struct cloudwatch_conn {
@@ -37,8 +37,9 @@ struct cloudwatch_conn {
   const char *domain;
 
   /* To be refreshed whenever the credentials are deemed too old. */
-  const char *iam_role;
-  struct iam_info *iam_info;
+  const array_header *credential_providers;
+  const struct aws_credential_info *credential_info;
+  struct aws_credentials *credentials;
 
   /* For handling request/response documents. */
   pool *req_pool;
@@ -54,7 +55,8 @@ struct cloudwatch_conn {
 struct cloudwatch_conn *aws_cloudwatch_conn_alloc(pool *p,
   unsigned long max_connect_secs, unsigned long max_request_secs,
   const char *cacerts, const char *region, const char *domain,
-  const char *iam_role, const char *namespace);
+  const array_header *credential_providers,
+  const struct aws_credential_info *credential_info, const char *namespace);
 
 int aws_cloudwatch_conn_destroy(pool *p, struct cloudwatch_conn *cw);
 

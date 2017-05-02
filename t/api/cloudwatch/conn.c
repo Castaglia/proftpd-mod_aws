@@ -54,7 +54,7 @@ static void tear_down(void) {
   if (p != NULL) {
     destroy_pool(p);
     p = permanent_pool = NULL;
-  } 
+  }
 }
 
 START_TEST (cloudwatch_conn_destroy_test) {
@@ -70,7 +70,8 @@ END_TEST
 START_TEST (cloudwatch_conn_alloc_test) {
   struct cloudwatch_conn *cw;
 
-  cw = aws_cloudwatch_conn_alloc(NULL, 0, 0, NULL, NULL, NULL, NULL);
+  mark_point();
+  cw = aws_cloudwatch_conn_alloc(NULL, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL);
   fail_unless(cw == NULL, "Failed to handle null pool");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);

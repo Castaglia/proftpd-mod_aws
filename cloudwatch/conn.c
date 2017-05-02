@@ -43,7 +43,8 @@ static const char *trace_channel = "aws.cloudwatch.conn";
 struct cloudwatch_conn *aws_cloudwatch_conn_alloc(pool *p,
     unsigned long max_connect_secs, unsigned long max_request_secs,
     const char *cacerts, const char *region, const char *domain,
-    const char *iam_role, const char *namespace) {
+    const array_header *credential_providers,
+    const struct aws_credential_info *credential_info, const char *namespace) {
   pool *cw_pool;
   struct cloudwatch_conn *cw;
   void *http;
@@ -66,7 +67,8 @@ struct cloudwatch_conn *aws_cloudwatch_conn_alloc(pool *p,
   cw->http = http;
   cw->region = pstrdup(cw->pool, region);
   cw->domain = pstrdup(cw->pool, domain);
-  cw->iam_role = pstrdup(cw->pool, iam_role);
+  cw->credential_providers = credential_providers;
+  cw->credential_info = credential_info;
 
   if (namespace != NULL) {
     cw->namespace = pstrdup(cw->pool, namespace);
@@ -186,33 +188,27 @@ static int cloudwatch_perform(pool *p, void *http, int http_method,
       return -1;
   }
 
-  if (cw->iam_info == NULL) {
-    /* Need to get AWS credentials for signing requests. */
-    if (cw->iam_role != NULL) {
-      cw->iam_info = aws_instance_get_iam_credentials(cw->pool, cw->iam_role);
-      if (cw->iam_info == NULL) {
-        pr_trace_msg(trace_channel, 1,
-          "error obtaining IAM credentials for role '%s': %s", cw->iam_role,
-          strerror(errno));
-        errno = EPERM;
-        return -1;
-      }
+  if (cw->credentials == NULL) {
+    int res;
 
-    } else {
-      /* XXX TODO:
-       * Use aws_creds_from_chain, with a providers list of "profile",
-       * "properties", "env", to try to get credentials.
-       */
+    /* Need to get AWS credentials for signing requests. */
+    res = aws_creds_from_chain(cw->pool, cw->credential_providers,
+      cw->credential_info, &(cw->credentials));
+    if (res < 0) {
+      pr_trace_msg(trace_channel, 1,
+        "error obtaining AWS credentials: %s", strerror(errno));
+      errno = EPERM;
+      return -1;
     }
   }
 
   host = pstrcat(p, aws_service, ".", cw->region, ".", cw->domain, NULL);
   (void) pr_table_add(req_headers, pstrdup(p, AWS_HTTP_HEADER_HOST), host, 0);
 
-  if (cw->session_token != NULL) {
+  if (cw->credentials->session_token != NULL) {
     (void) pr_table_add(req_headers,
       pstrdup(p, AWS_HTTP_HEADER_X_AMZ_SECURITY_TOKEN),
-      pstrdup(p, cw->session_token), 0);
+      pstrdup(p, cw->credentials->session_token), 0);
   }
 
   base_url = pstrcat(p, "https://", host, NULL);
@@ -232,8 +228,8 @@ static int cloudwatch_perform(pool *p, void *http, int http_method,
     url = pstrcat(p, base_url, path, NULL);
   }
 
-  res = aws_sign_v4_generate(p, cw->iam_info->access_key_id,
-    cw->iam_info->secret_access_key, cw->iam_info->session_token, cw->region,
+  res = aws_sign_v4_generate(p, cw->credentials->access_key_id,
+    cw->credentials->secret_access_key, cw->credentials->session_token, cw->region,
     aws_service, http, method_name, path, query_params, req_headers,
     request_body, request_bodysz, request_time);
   if (res < 0) {

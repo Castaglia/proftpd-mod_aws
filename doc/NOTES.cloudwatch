@@ -23,16 +23,14 @@ events:
   directory listings (success/failure, timing)
   file uploads (success/failure, timing)
   file downloads (success/failure, timing)
-  timeouts
+  timeouts (count)
 
-  tls protocol version
-  tls cipher
+  tls protocol version (count)
+  tls cipher (count)
 
 * Protocol as a dimension, not a namespace, so that aggregation can be done
   across protocols easily.
 
-
+TODO:
   AWSCloudWatchExcludeFilter
   AWSCloudWatchSampling
-  AWSCloudWatchNamespace (max 256 characters)
-    default: "proftpd"

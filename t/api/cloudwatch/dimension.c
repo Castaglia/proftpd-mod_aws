@@ -52,7 +52,6 @@ static void tear_down(void) {
 START_TEST (cloudwatch_dimension_get_test) {
   unsigned long flags;
   array_header *res;
-  struct aws_info *info;
 
   mark_point();
   res = aws_cloudwatch_dimension_get(NULL, 0, NULL);
@@ -74,7 +73,7 @@ START_TEST (cloudwatch_dimension_get_test) {
   res = aws_cloudwatch_dimension_get(p, flags, NULL);
   fail_unless(res != NULL, "Failed to get dimension for flags %lu: %s",
     flags, strerror(errno));
-  fail_unless(res->nelts == 0, "Expected nelts 0, got %u", res->nelts);
+  fail_unless(res->nelts == 2, "Expected nelts 2, got %u", res->nelts);
 
   flags = AWS_CLOUDWATCH_DIMENSION_INSTANCE_ID;
 
