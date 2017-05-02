@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws EC2 API
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@
 #include "mod_aws.h"
 #include "utils.h"
 #include "http.h"
-#include "instance.h"
+#include "creds.h"
 #include "error.h"
 #include "sign.h"
 #include "xml.h"
@@ -51,7 +51,8 @@ static void clear_response(struct ec2_conn *ec2) {
 
 struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
     unsigned long max_request_secs, const char *cacerts, const char *region,
-    const char *domain, const char *iam_role) {
+    const char *domain, const array_header *credential_providers,
+    const struct aws_credential_info *credential_info) {
   pool *ec2_pool;
   struct ec2_conn *ec2;
   void *http;
@@ -69,7 +70,8 @@ struct ec2_conn *aws_ec2_conn_alloc(pool *p, unsigned long max_connect_secs,
   ec2->http = http;
   ec2->region = pstrdup(ec2->pool, region);
   ec2->domain = pstrdup(ec2->pool, domain);
-  ec2->iam_role = pstrdup(ec2->pool, iam_role);
+  ec2->credential_providers = credential_providers;
+  ec2->credential_info = credential_info;
 
   return ec2;
 }
@@ -109,24 +111,17 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
       return -1;
   }
 
-  if (ec2->iam_info == NULL) {
-    /* Need to get AWS credentials for signing requests. */
-    if (ec2->iam_role != NULL) {
-      ec2->iam_info = aws_instance_get_iam_credentials(ec2->pool,
-        ec2->iam_role);
-      if (ec2->iam_info == NULL) {
-        pr_trace_msg(trace_channel, 1,
-          "error obtaining IAM credentials for role '%s': %s", ec2->iam_role,
-          strerror(errno));
-        errno = EPERM;
-        return -1;
-      }
+  if (ec2->credentials == NULL) {
+    int res;
 
-    } else {
-      /* XXX TODO:
-       * Use aws_creds_from_chain, with a providers list of "profile",
-       * "properties", "env", to try to get credentials.
-       */
+    /* Need to get AWS credentials for signing requests. */
+    res = aws_creds_from_chain(ec2->pool, ec2->credential_providers,
+      ec2->credential_info, &(ec2->credentials));
+    if (res < 0) {
+      pr_trace_msg(trace_channel, 1,
+        "error obtaining AWS credentials: %s", strerror(errno));
+      errno = EPERM;
+      return -1;
     }
   }
 
@@ -151,8 +146,8 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
   }
 
   res = aws_sign_v4_generate(p,
-    ec2->iam_info->access_key_id, ec2->iam_info->secret_access_key,
-    ec2->iam_info->token, ec2->region, aws_service, http, method_name, path,
+    ec2->credentials->access_key_id, ec2->credentials->secret_access_key,
+    ec2->credentials->session_token, ec2->region, aws_service, http, method_name, path,
     query_params, http_headers, request_body, request_time);
   if (res < 0) {
     int xerrno = errno;

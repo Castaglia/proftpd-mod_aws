@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws Route53 API
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -50,7 +50,9 @@ static void clear_response(struct route53_conn *route53) {
 
 struct route53_conn *aws_route53_conn_alloc(pool *p,
     unsigned long max_connect_secs, unsigned long max_request_secs,
-    const char *cacerts, const char *domain, const char *iam_role) {
+    const char *cacerts, const char *domain,
+    const array_header *credential_providers,
+    const struct aws_credential_info *credential_info) {
   pool *route53_pool;
   struct route53_conn *route53;
   void *http;
@@ -67,7 +69,8 @@ struct route53_conn *aws_route53_conn_alloc(pool *p,
   route53->pool = route53_pool;
   route53->http = http;
   route53->domain = pstrdup(route53->pool, domain);
-  route53->iam_role = pstrdup(route53->pool, iam_role);
+  route53->credential_providers = credential_providers;
+  route53->credential_info = credential_info;
 
   return route53;
 }
@@ -96,15 +99,16 @@ static int route53_get(pool *p, void *http, const char *path,
   time_t request_time;
   struct tm *gmt_tm;
 
-  if (route53->iam_info == NULL) {
+  if (route53->credentials == NULL) {
+    int res;
+
     /* Need to get the temporary IAM credentials for signing. */
 
-    route53->iam_info = aws_instance_get_iam_credentials(route53->pool,
-      route53->iam_role);
-    if (route53->iam_info == NULL) {
+    res = aws_creds_from_chain(route53->pool, route53->credential_providers,
+      route53->credential_info, &(route53->credentials));
+    if (res < 0) {
       pr_trace_msg(trace_channel, 1,
-        "error obtaining IAM credentials for role '%s': %s", route53->iam_role,
-        strerror(errno));
+        "error obtaining AWS credentials: %s", strerror(errno));
       errno = EPERM;
       return -1;
     }
@@ -147,9 +151,10 @@ static int route53_get(pool *p, void *http, const char *path,
   }
 
   res = aws_sign_v4_generate(p,
-    route53->iam_info->access_key_id, route53->iam_info->secret_access_key,
-    route53->iam_info->token, aws_region, aws_service, http, "GET", path,
-    query_params, http_headers, "", request_time);
+    route53->credentials->access_key_id,
+    route53->credentials->secret_access_key,
+    route53->credentials->session_token, aws_region, aws_service, http, "GET",
+    path, query_params, http_headers, "", request_time);
   if (res < 0) {
     int xerrno = errno;
 

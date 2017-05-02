@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2016-2017 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -397,6 +397,7 @@ Suite *tests_get_http_suite(void) {
   testcase = tcase_create("base");
 
   tcase_add_checked_fixture(testcase, set_up, tear_down);
+  tcase_set_timeout(testcase, 10);
 
   tcase_add_test(testcase, http_alloc_test);
   tcase_add_test(testcase, http_destroy_test);
