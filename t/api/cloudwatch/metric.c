@@ -104,6 +104,10 @@ START_TEST (cloudwatch_metric_counter_test) {
   double incr;
   struct cloudwatch_conn *cw;
 
+  if (getenv("TRAVIS") != NULL) {
+    return;
+  }
+
   mark_point();
   res = aws_cloudwatch_metric_counter(NULL, NULL, NULL, 0.0, NULL, 0);
   fail_unless(res < 0, "Failed to handle null pool");
@@ -146,6 +150,10 @@ START_TEST (cloudwatch_metric_timer_test) {
   char *name;
   double ms;
   struct cloudwatch_conn *cw;
+
+  if (getenv("TRAVIS") != NULL) {
+    return;
+  }
 
   mark_point();
   res = aws_cloudwatch_metric_timer(NULL, NULL, NULL, 0.0, NULL, 0);
