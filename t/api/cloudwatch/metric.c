@@ -73,19 +73,19 @@ static void tear_down(void) {
   } 
 }
 
-static struct cloudwatch_conn *get_cloudwatch(pool *p) {
+static struct cloudwatch_conn *get_cloudwatch(pool *cw_pool) {
   const char *cacerts, *region, *domain;
   array_header *credential_providers;
   struct aws_credential_info *credential_info;
   struct cloudwatch_conn *cw;
 
-  credential_providers = make_array(p, 1, sizeof(char *));
-  *((char **) push_array(credential_providers)) = pstrdup(p,
+  credential_providers = make_array(cw_pool, 1, sizeof(char *));
+  *((char **) push_array(credential_providers)) = pstrdup(cw_pool,
     AWS_CREDS_PROVIDER_NAME_PROFILE);
-  credential_info = pcalloc(p, sizeof(struct aws_credential_info));
+  credential_info = pcalloc(cw_pool, sizeof(struct aws_credential_info));
   credential_info->profile = "default";
 
-  pr_env_set(p, "AWS_CREDENTIAL_PROFILES_FILE", "/Users/tj/.aws/credentials");
+  pr_env_set(cw_pool, "AWS_CREDENTIAL_PROFILES_FILE", "/Users/tj/.aws/credentials");
 
   /* From the instance metadata. */
   cacerts = "/Users/tj/tmp/proftpd-mod_aws/aws-cacerts.pem";
@@ -93,8 +93,8 @@ static struct cloudwatch_conn *get_cloudwatch(pool *p) {
   domain = "amazonaws.com";
 
   mark_point();
-  cw = aws_cloudwatch_conn_alloc(p, max_connect_secs, max_request_secs, cacerts,
-    region, domain, credential_providers, credential_info, NULL);
+  cw = aws_cloudwatch_conn_alloc(cw_pool, max_connect_secs, max_request_secs,
+    cacerts, region, domain, credential_providers, credential_info, NULL);
   return cw;
 }
 

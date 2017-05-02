@@ -112,8 +112,6 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
   }
 
   if (ec2->credentials == NULL) {
-    int res;
-
     /* Need to get AWS credentials for signing requests. */
     res = aws_creds_from_chain(ec2->pool, ec2->credential_providers,
       ec2->credential_info, &(ec2->credentials));

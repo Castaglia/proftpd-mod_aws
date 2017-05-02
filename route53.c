@@ -100,10 +100,7 @@ static int route53_get(pool *p, void *http, const char *path,
   struct tm *gmt_tm;
 
   if (route53->credentials == NULL) {
-    int res;
-
     /* Need to get the temporary IAM credentials for signing. */
-
     res = aws_creds_from_chain(route53->pool, route53->credential_providers,
       route53->credential_info, &(route53->credentials));
     if (res < 0) {

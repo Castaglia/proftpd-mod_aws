@@ -189,8 +189,6 @@ static int cloudwatch_perform(pool *p, void *http, int http_method,
   }
 
   if (cw->credentials == NULL) {
-    int res;
-
     /* Need to get AWS credentials for signing requests. */
     res = aws_creds_from_chain(cw->pool, cw->credential_providers,
       cw->credential_info, &(cw->credentials));

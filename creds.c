@@ -549,7 +549,7 @@ int aws_creds_from_iam(pool *p, const char *iam_role,
 
   destroy_pool(iam_pool);
 
-  xerrno = errno;
+  errno = xerrno;
   return res;
 }
 
