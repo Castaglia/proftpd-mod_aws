@@ -30,7 +30,7 @@ before_script:
 script:
   # - find . -type f -name "*.c" -print | grep -v t\/ | xargs cppcheck 2>&1
   # - find . -type f -name "*.c" -print | grep -v t\/ | xargs rats --language=c
-  - git clone https://github.com/proftpd/proftpd.git
+  - git clone --depth 10 https://github.com/proftpd/proftpd.git
   - mkdir -p proftpd/contrib/mod_aws/
   - cp *.[ch] proftpd/contrib/mod_aws/
   - mkdir -p proftpd/contrib/mod_aws/cloudwatch/
@@ -41,11 +41,11 @@ script:
   - cp install-sh proftpd/contrib/mod_aws/
   - cp -R t/ proftpd/contrib/mod_aws/t/
   - cd proftpd
-  - ./configure --enable-devel=coverage --enable-dso --enable-openssl --enable-tests --with-shared=mod_aws --with-includes=/usr/include/libxml2
+  - ./configure LIBS='-lm -lrt -pthread' --enable-devel=coverage --enable-dso --enable-openssl --enable-tests --with-shared=mod_aws --with-includes=/usr/include/libxml2
   - make
   # Last, a build with a static module, and run the tests
   - make clean
-  - ./configure --enable-devel=coverage --enable-openssl --enable-tests --with-modules=mod_aws --with-includes=/usr/include/libxml2
+  - ./configure LIBS='-lm -lrt -pthread' --enable-devel=coverage --enable-openssl --enable-tests --with-modules=mod_aws --with-includes=/usr/include/libxml2
   - make
   - cd contrib/mod_aws && make TEST_VERBOSE=1 check && cd ../../
 
