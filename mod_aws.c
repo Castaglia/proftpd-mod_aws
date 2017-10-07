@@ -1448,19 +1448,12 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
   }
 
   if (instance_info->domain == NULL) {
-    /* Assume that we are not running within AWS EC2. */
-    pr_log_debug(DEBUG0, MOD_AWS_VERSION
-      ": not running within AWS EC2, disabling mod_aws");
-    aws_engine = FALSE;
-
-    if (aws_logfd >= 0) {
-      (void) close(aws_logfd);
-      aws_logfd = -1;
-    }
-
-    destroy_pool(aws_pool);
-    aws_pool = NULL;
-    instance_info = NULL;
+    /* Nothing more to do at this time; the subsequent code deals with the
+     * EC2 environment.
+     *
+     * However, we DO provide other AWS functionality outside of EC2, so we
+     * do not want to simply disable the module here.
+     */
 
     return;
   }
