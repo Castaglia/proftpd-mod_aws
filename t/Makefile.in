@@ -54,7 +54,7 @@ TEST_API_DEPS=\
   $(module_srcdir)/utils.o \
   $(TEST_CLOUDWATCH_DEPS)
 
-TEST_API_LIBS=-lcheck
+TEST_API_LIBS=-lcheck -lm
 
 TEST_CLOUDWATCH_OBJS=api/cloudwatch/conn.o \
   api/cloudwatch/error.o \
