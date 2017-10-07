@@ -1,5 +1,5 @@
 dnl ProFTPD - mod_aws
-dnl Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+dnl Copyright (c) 2016-2017 TJ Saunders <tj@castaglia.org>
 dnl
 dnl This program is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -119,6 +119,31 @@ AC_TRY_LINK(
   ]
 )
 
+AC_MSG_CHECKING([whether linking with OpenSSL functions requires -lz])
+saved_libs="$LIBS"
+
+dnl Splice out -lsupp, since that library hasn't been built yet
+LIBS=`echo "$LIBS" | sed -e 's/-lsupp//g'`;
+LIBS="-lcrypto -lz $LIBS"
+
+AC_TRY_LINK(
+  [
+    #include <openssl/evp.h>
+    #include <openssl/bio.h>
+    #include <openssl/comp.h>
+  ], [
+    BIO *bio;
+    SSLeay_add_all_algorithms();
+    bio = BIO_new(BIO_f_zlib());
+  ], [
+    AC_MSG_RESULT(yes)
+    LIBS="$saved_libs -lz"
+  ], [
+    AC_MSG_RESULT(no)
+    LIBS="$saved_libs"
+  ]
+)
+
 AC_MSG_CHECKING([whether OpenSSL supports SHA256])
 
 dnl Splice out -lsupp, since that library hasn't been built yet
@@ -129,15 +154,13 @@ AC_TRY_LINK(
   [
     #include <openssl/evp.h>
   ], [
-    EVP_MD *md;
+    const EVP_MD *md;
     md = EVP_sha256();
   ], [
     AC_MSG_RESULT(yes)
     AC_DEFINE(HAVE_OPENSSL_SHA256, 1, [OpenSSL supports SHA256])
-    LIBS="$saved_libs"
   ], [
     AC_MSG_RESULT(no)
-    LIBS="$saved_libs"
   ]
 )
 
