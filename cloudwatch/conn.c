@@ -49,7 +49,8 @@ struct cloudwatch_conn *aws_cloudwatch_conn_alloc(pool *p,
   struct cloudwatch_conn *cw;
   void *http;
 
-  if (p == NULL) {
+  if (p == NULL ||
+      domain == NULL) {
     errno = EINVAL;
     return NULL;
   }
@@ -77,6 +78,9 @@ struct cloudwatch_conn *aws_cloudwatch_conn_alloc(pool *p,
     cw->namespace = pstrdup(cw->pool, AWS_CLOUDWATCH_DEFAULT_NAMESPACE);
   }
 
+  pr_trace_msg(trace_channel, 17,
+    "opening CloudWatch connection using AWS region '%s', domain '%s', "
+    "namespace '%s'", cw->region, cw->domain, cw->namespace);
   return cw;
 }
 

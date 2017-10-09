@@ -42,7 +42,7 @@ int aws_creds_from_env(pool *p, struct aws_credentials **creds) {
   k = "AWS_ACCESS_KEY_ID";
   id = pr_env_get(p, k);
   if (id == NULL) {
-    pr_trace_msg(trace_channel, 14, "no %s environ variable found", k);
+    pr_trace_msg(trace_channel, 14, "no %s environment variable found", k);
     errno = ENOENT;
     return -1;
   }
@@ -50,7 +50,7 @@ int aws_creds_from_env(pool *p, struct aws_credentials **creds) {
   k = "AWS_SECRET_ACCESS_KEY";
   secret = pr_env_get(p, k);
   if (secret == NULL) {
-    pr_trace_msg(trace_channel, 14, "no %s environ variable found", k);
+    pr_trace_msg(trace_channel, 14, "no %s environment variable found", k);
     errno = ENOENT;
     return -1;
   }

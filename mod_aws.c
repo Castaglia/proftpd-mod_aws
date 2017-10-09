@@ -64,6 +64,7 @@ static unsigned long aws_services = 0UL;
 
 static const char *aws_logfile = NULL;
 static const char *aws_cacerts = PR_CONFIG_DIR "/aws-cacerts.pem";
+static const char *aws_region = NULL;
 
 /* For obtaining AWS credentials. */
 static const char *aws_profile = AWS_CREDS_DEFAULT_PROFILE;
@@ -956,6 +957,19 @@ MODRET set_awsprofile(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
+/* usage: AWSRegion region */
+MODRET set_awsregion(cmd_rec *cmd) {
+  config_rec *c;
+
+  CHECK_ARGS(cmd, 1);
+  CHECK_CONF(cmd, CONF_ROOT|CONF_VIRTUAL|CONF_GLOBAL);
+
+  c = add_config_param(cmd->argv[0], 1, NULL);
+  c->argv[0] = pstrdup(c->pool, cmd->argv[1]);
+
+  return PR_HANDLED(cmd);
+}
+
 /* usage: AWSSecurityGroup sg-id */
 MODRET set_awssecuritygroup(cmd_rec *cmd) {
   const char *sg_id;
@@ -1256,11 +1270,19 @@ static void log_cmd_metrics(cmd_rec *cmd, int had_error) {
 }
 
 MODRET aws_log_any(cmd_rec *cmd) {
+  if (aws_engine == FALSE) {
+    return PR_DECLINED(cmd);
+  }
+
   log_cmd_metrics(cmd, FALSE);
   return PR_DECLINED(cmd);
 }
 
 MODRET aws_log_any_err(cmd_rec *cmd) {
+  if (aws_engine == FALSE) {
+    return PR_DECLINED(cmd);
+  }
+
   log_cmd_metrics(cmd, TRUE);
   return PR_DECLINED(cmd);
 }
@@ -1432,34 +1454,21 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 
   instance_info = aws_instance_get_info(aws_pool);
   if (instance_info == NULL) {
-    pr_log_debug(DEBUG0, MOD_AWS_VERSION
+    pr_log_debug(DEBUG1, MOD_AWS_VERSION
       ": unable to discover EC2 instance metadata: %s", strerror(errno));
-    aws_engine = FALSE;
-
-    if (aws_logfd >= 0) {
-      (void) close(aws_logfd);
-      aws_logfd = -1;
-    }
-
-    destroy_pool(aws_pool);
-    aws_pool = NULL;
-
     return;
   }
 
   if (instance_info->domain == NULL) {
-    /* Assume that we are not running within AWS EC2. */
-    pr_log_debug(DEBUG0, MOD_AWS_VERSION
-      ": not running within AWS EC2, disabling mod_aws");
-    aws_engine = FALSE;
+    /* Nothing more to do at this time; the subsequent code deals with the
+     * EC2 environment.
+     *
+     * However, we DO provide other AWS functionality outside of EC2, so we
+     * do not want to simply disable the module here.
+     */
 
-    if (aws_logfd >= 0) {
-      (void) close(aws_logfd);
-      aws_logfd = -1;
-    }
-
-    destroy_pool(aws_pool);
-    aws_pool = NULL;
+    pr_log_debug(DEBUG1, MOD_AWS_VERSION
+      ": no EC2 instance metadata available (not running within AWS EC2)");
     instance_info = NULL;
 
     return;
@@ -1585,6 +1594,8 @@ static int aws_init(void) {
     return 0;
   }
 
+  aws_xml_init(aws_pool);
+
 #if defined(PR_SHARED_MODULE)
   pr_event_register(&aws_module, "core.module-unload", aws_mod_unload_ev,
     NULL);
@@ -1592,8 +1603,6 @@ static int aws_init(void) {
   pr_event_register(&aws_module, "core.restart", aws_restart_ev, NULL);
   pr_event_register(&aws_module, "core.shutdown", aws_shutdown_ev, NULL);
   pr_event_register(&aws_module, "core.startup", aws_startup_ev, NULL);
-
-  aws_xml_init(aws_pool);
 
   return 0;
 }
@@ -1615,6 +1624,19 @@ static int aws_sess_init(void) {
     aws_creds_providers = c->argv[0];
   }
 
+  c = find_config(main_server->conf, CONF_PARAM, "AWSRegion", FALSE);
+  if (c != NULL) {
+    aws_region = c->argv[0];
+
+  } else {
+    const char *region_env;
+
+    region_env = pr_env_get(session.pool, "AWS_DEFAULT_REGION");
+    if (region_env != NULL) {
+      aws_region = pstrdup(session.pool, region_env);
+    }
+  }
+
   /* Remove all timers registered during e.g. startup; we only want those
    * timers firing in the daemon process, not in session processes.
    */
@@ -1630,58 +1652,59 @@ static int aws_sess_init(void) {
     instance_health = NULL;
   }
 
-  if (instance_info == NULL) {
-    return 0;
-  }
+  if (instance_info != NULL) {
+    /* Make all of the instance metadata available for logging by stashing the
+     * metadata in the session's notes table.
+     */
 
-  /* Make all of the instance metadata available for logging by stashing the
-   * metadata in the session's notes table.
-   */
+    set_sess_note(session.pool, "aws.domain",
+      instance_info->domain, instance_info->domainsz);
+    set_sess_note(session.pool, "aws.account-id",
+      instance_info->account_id, 0);
+    set_sess_note(session.pool, "aws.api-version",
+      instance_info->api_version, 0);
+    set_sess_note(session.pool, "aws.region",
+      instance_info->region, 0);
+    set_sess_note(session.pool, "aws.avail-zone",
+      instance_info->avail_zone, instance_info->avail_zonesz);
+    set_sess_note(session.pool, "aws.instance-type",
+      instance_info->instance_type, instance_info->instance_typesz);
+    set_sess_note(session.pool, "aws.instance-id",
+      instance_info->instance_id, instance_info->instance_idsz);
+    set_sess_note(session.pool, "aws.ami-id",
+      instance_info->ami_id, instance_info->ami_idsz);
+    set_sess_note(session.pool, "aws.iam-role",
+      instance_info->iam_role, instance_info->iam_rolesz);
+    set_sess_note(session.pool, "aws.mac",
+      instance_info->hw_mac, instance_info->hw_macsz);
+    set_sess_note(session.pool, "aws.vpc-id",
+      instance_info->vpc_id, instance_info->vpc_idsz);
+    set_sess_note(session.pool, "aws.subnet-id",
+      instance_info->subnet_id, instance_info->subnet_idsz);
+    set_sess_note(session.pool, "aws.local-ipv4",
+      instance_info->local_ipv4, instance_info->local_ipv4sz);
+    set_sess_note(session.pool, "aws.local-hostname",
+      instance_info->local_hostname, instance_info->local_hostnamesz);
+    set_sess_note(session.pool, "aws.public-ipv4",
+      instance_info->public_ipv4, instance_info->public_ipv4sz);
+    set_sess_note(session.pool, "aws.public-hostname",
+      instance_info->public_hostname, instance_info->public_hostnamesz);
 
-  set_sess_note(session.pool, "aws.domain", instance_info->domain,
-    instance_info->domainsz);
-  set_sess_note(session.pool, "aws.account-id", instance_info->account_id, 0);
-  set_sess_note(session.pool, "aws.api-version", instance_info->api_version, 0);
-  set_sess_note(session.pool, "aws.region", instance_info->region, 0);
-  set_sess_note(session.pool, "aws.avail-zone", instance_info->avail_zone,
-    instance_info->avail_zonesz);
-  set_sess_note(session.pool, "aws.instance-type", instance_info->instance_type,
-    instance_info->instance_typesz);
-  set_sess_note(session.pool, "aws.instance-id", instance_info->instance_id,
-    instance_info->instance_idsz);
-  set_sess_note(session.pool, "aws.ami-id", instance_info->ami_id,
-    instance_info->ami_idsz);
-  set_sess_note(session.pool, "aws.iam-role", instance_info->iam_role,
-    instance_info->iam_rolesz);
-  set_sess_note(session.pool, "aws.mac", instance_info->hw_mac,
-    instance_info->hw_macsz);
-  set_sess_note(session.pool, "aws.vpc-id", instance_info->vpc_id,
-    instance_info->vpc_idsz);
-  set_sess_note(session.pool, "aws.subnet-id", instance_info->subnet_id,
-    instance_info->subnet_idsz);
-  set_sess_note(session.pool, "aws.local-ipv4", instance_info->local_ipv4,
-    instance_info->local_ipv4sz);
-  set_sess_note(session.pool, "aws.local-hostname",
-    instance_info->local_hostname, instance_info->local_hostnamesz);
-  set_sess_note(session.pool, "aws.public-ipv4", instance_info->public_ipv4,
-    instance_info->public_ipv4sz);
-  set_sess_note(session.pool, "aws.public-hostname",
-    instance_info->public_hostname, instance_info->public_hostnamesz);
+    if (instance_info->security_groups != NULL) {
+      register unsigned int i;
+      char **elts, *sg_ids = "";
 
-  if (instance_info->security_groups != NULL) {
-    register unsigned int i;
-    char **elts, *sg_ids = "";
+      elts = instance_info->security_groups->elts;
+      for (i = 0; i < instance_info->security_groups->nelts; i++) {
+        sg_ids = pstrcat(session.pool, sg_ids, *sg_ids ? ", " : "", elts[i],
+          NULL);
+      }
 
-    elts = instance_info->security_groups->elts;
-    for (i = 0; i < instance_info->security_groups->nelts; i++) {
-      sg_ids = pstrcat(session.pool, sg_ids, *sg_ids ? ", " : "", elts[i],
-        NULL);
+      set_sess_note(session.pool, "aws.security-groups", sg_ids, 0);
+
+    } else {
+      set_sess_note(session.pool, "aws.security-groups", NULL, 0);
     }
-
-    set_sess_note(session.pool, "aws.security-groups", sg_ids, 0);
-
-  } else {
-    set_sess_note(session.pool, "aws.security-groups", NULL, 0);
   }
 
   c = find_config(main_server->conf, CONF_PARAM, "AWSServices", FALSE);
@@ -1698,7 +1721,7 @@ static int aws_sess_init(void) {
 
   if (aws_services & AWS_SERVICE_CLOUDWATCH) {
     pool *tmp_pool;
-    const char *domain, *iam_role;
+    const char *domain = NULL, *iam_role = NULL, *region = NULL;
     struct aws_credential_info *cred_info = NULL;
     array_header *dimensions;
 
@@ -1715,17 +1738,29 @@ static int aws_sess_init(void) {
     }
 
     tmp_pool = make_sub_pool(aws_pool);
-    domain = pstrndup(tmp_pool, instance_info->domain, instance_info->domainsz);
-    iam_role = pstrndup(tmp_pool, instance_info->iam_role,
-      instance_info->iam_rolesz);
+
+    if (instance_info != NULL) {
+      domain = pstrndup(tmp_pool, instance_info->domain,
+        instance_info->domainsz);
+      iam_role = pstrndup(tmp_pool, instance_info->iam_role,
+        instance_info->iam_rolesz);
+      region = instance_info->region;
+      if (aws_region != NULL) {
+        region = aws_region;
+      }
+
+    } else {
+      /* Note: ASSUME that the domain is "amazonaws.com". */
+      domain = pstrdup(tmp_pool, "amazonaws.com");
+      region = aws_region;
+    }
 
     cred_info = pcalloc(tmp_pool, sizeof(struct aws_credential_info));
     cred_info->iam_role = iam_role;
 
     aws_cloudwatch = aws_cloudwatch_conn_alloc(aws_pool,
       aws_connect_timeout_secs, aws_request_timeout_secs, aws_cacerts,
-      instance_info->region, domain, aws_creds_providers, cred_info,
-      aws_cloudwatch_namespace);
+      region, domain, aws_creds_providers, cred_info, aws_cloudwatch_namespace);
     if (aws_cloudwatch != NULL) {
       pr_event_register(&aws_module, "core.timeout-idle",
         aws_timeout_idle_ev, NULL);
@@ -1800,6 +1835,7 @@ static conftable aws_conftab[] = {
   { "AWSLog",			set_awslog,		NULL },
   { "AWSOptions",		set_awsoptions,		NULL },
   { "AWSProfile",		set_awsprofile,		NULL },
+  { "AWSRegion",		set_awsregion,		NULL },
   { "AWSSecurityGroup",		set_awssecuritygroup,	NULL },
   { "AWSServices",		set_awsservices,	NULL },
   { "AWSTimeoutConnect",	set_awstimeoutconnect,	NULL },
