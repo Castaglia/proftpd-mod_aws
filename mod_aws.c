@@ -64,6 +64,7 @@ static unsigned long aws_services = 0UL;
 
 static const char *aws_logfile = NULL;
 static const char *aws_cacerts = PR_CONFIG_DIR "/aws-cacerts.pem";
+static const char *aws_region = NULL;
 
 /* For obtaining AWS credentials. */
 static const char *aws_profile = AWS_CREDS_DEFAULT_PROFILE;
@@ -956,6 +957,19 @@ MODRET set_awsprofile(cmd_rec *cmd) {
   return PR_HANDLED(cmd);
 }
 
+/* usage: AWSRegion region */
+MODRET set_awsregion(cmd_rec *cmd) {
+  config_rec *c;
+
+  CHECK_ARGS(cmd, 1);
+  CHECK_CONF(cmd, CONF_ROOT|CONF_VIRTUAL|CONF_GLOBAL);
+
+  c = add_config_param(cmd->argv[0], 1, NULL);
+  c->argv[0] = pstrdup(c->pool, cmd->argv[1]);
+
+  return PR_HANDLED(cmd);
+}
+
 /* usage: AWSSecurityGroup sg-id */
 MODRET set_awssecuritygroup(cmd_rec *cmd) {
   const char *sg_id;
@@ -1608,6 +1622,11 @@ static int aws_sess_init(void) {
     aws_creds_providers = c->argv[0];
   }
 
+  c = find_config(main_server->conf, CONF_PARAM, "AWSRegion", FALSE);
+  if (c != NULL) {
+    aws_region = c->argv[0];
+  }
+
   /* Remove all timers registered during e.g. startup; we only want those
    * timers firing in the daemon process, not in session processes.
    */
@@ -1692,7 +1711,7 @@ static int aws_sess_init(void) {
 
   if (aws_services & AWS_SERVICE_CLOUDWATCH) {
     pool *tmp_pool;
-    const char *domain, *iam_role;
+    const char *domain = NULL, *iam_role = NULL, *region = NULL;
     struct aws_credential_info *cred_info = NULL;
     array_header *dimensions;
 
@@ -1709,17 +1728,29 @@ static int aws_sess_init(void) {
     }
 
     tmp_pool = make_sub_pool(aws_pool);
-    domain = pstrndup(tmp_pool, instance_info->domain, instance_info->domainsz);
-    iam_role = pstrndup(tmp_pool, instance_info->iam_role,
-      instance_info->iam_rolesz);
+
+    if (instance_info != NULL) {
+      domain = pstrndup(tmp_pool, instance_info->domain,
+        instance_info->domainsz);
+      iam_role = pstrndup(tmp_pool, instance_info->iam_role,
+        instance_info->iam_rolesz);
+      region = instance_info->region;
+      if (aws_region != NULL) {
+        region = aws_region;
+      }
+
+    } else {
+      /* Note: ASSUME that the domain is "amazonaws.com". */
+      domain = pstrdup(tmp_pool, "amazonaws.com");
+      region = aws_region;
+    }
 
     cred_info = pcalloc(tmp_pool, sizeof(struct aws_credential_info));
     cred_info->iam_role = iam_role;
 
     aws_cloudwatch = aws_cloudwatch_conn_alloc(aws_pool,
       aws_connect_timeout_secs, aws_request_timeout_secs, aws_cacerts,
-      instance_info->region, domain, aws_creds_providers, cred_info,
-      aws_cloudwatch_namespace);
+      region, domain, aws_creds_providers, cred_info, aws_cloudwatch_namespace);
     if (aws_cloudwatch != NULL) {
       pr_event_register(&aws_module, "core.timeout-idle",
         aws_timeout_idle_ev, NULL);
@@ -1794,6 +1825,7 @@ static conftable aws_conftab[] = {
   { "AWSLog",			set_awslog,		NULL },
   { "AWSOptions",		set_awsoptions,		NULL },
   { "AWSProfile",		set_awsprofile,		NULL },
+  { "AWSRegion",		set_awsregion,		NULL },
   { "AWSSecurityGroup",		set_awssecuritygroup,	NULL },
   { "AWSServices",		set_awsservices,	NULL },
   { "AWSTimeoutConnect",	set_awstimeoutconnect,	NULL },

@@ -49,7 +49,8 @@ struct cloudwatch_conn *aws_cloudwatch_conn_alloc(pool *p,
   struct cloudwatch_conn *cw;
   void *http;
 
-  if (p == NULL) {
+  if (p == NULL ||
+      domain == NULL) {
     errno = EINVAL;
     return NULL;
   }
