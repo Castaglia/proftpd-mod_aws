@@ -318,6 +318,11 @@ module is <em>not</em> running within EC2, or when the auto-discovered value
 needs to be overridden, use this directive.
 
 <p>
+If the <code>AWSRegion</code> is <em>not</em> set, but the
+<code>AWS_DEFAULT_REGION</code> environment variable <em>is</em> present, then
+that value will be used.
+
+<p>
 Example:
 <pre>
   AWSRegion us-east-1

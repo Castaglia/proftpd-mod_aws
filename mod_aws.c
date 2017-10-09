@@ -1625,6 +1625,14 @@ static int aws_sess_init(void) {
   c = find_config(main_server->conf, CONF_PARAM, "AWSRegion", FALSE);
   if (c != NULL) {
     aws_region = c->argv[0];
+
+  } else {
+    const char *region_env;
+
+    region_env = pr_env_get(session.pool, "AWS_DEFAULT_REGION");
+    if (region_env != NULL) {
+      aws_region = pstrdup(session.pool, region_env);
+    }
   }
 
   /* Remove all timers registered during e.g. startup; we only want those
