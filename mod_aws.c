@@ -1454,18 +1454,8 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
 
   instance_info = aws_instance_get_info(aws_pool);
   if (instance_info == NULL) {
-    pr_log_debug(DEBUG0, MOD_AWS_VERSION
+    pr_log_debug(DEBUG1, MOD_AWS_VERSION
       ": unable to discover EC2 instance metadata: %s", strerror(errno));
-    aws_engine = FALSE;
-
-    if (aws_logfd >= 0) {
-      (void) close(aws_logfd);
-      aws_logfd = -1;
-    }
-
-    destroy_pool(aws_pool);
-    aws_pool = NULL;
-
     return;
   }
 
