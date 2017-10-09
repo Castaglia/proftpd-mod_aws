@@ -1467,6 +1467,10 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
      * do not want to simply disable the module here.
      */
 
+    pr_log_debug(DEBUG1, MOD_AWS_VERSION
+      ": no EC2 instance metadata available (not running within AWS EC2)");
+    instance_info = NULL;
+
     return;
   }
 
@@ -1590,6 +1594,8 @@ static int aws_init(void) {
     return 0;
   }
 
+  aws_xml_init(aws_pool);
+
 #if defined(PR_SHARED_MODULE)
   pr_event_register(&aws_module, "core.module-unload", aws_mod_unload_ev,
     NULL);
@@ -1597,8 +1603,6 @@ static int aws_init(void) {
   pr_event_register(&aws_module, "core.restart", aws_restart_ev, NULL);
   pr_event_register(&aws_module, "core.shutdown", aws_shutdown_ev, NULL);
   pr_event_register(&aws_module, "core.startup", aws_startup_ev, NULL);
-
-  aws_xml_init(aws_pool);
 
   return 0;
 }
