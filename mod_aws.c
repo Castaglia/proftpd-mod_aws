@@ -1623,58 +1623,59 @@ static int aws_sess_init(void) {
     instance_health = NULL;
   }
 
-  if (instance_info == NULL) {
-    return 0;
-  }
+  if (instance_info != NULL) {
+    /* Make all of the instance metadata available for logging by stashing the
+     * metadata in the session's notes table.
+     */
 
-  /* Make all of the instance metadata available for logging by stashing the
-   * metadata in the session's notes table.
-   */
+    set_sess_note(session.pool, "aws.domain",
+      instance_info->domain, instance_info->domainsz);
+    set_sess_note(session.pool, "aws.account-id",
+      instance_info->account_id, 0);
+    set_sess_note(session.pool, "aws.api-version",
+      instance_info->api_version, 0);
+    set_sess_note(session.pool, "aws.region",
+      instance_info->region, 0);
+    set_sess_note(session.pool, "aws.avail-zone",
+      instance_info->avail_zone, instance_info->avail_zonesz);
+    set_sess_note(session.pool, "aws.instance-type",
+      instance_info->instance_type, instance_info->instance_typesz);
+    set_sess_note(session.pool, "aws.instance-id",
+      instance_info->instance_id, instance_info->instance_idsz);
+    set_sess_note(session.pool, "aws.ami-id",
+      instance_info->ami_id, instance_info->ami_idsz);
+    set_sess_note(session.pool, "aws.iam-role",
+      instance_info->iam_role, instance_info->iam_rolesz);
+    set_sess_note(session.pool, "aws.mac",
+      instance_info->hw_mac, instance_info->hw_macsz);
+    set_sess_note(session.pool, "aws.vpc-id",
+      instance_info->vpc_id, instance_info->vpc_idsz);
+    set_sess_note(session.pool, "aws.subnet-id",
+      instance_info->subnet_id, instance_info->subnet_idsz);
+    set_sess_note(session.pool, "aws.local-ipv4",
+      instance_info->local_ipv4, instance_info->local_ipv4sz);
+    set_sess_note(session.pool, "aws.local-hostname",
+      instance_info->local_hostname, instance_info->local_hostnamesz);
+    set_sess_note(session.pool, "aws.public-ipv4",
+      instance_info->public_ipv4, instance_info->public_ipv4sz);
+    set_sess_note(session.pool, "aws.public-hostname",
+      instance_info->public_hostname, instance_info->public_hostnamesz);
 
-  set_sess_note(session.pool, "aws.domain", instance_info->domain,
-    instance_info->domainsz);
-  set_sess_note(session.pool, "aws.account-id", instance_info->account_id, 0);
-  set_sess_note(session.pool, "aws.api-version", instance_info->api_version, 0);
-  set_sess_note(session.pool, "aws.region", instance_info->region, 0);
-  set_sess_note(session.pool, "aws.avail-zone", instance_info->avail_zone,
-    instance_info->avail_zonesz);
-  set_sess_note(session.pool, "aws.instance-type", instance_info->instance_type,
-    instance_info->instance_typesz);
-  set_sess_note(session.pool, "aws.instance-id", instance_info->instance_id,
-    instance_info->instance_idsz);
-  set_sess_note(session.pool, "aws.ami-id", instance_info->ami_id,
-    instance_info->ami_idsz);
-  set_sess_note(session.pool, "aws.iam-role", instance_info->iam_role,
-    instance_info->iam_rolesz);
-  set_sess_note(session.pool, "aws.mac", instance_info->hw_mac,
-    instance_info->hw_macsz);
-  set_sess_note(session.pool, "aws.vpc-id", instance_info->vpc_id,
-    instance_info->vpc_idsz);
-  set_sess_note(session.pool, "aws.subnet-id", instance_info->subnet_id,
-    instance_info->subnet_idsz);
-  set_sess_note(session.pool, "aws.local-ipv4", instance_info->local_ipv4,
-    instance_info->local_ipv4sz);
-  set_sess_note(session.pool, "aws.local-hostname",
-    instance_info->local_hostname, instance_info->local_hostnamesz);
-  set_sess_note(session.pool, "aws.public-ipv4", instance_info->public_ipv4,
-    instance_info->public_ipv4sz);
-  set_sess_note(session.pool, "aws.public-hostname",
-    instance_info->public_hostname, instance_info->public_hostnamesz);
+    if (instance_info->security_groups != NULL) {
+      register unsigned int i;
+      char **elts, *sg_ids = "";
 
-  if (instance_info->security_groups != NULL) {
-    register unsigned int i;
-    char **elts, *sg_ids = "";
+      elts = instance_info->security_groups->elts;
+      for (i = 0; i < instance_info->security_groups->nelts; i++) {
+        sg_ids = pstrcat(session.pool, sg_ids, *sg_ids ? ", " : "", elts[i],
+          NULL);
+      }
 
-    elts = instance_info->security_groups->elts;
-    for (i = 0; i < instance_info->security_groups->nelts; i++) {
-      sg_ids = pstrcat(session.pool, sg_ids, *sg_ids ? ", " : "", elts[i],
-        NULL);
+      set_sess_note(session.pool, "aws.security-groups", sg_ids, 0);
+
+    } else {
+      set_sess_note(session.pool, "aws.security-groups", NULL, 0);
     }
-
-    set_sess_note(session.pool, "aws.security-groups", sg_ids, 0);
-
-  } else {
-    set_sess_note(session.pool, "aws.security-groups", NULL, 0);
   }
 
   c = find_config(main_server->conf, CONF_PARAM, "AWSServices", FALSE);
