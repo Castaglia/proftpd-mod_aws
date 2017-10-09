@@ -1270,11 +1270,19 @@ static void log_cmd_metrics(cmd_rec *cmd, int had_error) {
 }
 
 MODRET aws_log_any(cmd_rec *cmd) {
+  if (aws_engine == FALSE) {
+    return PR_DECLINED(cmd);
+  }
+
   log_cmd_metrics(cmd, FALSE);
   return PR_DECLINED(cmd);
 }
 
 MODRET aws_log_any_err(cmd_rec *cmd) {
+  if (aws_engine == FALSE) {
+    return PR_DECLINED(cmd);
+  }
+
   log_cmd_metrics(cmd, TRUE);
   return PR_DECLINED(cmd);
 }
