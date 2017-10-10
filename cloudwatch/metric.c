@@ -41,7 +41,7 @@ static void add_dimensions(pool *p, array_header *query_params,
   for (i = 0; i < dimensions->nelts; i++) {
     char *memberno, *name, *value;
 
-    memberno = aws_utils_str_n2s(p, (int) i);
+    memberno = aws_utils_str_n2s(p, (int) i+1);
     name = ((char **) dimensions->elts)[i];
     value = ((char **) dimensions->elts)[i++];
 
