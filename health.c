@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws Health API
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -44,13 +44,16 @@
 /* The buffer size for formatting HTTP dates. */
 #define AWS_HEALTH_HTTP_DATE_BUFSZ		512
 
-/* Right now, we only allow for a SINGLE health listener.  In the future, that
- * may need to change.  And due to the Timer API's callback data, we need
- * to keep the handles around in an accessible way.  In that future case, this
- * could be a table, whose keys are the timernos and the values are the
- * associated handle.
+/* Right now, we only allow for a SINGLE health listener.  Note that we use
+ * this static variable for handling the callback where we check for any
+ * connections to accept.
+ *
+ * In the future, that may need to change.  And due to the Timer API's callback
+ * data, we need to keep the handles around in an accessible way.  In that
+ * future case, this could be a table, whose keys are the timernos and the
+ * values are the associated handle.
  */
-static struct health *health_listener = NULL;
+static struct aws_health *health_listener = NULL;
 
 /* TODO: Get the list of allowed IP ranges, used by AWS Route53, and only allow
  * requests from those ranges.  See:
@@ -248,7 +251,7 @@ static int health_write_response(pool *p, conn_t *conn,
   return res;
 }
 
-static long health_check_request(pool *p, struct health *health,
+static long health_check_request(pool *p, struct aws_health *health,
     const char *req_line, char **http_version) {
   long resp_code = AWS_HTTP_RESPONSE_CODE_INTERNAL_SERVER_ERROR;
   const char *ptr;
@@ -290,7 +293,8 @@ static long health_check_request(pool *p, struct health *health,
   return resp_code;
 }
 
-static void health_handle_ping(pool *p, struct health *health, conn_t *conn) {
+static void health_handle_ping(pool *p, struct aws_health *health,
+    conn_t *conn) {
   int res;
   char *http_version;
   const char *req_line;
@@ -374,7 +378,7 @@ static void health_close_conn(conn_t *conn) {
 
 static int health_ping_cb(CALLBACK_FRAME) {
   conn_t *conn;
-  struct health *health;
+  struct aws_health *health;
   pool *req_pool;
   uint64_t start_ms = 0, end_ms = 0;
 
@@ -453,21 +457,15 @@ static conn_t *health_make_listener(pool *p, const pr_netaddr_t *addr,
   return conn;
 }
 
-struct health *aws_health_listener_create(pool *p,
+struct aws_health *aws_health_listener_create(pool *p,
     const char *addr, int port, const char *uri, int freq, array_header *acls) {
   pool *health_pool;
-  struct health *health;
-
-  /* If we already have a listener, error out now.  (Ugh, singletons!) */
-  if (health_listener != NULL) {
-    errno = EPERM;
-    return NULL;
-  }
+  struct aws_health *health;
 
   health_pool = make_sub_pool(p);
   pr_pool_tag(health_pool, "AWS Health Listener Pool");
 
-  health = pcalloc(health_pool, sizeof(struct health));
+  health = pcalloc(health_pool, sizeof(struct aws_health));
   health->pool = health_pool;
 
   health->addr = pr_netaddr_get_addr(health->pool, addr, NULL);
@@ -512,7 +510,7 @@ struct health *aws_health_listener_create(pool *p,
   return health;
 }
 
-int aws_health_listener_destroy(pool *p, struct health *health) {
+int aws_health_listener_destroy(pool *p, struct aws_health *health) {
   int res;
 
   res = pr_timer_remove(health->timerno, &aws_module);
@@ -523,5 +521,7 @@ int aws_health_listener_destroy(pool *p, struct health *health) {
 
   pr_inet_close(health->pool, health->conn);
   destroy_pool(health->pool);
+  health_listener = NULL;
+
   return 0;
 }

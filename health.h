@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws Health API
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@
 #ifndef MOD_AWS_HEALTH_H
 #define MOD_AWS_HEALTH_H
 
-struct health {
+struct aws_health {
   pool *pool;
 
   const pr_netaddr_t *addr;
@@ -41,8 +41,8 @@ struct health {
   int timerno;
 };
 
-struct health *aws_health_listener_create(pool *p,
+struct aws_health *aws_health_listener_create(pool *p,
   const char *addr, int port, const char *uri, int freq, array_header *acls);
-int aws_health_listener_destroy(pool *p, struct health *health);
+int aws_health_listener_destroy(pool *p, struct aws_health *health);
 
 #endif /* MOD_AWS_HEALTH_H */
