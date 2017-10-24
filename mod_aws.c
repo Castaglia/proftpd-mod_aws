@@ -89,6 +89,7 @@ static const char *aws_adjust_sg_id = NULL;
 /* For holding onto the EC2 instance metadata for e.g. session processes' use */
 static const struct aws_info *instance_info = NULL;
 
+static int aws_use_health = FALSE;
 static const char *aws_health_addr = NULL;
 static int aws_health_port = 8080;
 static const char *aws_health_uri = "/health";
@@ -96,7 +97,7 @@ static const char *aws_health_uri = "/health";
 /* For holding onto the health listener, for shutting down when the daemon
  * is stopped.
  */
-struct health *instance_health = NULL;
+struct aws_health *instance_health = NULL;
 
 /* CloudWatch */
 static struct cloudwatch_conn *aws_cloudwatch = NULL;
@@ -871,9 +872,15 @@ MODRET set_awshealthcheck(cmd_rec *cmd) {
 
   CHECK_CONF(cmd, CONF_ROOT);
 
+  if (strcasecmp(cmd->argv[1], "off") == 0 ||
+      strcasecmp(cmd->argv[1], "none") == 0) {
+    aws_use_health = FALSE;
+    return PR_HANDLED(cmd);
+  }
+
   aws_health_uri = pstrdup(aws_pool, (char *) cmd->argv[1]);
 
-  if (cmd->argc == 3) {
+  if (cmd->argc >= 3) {
     const char *name;
     const pr_netaddr_t *addr;
 
@@ -902,6 +909,7 @@ MODRET set_awshealthcheck(cmd_rec *cmd) {
     aws_health_port = portno;
   }
 
+  aws_use_health = TRUE;
   return PR_HANDLED(cmd);
 }
 
@@ -1440,6 +1448,31 @@ static void aws_sql_db_error_ev(const void *event_data, void *user_data) {
   incr_metric("Error.SQL", 1.0);
 }
 
+static int aws_health_listening(pool *p, const char *addr, int port,
+    const char *uri) {
+  int res = 0, xerrno = 0;
+
+  (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+    "creating AWSHealthCheck listener for http://%s:%d%s", addr, port, uri);
+
+  instance_health = aws_health_listener_create(aws_pool, addr, port, uri, -1,
+    NULL);
+  xerrno = errno;
+
+  if (instance_health != NULL) {
+    pr_trace_msg(trace_channel, 8,
+      "listening for AWSHealthCheck http://%s:%d%s", addr, port, uri);
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "error listening for AWSHealthCheck http://%s:%d%s: %s",
+      addr, port, uri, strerror(xerrno));
+  }
+
+  errno = xerrno;
+  return res;
+}
+
 static void aws_startup_ev(const void *event_data, void *user_data) {
   server_rec *s = NULL;
   struct ec2_conn *ec2 = NULL;
@@ -1451,6 +1484,17 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
   }
 
   open_logfile();
+
+  /* If we should be listening for health checks, AND we have already been
+   * given an explicit AWSHealthCheck address, then start our listener here.
+   * Otherwise, we will wait until we have the EC2 instance' public IPv4
+   * address.
+   */
+  if (aws_use_health == TRUE &&
+      aws_health_addr != NULL) {
+    (void) aws_health_listening(aws_pool, aws_health_addr, aws_health_port,
+      aws_health_uri);
+  }
 
   instance_info = aws_instance_get_info(aws_pool);
   if (instance_info == NULL) {
@@ -1475,6 +1519,34 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
   }
 
   log_instance_info(aws_pool, instance_info);
+
+  if (aws_use_health == TRUE &&
+      instance_health == NULL) {
+    const char *addr = NULL;
+
+    /* Use the public IPv4 address, if we have one.  If not, fall back to
+     * the local/private IPv4 address.
+     */
+    if (instance_info->public_ipv4 != NULL) {
+      addr = pstrndup(aws_pool, instance_info->public_ipv4,
+        instance_info->public_ipv4sz);
+
+    } else if (instance_info->local_ipv4 != NULL) {
+      addr = pstrndup(aws_pool, instance_info->local_ipv4,
+        instance_info->local_ipv4sz);
+    }
+
+    aws_health_addr = addr;
+
+    if (aws_health_addr != NULL) {
+      (void) aws_health_listening(aws_pool, aws_health_addr, aws_health_port,
+        aws_health_uri);
+
+    } else {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "unable to listen for AWSHealthCheck: unable to discover address");
+    }
+  }
 
   /* Assume that we can only perform discovery/configuration via AWS services
    * if we have an IAM role, which in turn means we have the necessary
