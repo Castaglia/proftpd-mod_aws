@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws HTTP API
- * Copyright (c) 2016 TJ Saunders
+ * Copyright (c) 2016-2017 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -213,6 +213,12 @@ static int http_perform(pool *p, CURL *curl, const char *url,
       if (strstr(curl_errorbuf, "Couldn't resolve host") != NULL ||
           strstr(curl_errorbuf, "Could not resolve host") != NULL) {
         xerrno = ESRCH;
+
+      } else if (strstr(curl_errorbuf, "No route to host") != NULL) {
+        xerrno = EHOSTUNREACH;
+
+      } else if (strstr(curl_errorbuf, "Network is unreachable") != NULL) {
+        xerrno = ENETUNREACH;
 
       } else if (strstr(curl_errorbuf, "connect() timed out") != NULL ||
                  strstr(curl_errorbuf, "Connection timed out") != NULL) {
