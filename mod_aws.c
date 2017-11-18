@@ -174,8 +174,8 @@ static int allow_sg_ports(pool *p, struct ec2_conn *ec2, const char *sg_id,
 
 static void verify_ctrl_port(pool *p, const struct aws_info *info,
     struct ec2_conn *ec2, server_rec *s, pr_table_t *security_groups) {
-  const void *key;
-  const char *sg_id;
+  const void *key = NULL;
+  const char *sg_id = NULL;
   int ctrl_port_allowed = FALSE;
 
   if (s->ServerPort == 0) {
@@ -340,8 +340,8 @@ static void verify_pasv_ports(pool *p, const struct aws_info *info,
     struct ec2_conn *ec2, server_rec *s, pr_table_t *security_groups) {
   config_rec *c;
   int pasv_min_port, pasv_max_port;
-  const void *key;
-  const char *sg_id;
+  const void *key = NULL;
+  const char *sg_id = NULL;
   int pasv_ports_allowed = FALSE;
 
   /* If this vhost is for mod_sftp, then PassivePorts have no effect/meaning */
@@ -1923,6 +1923,8 @@ static conftable aws_conftab[] = {
 static cmdtable aws_cmdtab[] = {
   { LOG_CMD,		C_ANY,	G_NONE,	aws_log_any,		FALSE,	FALSE },
   { LOG_CMD_ERR,	C_ANY,	G_NONE,	aws_log_any_err,	FALSE,	FALSE },
+
+  { 0, NULL }
 };
 
 module aws_module = {
