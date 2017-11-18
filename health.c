@@ -435,6 +435,13 @@ static conn_t *health_make_listener(pool *p, const pr_netaddr_t *addr,
     return NULL;
   }
 
+  /* Make sure our listening fd is not one of the Big Three.  Doing so now
+   * will make problems later (see Issue #34).
+   */
+  if (pr_fs_get_usable_fd2(&(conn->listen_fd)) < 0) {
+    return NULL;
+  }
+
   res = pr_inet_listen(p, conn, 5, 0);
   if (res < 0) {
     int xerrno = errno;
