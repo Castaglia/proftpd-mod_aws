@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws API testsuite
- * Copyright (c) 2016-2017 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2016-2020 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -63,7 +63,7 @@ Suite *tests_get_cloudwatch_error_suite(void);
 Suite *tests_get_cloudwatch_dimension_suite(void);
 Suite *tests_get_cloudwatch_metric_suite(void);
 
-unsigned int recvd_signal_flags;
+extern volatile unsigned int recvd_signal_flags;
 extern pid_t mpid;
 extern server_rec *main_server;
 
