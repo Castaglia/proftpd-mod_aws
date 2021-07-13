@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws AWS credentials
- * Copyright (c) 2016-2017 TJ Saunders
+ * Copyright (c) 2016-2021 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -448,47 +448,13 @@ static int get_iam_info(pool *p, void *http, struct iam_info *info) {
 
   res = get_metadata(p, http, url, iam_creds_cb, info);
   if (res == 0) {
-    const char *text;
+    const char *text, *key;
+    char *val;
     pr_json_object_t *json;
 
     text = pstrndup(info->pool, info->creds_doc, info->creds_docsz);
     json = pr_json_object_from_text(info->pool, text);
-    if (json != NULL) {
-      const char *key;
-      char *val = NULL;
-
-      key = "AccessKeyId";
-      if (pr_json_object_get_string(info->pool, json, key, &val) == 0) {
-        info->access_key_id = pstrdup(info->pool, val);
-
-      } else {
-        pr_trace_msg(trace_channel, 3, "no '%s' string found in '%s'", key,
-          text);
-      }
-
-      key = "SecretAccessKey";
-      val = NULL;
-      if (pr_json_object_get_string(info->pool, json, key, &val) == 0) {
-        info->secret_access_key = pstrdup(info->pool, val);
-
-      } else {
-        pr_trace_msg(trace_channel, 3, "no '%s' string found in '%s'", key,
-          text);
-      }
-
-      key = "Token";
-      val = NULL;
-      if (pr_json_object_get_string(info->pool, json, key, &val) == 0) {
-        info->session_token = pstrdup(info->pool, val);
-
-      } else {
-        pr_trace_msg(trace_channel, 3, "no '%s' string found in '%s'", key,
-          text);
-      }
-
-      pr_json_object_free(json);
-
-    } else {
+    if (json == NULL) {
       pr_trace_msg(trace_channel, 3,
         "'%s' JSON failed validation, ignoring", url);
 
@@ -498,6 +464,35 @@ static int get_iam_info(pool *p, void *http, struct iam_info *info) {
       errno = ENOENT;
       return -1;
     }
+
+    key = "AccessKeyId";
+    val = NULL;
+    if (pr_json_object_get_string(info->pool, json, key, &val) == 0) {
+      info->access_key_id = pstrdup(info->pool, val);
+
+    } else {
+      pr_trace_msg(trace_channel, 3, "no '%s' string found in '%s'", key, text);
+    }
+
+    key = "SecretAccessKey";
+    val = NULL;
+    if (pr_json_object_get_string(info->pool, json, key, &val) == 0) {
+      info->secret_access_key = pstrdup(info->pool, val);
+
+    } else {
+      pr_trace_msg(trace_channel, 3, "no '%s' string found in '%s'", key, text);
+    }
+
+    key = "Token";
+    val = NULL;
+    if (pr_json_object_get_string(info->pool, json, key, &val) == 0) {
+      info->session_token = pstrdup(info->pool, val);
+
+    } else {
+      pr_trace_msg(trace_channel, 3, "no '%s' string found in '%s'", key, text);
+    }
+
+    pr_json_object_free(json);
 
   } else if (res < 0 &&
              errno == ENOENT) {
@@ -531,7 +526,7 @@ int aws_creds_from_iam(pool *p, const char *iam_role,
   iam_pool = make_sub_pool(p);
   pr_pool_tag(iam_pool, "AWS IAM credentials pool");
 
-  info = palloc(iam_pool, sizeof(struct iam_info));
+  info = pcalloc(iam_pool, sizeof(struct iam_info));
   info->pool = iam_pool;
   info->iam_role = iam_role;
 

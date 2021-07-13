@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2017 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2017-2021 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -104,7 +104,8 @@ START_TEST (cloudwatch_metric_counter_test) {
   double incr;
   struct cloudwatch_conn *cw;
 
-  if (getenv("TRAVIS") != NULL) {
+  if (getenv("CI") != NULL ||
+      getenv("TRAVIS") != NULL) {
     return;
   }
 
@@ -119,10 +120,6 @@ START_TEST (cloudwatch_metric_counter_test) {
   fail_unless(res < 0, "Failed to handle null cloudwatch");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
-
-  if (getenv("TRAVIS") != NULL) {
-    return;
-  }
 
   cw = get_cloudwatch(p);
   fail_unless(cw != NULL, "Failed to get CloudWatch connection: %s",
@@ -151,7 +148,8 @@ START_TEST (cloudwatch_metric_timer_test) {
   double ms;
   struct cloudwatch_conn *cw;
 
-  if (getenv("TRAVIS") != NULL) {
+  if (getenv("CI") != NULL ||
+      getenv("TRAVIS") != NULL) {
     return;
   }
 
@@ -166,10 +164,6 @@ START_TEST (cloudwatch_metric_timer_test) {
   fail_unless(res < 0, "Failed to handle null cloudwatch");
   fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
-
-  if (getenv("TRAVIS") != NULL) {
-    return;
-  }
 
   cw = get_cloudwatch(p);
   fail_unless(cw != NULL, "Failed to get CloudWatch connection: %s",
