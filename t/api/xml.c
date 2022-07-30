@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2016-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,20 +59,20 @@ START_TEST (xml_doc_parse_test) {
   size_t datasz;
 
   xml = aws_xml_doc_parse(p, NULL, 0);
-  fail_unless(xml == NULL, "Failed to handle null data");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(xml == NULL, "Failed to handle null data");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   data = "foo bar baz";
 
   xml = aws_xml_doc_parse(p, data, 0);
-  fail_unless(xml == NULL, "Failed to handle empty data");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(xml == NULL, "Failed to handle empty data");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   datasz = strlen(data);
   xml = aws_xml_doc_parse(p, data, datasz);
-  fail_unless(xml == NULL, "Failed to handle malformed XML data");
+  ck_assert_msg(xml == NULL, "Failed to handle malformed XML data");
 }
 END_TEST
 
@@ -80,8 +80,8 @@ START_TEST (xml_doc_get_root_elt_test) {
   void *elt;
 
   elt = aws_xml_doc_get_root_elt(NULL, NULL);
-  fail_unless(elt == NULL, "Failed to handle null doc");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(elt == NULL, "Failed to handle null doc");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -90,8 +90,8 @@ START_TEST (xml_elt_get_child_test) {
   void *kid;
 
   kid = aws_xml_elt_get_child(NULL, NULL, NULL, 0);
-  fail_unless(kid == NULL, "Failed to handle null arguments");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(kid == NULL, "Failed to handle null arguments");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -100,8 +100,8 @@ START_TEST (xml_elt_get_child_count_test) {
   int res;
 
   res = aws_xml_elt_get_child_count(NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null arguments");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null arguments");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -110,8 +110,8 @@ START_TEST (xml_elt_get_next_test) {
   void *elt;
 
   elt = aws_xml_elt_get_next(NULL, NULL);
-  fail_unless(elt == NULL, "Failed to handle null arguments");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(elt == NULL, "Failed to handle null arguments");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -120,13 +120,13 @@ START_TEST (xml_elt_get_name_test) {
   const char *name;
 
   name = aws_xml_elt_get_name(NULL, NULL, NULL);
-  fail_unless(name == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(name == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   name = aws_xml_elt_get_name(p, NULL, NULL);
-  fail_unless(name == NULL, "Failed to handle null element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(name == NULL, "Failed to handle null element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -135,13 +135,13 @@ START_TEST (xml_elt_get_text_test) {
   const char *text;
 
   text = aws_xml_elt_get_text(NULL, NULL);
-  fail_unless(text == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(text == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   text = aws_xml_elt_get_text(p, NULL);
-  fail_unless(text == NULL, "Failed to handle null element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(text == NULL, "Failed to handle null element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST

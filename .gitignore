@@ -5,8 +5,10 @@ config.status
 autom4te.cache
 mod_aws.h
 tests.log
+t/api-tests*
 .libs
 .*.swp
+*.a
 *.la
 *.lo
 *.o

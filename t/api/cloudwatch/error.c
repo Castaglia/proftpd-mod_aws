@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2017 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2017-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -60,19 +60,19 @@ START_TEST (cloudwatch_error_get_code_test) {
   const char *err_name;
 
   err_code = aws_cloudwatch_error_get_code(NULL, NULL);
-  fail_unless(err_code == AWS_ERROR_CODE_UNKNOWN, "Failed to handle null pool");
+  ck_assert_msg(err_code == AWS_ERROR_CODE_UNKNOWN, "Failed to handle null pool");
 
   err_code = aws_cloudwatch_error_get_code(p, NULL);
-  fail_unless(err_code == AWS_ERROR_CODE_UNKNOWN, "Failed to handle null name");
+  ck_assert_msg(err_code == AWS_ERROR_CODE_UNKNOWN, "Failed to handle null name");
 
   err_name = "Throttling";
   err_code = aws_cloudwatch_error_get_code(p, err_name);
-  fail_unless(err_code == AWS_CLOUDWATCH_ERROR_CODE_THROTTLING,
+  ck_assert_msg(err_code == AWS_CLOUDWATCH_ERROR_CODE_THROTTLING,
     "Failed to resolve CloudWatch error name '%s'", err_name);
 
   err_name = "AuthFailure";
   err_code = aws_cloudwatch_error_get_code(p, err_name);
-  fail_unless(err_code == AWS_ERROR_CODE_AUTH_FAILURE,
+  ck_assert_msg(err_code == AWS_ERROR_CODE_AUTH_FAILURE,
     "Failed to resolve error name '%s'", err_name);
 }
 END_TEST
@@ -83,17 +83,17 @@ START_TEST (cloudwatch_error_get_name_test) {
 
   err_code = AWS_ERROR_CODE_AUTH_FAILURE;
   res = aws_cloudwatch_error_get_name(err_code);
-  fail_unless(res != NULL, "Failed to resolve error code %u", err_code);
+  ck_assert_msg(res != NULL, "Failed to resolve error code %u", err_code);
   expected = "AuthFailure";
-  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'", expected,
+  ck_assert_msg(strcmp(res, expected) == 0, "Expected '%s', got '%s'", expected,
     res);
 
   err_code = AWS_CLOUDWATCH_ERROR_CODE_THROTTLING;
   res = aws_cloudwatch_error_get_name(err_code);
-  fail_unless(res != NULL, "Failed to resolve CloudWatch error code %u",
+  ck_assert_msg(res != NULL, "Failed to resolve CloudWatch error code %u",
     err_code);
   expected = "Throttling";
-  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'", expected,
+  ck_assert_msg(strcmp(res, expected) == 0, "Expected '%s', got '%s'", expected,
     res);
 }
 END_TEST
@@ -104,14 +104,14 @@ START_TEST (cloudwatch_error_parse_xml_test) {
   size_t datasz;
 
   err = aws_cloudwatch_error_parse_xml(p, NULL, 0);
-  fail_unless(err == NULL, "Failed to handle null data");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle null data");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   data = "foo";
   err = aws_cloudwatch_error_parse_xml(p, data, 0);
-  fail_unless(err == NULL, "Failed to handle empty data");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle empty data");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: no <ErrorResponse> element */
@@ -119,7 +119,7 @@ START_TEST (cloudwatch_error_parse_xml_test) {
   data = pstrdup(p, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
   datasz = strlen(data);
   err = aws_cloudwatch_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL,
+  ck_assert_msg(err == NULL,
     "Failed to handle XML with no <ErrorResponse> element");
 
   /* Malformed XML: no <Error> element */
@@ -130,8 +130,8 @@ START_TEST (cloudwatch_error_parse_xml_test) {
     "</ErrorResponse>\n");
   datasz = strlen(data);
   err = aws_cloudwatch_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with no <Error> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with no <Error> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: <Error> element with wrong child count (1) */
@@ -144,8 +144,8 @@ START_TEST (cloudwatch_error_parse_xml_test) {
     "</ErrorResponse>\n");
   datasz = strlen(data);
   err = aws_cloudwatch_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with bad <Error> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with bad <Error> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: no <Code> element */
@@ -159,8 +159,8 @@ START_TEST (cloudwatch_error_parse_xml_test) {
     "</ErrorResponse>\n");
   datasz = strlen(data);
   err = aws_cloudwatch_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with no <Code> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with no <Code> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: no <Message> element */
@@ -174,8 +174,8 @@ START_TEST (cloudwatch_error_parse_xml_test) {
     "</ErrorResponse>\n");
   datasz = strlen(data);
   err = aws_cloudwatch_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with no <Message> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with no <Message> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: no <RequestId> element */
@@ -190,8 +190,8 @@ START_TEST (cloudwatch_error_parse_xml_test) {
     "</ErrorResponse>\n");
   datasz = strlen(data);
   err = aws_cloudwatch_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with no <RequestId> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with no <RequestId> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   data = pstrdup(p,
@@ -205,16 +205,16 @@ START_TEST (cloudwatch_error_parse_xml_test) {
 
   datasz = strlen(data);
   err = aws_cloudwatch_error_parse_xml(p, data, datasz);
-  fail_unless(err != NULL, "Failed to parse error XML: %s", strerror(errno));
-  fail_unless(err->err_code == AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND,
+  ck_assert_msg(err != NULL, "Failed to parse error XML: %s", strerror(errno));
+  ck_assert_msg(err->err_code == AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND,
     "Expected error code %u, got %u",
     AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND, err->err_code);
-  fail_unless(err->err_msg != NULL, "Expected error message, got null");
-  fail_unless(strcmp(err->err_msg,
+  ck_assert_msg(err->err_msg != NULL, "Expected error message, got null");
+  ck_assert_msg(strcmp(err->err_msg,
     "The security group ID 'sg-1a2b3c4d' does not exist") == 0,
     "Failed to get expected error message");
-  fail_unless(err->req_id != NULL, "Expected request ID, got null");
-  fail_unless(strcmp(err->req_id, "ea966190-f9aa-478e-9ede-example") == 0,
+  ck_assert_msg(err->req_id != NULL, "Expected request ID, got null");
+  ck_assert_msg(strcmp(err->req_id, "ea966190-f9aa-478e-9ede-example") == 0,
     "Failed to get expected request ID");
 }
 END_TEST

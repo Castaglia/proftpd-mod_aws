@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2016-2017 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2016-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,13 +62,13 @@ START_TEST (http_alloc_test) {
   /* Note: We don't use the pool for allocating HTTP handles. */
 
   http = aws_http_alloc(p, 3, 5, NULL);
-  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+  ck_assert_msg(http != NULL, "Failed to allocate handle: %s", strerror(errno));
   aws_http_destroy(p, http);
 
   /* Assume that the tests are being run from the top-level of the project. */
   cacerts = "./aws-cacerts.pem";
   http = aws_http_alloc(p, 3, 5, cacerts);
-  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+  ck_assert_msg(http != NULL, "Failed to allocate handle: %s", strerror(errno));
   aws_http_destroy(p, http);
 }
 END_TEST
@@ -77,8 +77,8 @@ START_TEST (http_destroy_test) {
   int res;
 
   res = aws_http_destroy(NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null handle");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null handle");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -90,27 +90,27 @@ START_TEST (http_default_headers_test) {
   const char *header_name, *header_value;
 
   tab = aws_http_default_headers(NULL, NULL);
-  fail_unless(tab == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(tab == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   tab = aws_http_default_headers(p, NULL);
-  fail_unless(tab != NULL, "Failed to allocate default headers: %s",
+  ck_assert_msg(tab != NULL, "Failed to allocate default headers: %s",
     strerror(errno));
 
   header_name = AWS_HTTP_HEADER_ACCEPT;
   header_value = pr_table_get(tab, header_name, NULL);
-  fail_unless(header_value != NULL, "Failed to get '%s' header value: %s",
+  ck_assert_msg(header_value != NULL, "Failed to get '%s' header value: %s",
     header_name, strerror(errno));
 
   header_name = AWS_HTTP_HEADER_USER_AGENT;
   header_value = pr_table_get(tab, header_name, NULL);
-  fail_unless(header_value != NULL, "Failed to get '%s' header value: %s",
+  ck_assert_msg(header_value != NULL, "Failed to get '%s' header value: %s",
     header_name, strerror(errno));
 
   header_name = AWS_HTTP_HEADER_X_AMZ_DATE;
   header_value = pr_table_get(tab, header_name, NULL);
-  fail_unless(header_value == NULL, "Got '%s' header value unexpectedly",
+  ck_assert_msg(header_value == NULL, "Got '%s' header value unexpectedly",
     header_name);
 
   pr_table_empty(tab);
@@ -121,22 +121,22 @@ START_TEST (http_default_headers_test) {
   gmt_tm = pr_gmtime(p, &now);
 
   tab = aws_http_default_headers(p, gmt_tm);
-  fail_unless(tab != NULL, "Failed to allocate default headers: %s",
+  ck_assert_msg(tab != NULL, "Failed to allocate default headers: %s",
     strerror(errno));
 
   header_name = AWS_HTTP_HEADER_ACCEPT;
   header_value = pr_table_get(tab, header_name, NULL);
-  fail_unless(header_value != NULL, "Failed to get '%s' header value: %s",
+  ck_assert_msg(header_value != NULL, "Failed to get '%s' header value: %s",
     header_name, strerror(errno));
 
   header_name = AWS_HTTP_HEADER_USER_AGENT;
   header_value = pr_table_get(tab, header_name, NULL);
-  fail_unless(header_value != NULL, "Failed to get '%s' header value: %s",
+  ck_assert_msg(header_value != NULL, "Failed to get '%s' header value: %s",
     header_name, strerror(errno));
 
   header_name = AWS_HTTP_HEADER_X_AMZ_DATE;
   header_value = pr_table_get(tab, header_name, NULL);
-  fail_unless(header_value != NULL, "Failed to get '%s' header value: %s",
+  ck_assert_msg(header_value != NULL, "Failed to get '%s' header value: %s",
     header_name, strerror(errno));
 
   pr_table_empty(tab);
@@ -150,42 +150,43 @@ START_TEST (http_urldecode_test) {
   void *http;
 
   res = aws_http_urldecode(NULL, NULL, NULL, 0, NULL);
-  fail_unless(res == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   res = aws_http_urldecode(p, NULL, NULL, 0, NULL);
-  fail_unless(res == NULL, "Failed to handle null handle");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null handle");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   http = aws_http_alloc(p, 3, 5, NULL);
-  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+  ck_assert_msg(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   res = aws_http_urldecode(p, http, NULL, 0, NULL);
-  fail_unless(res == NULL, "Failed to handle null item");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null item");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   item = "foo%20bar";
   res = aws_http_urldecode(p, http, item, 0, NULL);
-  fail_unless(res == NULL, "Failed to handle empty item");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle empty item");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   item_len = strlen(item);
   res = aws_http_urldecode(p, http, item, item_len, NULL);
-  fail_unless(res == NULL, "Failed to handle null decoded len");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null decoded len");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   decoded_len = 0;
   res = aws_http_urldecode(p, http, item, item_len, &decoded_len);
-  fail_unless(res != NULL, "Failed to decode item '%s': %s", item,
+  ck_assert_msg(res != NULL, "Failed to decode item '%s': %s", item,
     strerror(errno));
-  fail_unless(decoded_len == 7,
-    "Expected %lu, got %lu", 7, (unsigned long) decoded_len);
-  fail_unless(strcmp(res, "foo bar") == 0, "Expected 'foo bar', got '%s'", res);
+  ck_assert_msg(decoded_len == 7,
+    "Expected %lu, got %lu", (unsigned long) 7, (unsigned long) decoded_len);
+  ck_assert_msg(strcmp(res, "foo bar") == 0, "Expected 'foo bar', got '%s'",
+    res);
 
   aws_http_destroy(p, http);
 }
@@ -197,35 +198,35 @@ START_TEST (http_urlencode_test) {
   void *http;
 
   res = aws_http_urlencode(NULL, NULL, NULL, 0);
-  fail_unless(res == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   res = aws_http_urlencode(p, NULL, NULL, 0);
-  fail_unless(res == NULL, "Failed to handle null handle");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null handle");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   http = aws_http_alloc(p, 3, 5, NULL);
-  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+  ck_assert_msg(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   res = aws_http_urlencode(p, http, NULL, 0);
-  fail_unless(res == NULL, "Failed to handle null item");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null item");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   item = "foo bar";
   res = aws_http_urlencode(p, http, item, 0);
-  fail_unless(res == NULL, "Failed to handle empty item");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle empty item");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   item = "foo bar";
   item_len = strlen(item);
   res = aws_http_urlencode(p, http, item, item_len);
-  fail_unless(res != NULL, "Failed to encode item '%s': %s", item,
+  ck_assert_msg(res != NULL, "Failed to encode item '%s': %s", item,
     strerror(errno));
-  fail_unless(strcmp(res, "foo%20bar") == 0,
+  ck_assert_msg(strcmp(res, "foo%20bar") == 0,
     "Expected 'foo%%20bar', got '%s'", res);
 
   aws_http_destroy(p, http);
@@ -247,78 +248,78 @@ START_TEST (http_get_test) {
   long resp_code = 0;
 
   res = aws_http_get(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   res = aws_http_get(p, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null handle");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null handle");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   http = aws_http_alloc(p, 3, 5, NULL);
-  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+  ck_assert_msg(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   res = aws_http_get(p, http, NULL, NULL, NULL, NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null URL");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null URL");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   url = "http://www.google.com";
   res = aws_http_get(p, http, url, NULL, NULL, NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null response callback");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null response callback");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null response code");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null response code");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL);
-  fail_unless(res == 0, "Failed to handle GET request to '%s': %s", url,
+  ck_assert_msg(res == 0, "Failed to handle GET request to '%s': %s", url,
     strerror(errno));
-  fail_unless(resp_code == AWS_HTTP_RESPONSE_CODE_OK,
+  ck_assert_msg(resp_code == AWS_HTTP_RESPONSE_CODE_OK,
     "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
 
   /* Once more, with the Content-Type. */
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code,
     &content_type);
-  fail_unless(res == 0, "Failed to handle GET request to '%s': %s", url,
+  ck_assert_msg(res == 0, "Failed to handle GET request to '%s': %s", url,
     strerror(errno));
-  fail_unless(resp_code == AWS_HTTP_RESPONSE_CODE_OK,
+  ck_assert_msg(resp_code == AWS_HTTP_RESPONSE_CODE_OK,
     "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
-  fail_unless(content_type != NULL, "Failed to get Content-Type of response");
-  fail_unless(strstr(content_type, "text/html") != NULL,
+  ck_assert_msg(content_type != NULL, "Failed to get Content-Type of response");
+  ck_assert_msg(strstr(content_type, "text/html") != NULL,
     "Expected 'text/html' in Content-Type, got '%s'", content_type);
 
   /* Unknown/bad URL */
   url = "http://www.google.com/foo/bar/baz";
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL);
-  fail_unless(res == 0, "Failed to handle GET request to '%s': %s", url,
+  ck_assert_msg(res == 0, "Failed to handle GET request to '%s': %s", url,
     strerror(errno));
-  fail_unless(resp_code == AWS_HTTP_RESPONSE_CODE_NOT_FOUND,
+  ck_assert_msg(resp_code == AWS_HTTP_RESPONSE_CODE_NOT_FOUND,
     "Expected %ld, got %ld", AWS_HTTP_RESPONSE_CODE_NOT_FOUND, resp_code);
 
   /* Unresolvable DNS names. */
   url = "http://my.hostname.at.domain.example.com";
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL);
-  fail_unless(res < 0, "Handled unresolvable DNS name unexpectedly");
-  fail_unless(errno == ESRCH, "Expected ESRCH (%d), got %s (%d)", ESRCH,
+  ck_assert_msg(res < 0, "Handled unresolvable DNS name unexpectedly");
+  ck_assert_msg(errno == ESRCH, "Expected ESRCH (%d), got %s (%d)", ESRCH,
     strerror(errno), errno);
 
   /* Unconnectable IP addresses */
   url = "http://1.2.3.4";
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL);
-  fail_unless(res < 0, "Handled unreachable IP address unexpectedly");
-  fail_unless(errno == ETIMEDOUT, "Expected ETIMEDOUT (%d), got %s (%d)",
+  ck_assert_msg(res < 0, "Handled unreachable IP address unexpectedly");
+  ck_assert_msg(errno == ETIMEDOUT, "Expected ETIMEDOUT (%d), got %s (%d)",
     ETIMEDOUT, strerror(errno), errno);
 
   /* Unsupported URL syntax */
   url = "foo://bar:baz/42";
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL);
-  fail_unless(res < 0, "Handled unsupported URL syntax unexpectedly");
-  fail_unless(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
+  ck_assert_msg(res < 0, "Handled unsupported URL syntax unexpectedly");
+  ck_assert_msg(errno == EPERM, "Expected EPERM (%d), got %s (%d)", EPERM,
     strerror(errno), errno);
 
   aws_http_destroy(p, http);
@@ -334,44 +335,44 @@ START_TEST (http_post_test) {
   pr_table_t *headers;
 
   res = aws_http_post(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   res = aws_http_post(p, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null handle");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null handle");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   http = aws_http_alloc(p, 3, 5, NULL);
-  fail_unless(http != NULL, "Failed to allocate handle: %s", strerror(errno));
+  ck_assert_msg(http != NULL, "Failed to allocate handle: %s", strerror(errno));
 
   res = aws_http_post(p, http, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null URL");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null URL");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   url = "http://www.google.com";
   res = aws_http_post(p, http, url, NULL, NULL, NULL, NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null response callback");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null response callback");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   res = aws_http_post(p, http, url, NULL, resp_cb, NULL, NULL, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null request body");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null request body");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   req = "{ \"test\": true }\n";
   res = aws_http_post(p, http, url, NULL, resp_cb, NULL, req, NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null response code");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null response code");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   res = aws_http_post(p, http, url, NULL, resp_cb, NULL, req, &resp_code, NULL);
-  fail_unless(res == 0, "Failed to handle POST request to '%s': %s", url,
+  ck_assert_msg(res == 0, "Failed to handle POST request to '%s': %s", url,
     strerror(errno));
-  fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
+  ck_assert_msg(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
     "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
 
   headers = aws_http_default_headers(p, NULL);
@@ -380,9 +381,9 @@ START_TEST (http_post_test) {
 
   res = aws_http_post(p, http, url, headers, resp_cb, NULL, req, &resp_code,
     NULL);
-  fail_unless(res == 0, "Failed to handle POST request to '%s': %s", url,
+  ck_assert_msg(res == 0, "Failed to handle POST request to '%s': %s", url,
     strerror(errno));
-  fail_unless(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
+  ck_assert_msg(resp_code != AWS_HTTP_RESPONSE_CODE_OK,
     "Expected !%ld, got %ld", AWS_HTTP_RESPONSE_CODE_OK, resp_code);
 
   aws_http_destroy(p, http);

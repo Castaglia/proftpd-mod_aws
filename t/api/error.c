@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2016 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2016-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -60,15 +60,15 @@ START_TEST (error_get_code_test) {
 
   expected = AWS_ERROR_CODE_UNKNOWN;
   res = aws_error_get_code(p, NULL);
-  fail_unless(res == expected, "Expected %u, got %u", expected, res);
+  ck_assert_msg(res == expected, "Expected %u, got %u", expected, res);
 
   expected = AWS_ERROR_CODE_AUTH_FAILURE;
   res = aws_error_get_code(p, "AuthFailure");
-  fail_unless(res == expected, "Expected %u, got %u", expected, res);
+  ck_assert_msg(res == expected, "Expected %u, got %u", expected, res);
 
   expected = AWS_ERROR_CODE_UNKNOWN;
   res = aws_error_get_code(p, "fooBarBaz");
-  fail_unless(res == expected, "Expected %u, got %u", expected, res);
+  ck_assert_msg(res == expected, "Expected %u, got %u", expected, res);
 }
 END_TEST
 
@@ -77,20 +77,20 @@ START_TEST (error_get_name_test) {
 
   expected = "<unknown>";
   res = aws_error_get_name(0);
-  fail_unless(res != NULL, "Failed to handle zero");
-  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
+  ck_assert_msg(res != NULL, "Failed to handle zero");
+  ck_assert_msg(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
     expected, res);
 
   expected = "AuthFailure";
   res = aws_error_get_name(AWS_ERROR_CODE_AUTH_FAILURE);
-  fail_unless(res != NULL, "Failed to handle zero");
-  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
+  ck_assert_msg(res != NULL, "Failed to handle zero");
+  ck_assert_msg(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
     expected, res);
 
   expected = "<unknown>";
   res = aws_error_get_name(UINT_MAX);
-  fail_unless(res != NULL, "Failed to handle UINT_MAX");
-  fail_unless(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
+  ck_assert_msg(res != NULL, "Failed to handle UINT_MAX");
+  ck_assert_msg(strcmp(res, expected) == 0, "Expected '%s', got '%s'",
     expected, res);
 }
 END_TEST
@@ -101,14 +101,14 @@ START_TEST (error_parse_xml_test) {
   size_t datasz;
 
   err = aws_error_parse_xml(p, NULL, 0);
-  fail_unless(err == NULL, "Failed to handle null data");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle null data");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   data = "foo";
   err = aws_error_parse_xml(p, data, 0);
-  fail_unless(err == NULL, "Failed to handle empty data");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle empty data");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: no root element */
@@ -116,7 +116,7 @@ START_TEST (error_parse_xml_test) {
   data = pstrdup(p, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
   datasz = strlen(data);
   err = aws_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with no root element");
+  ck_assert_msg(err == NULL, "Failed to handle XML with no root element");
 
   /* Malformed XML: no <Response> element */
 
@@ -125,8 +125,8 @@ START_TEST (error_parse_xml_test) {
     "<FooBar/>\n");
   datasz = strlen(data);
   err = aws_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with no <Response> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with no <Response> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: <Response> element with wrong child count (1) */
@@ -138,8 +138,8 @@ START_TEST (error_parse_xml_test) {
     "</Response>\n");
   datasz = strlen(data);
   err = aws_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with bad <Response> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with bad <Response> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: no <Errors> element */
@@ -152,8 +152,8 @@ START_TEST (error_parse_xml_test) {
     "</Response>\n");
   datasz = strlen(data);
   err = aws_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with no <Errors> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with no <Errors> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: no <Error> element */
@@ -168,8 +168,8 @@ START_TEST (error_parse_xml_test) {
     "</Response>\n");
   datasz = strlen(data);
   err = aws_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with no <Error> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with no <Error> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: no <Code> element */
@@ -186,8 +186,8 @@ START_TEST (error_parse_xml_test) {
     "</Response>\n");
   datasz = strlen(data);
   err = aws_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with no <Code> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with no <Code> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: no <Message> element */
@@ -204,8 +204,8 @@ START_TEST (error_parse_xml_test) {
     "</Response>\n");
   datasz = strlen(data);
   err = aws_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with no <Message> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with no <Message> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Malformed XML: no <RequestID> element */
@@ -223,8 +223,8 @@ START_TEST (error_parse_xml_test) {
     "</Response>\n");
   datasz = strlen(data);
   err = aws_error_parse_xml(p, data, datasz);
-  fail_unless(err == NULL, "Failed to handle XML with no <RequestID> element");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(err == NULL, "Failed to handle XML with no <RequestID> element");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   /* Currently, mod_aws expects XML error responses as returned by EC2;
@@ -246,16 +246,16 @@ START_TEST (error_parse_xml_test) {
 
   datasz = strlen(data);
   err = aws_error_parse_xml(p, data, datasz);
-  fail_unless(err != NULL, "Failed to parse error XML: %s", strerror(errno));
-  fail_unless(err->err_code == AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND,
+  ck_assert_msg(err != NULL, "Failed to parse error XML: %s", strerror(errno));
+  ck_assert_msg(err->err_code == AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND,
     "Expected error code %u, got %u",
     AWS_ERROR_CODE_EC2_INVALID_GROUP_NOT_FOUND, err->err_code);
-  fail_unless(err->err_msg != NULL, "Expected error message, got null");
-  fail_unless(strcmp(err->err_msg,
+  ck_assert_msg(err->err_msg != NULL, "Expected error message, got null");
+  ck_assert_msg(strcmp(err->err_msg,
     "The security group ID 'sg-1a2b3c4d' does not exist") == 0,
     "Failed to get expected error message");
-  fail_unless(err->req_id != NULL, "Expected request ID, got null");
-  fail_unless(strcmp(err->req_id, "ea966190-f9aa-478e-9ede-example") == 0,
+  ck_assert_msg(err->req_id != NULL, "Expected request ID, got null");
+  ck_assert_msg(strcmp(err->req_id, "ea966190-f9aa-478e-9ede-example") == 0,
     "Failed to get expected request ID");
 }
 END_TEST
