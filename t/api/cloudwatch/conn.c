@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2017 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2017-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -61,8 +61,8 @@ START_TEST (cloudwatch_conn_destroy_test) {
   int res;
 
   res = aws_cloudwatch_conn_destroy(NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null cloudwatch");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null cloudwatch");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -72,8 +72,8 @@ START_TEST (cloudwatch_conn_alloc_test) {
 
   mark_point();
   cw = aws_cloudwatch_conn_alloc(NULL, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL);
-  fail_unless(cw == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(cw == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST
@@ -95,14 +95,14 @@ START_TEST (cloudwatch_conn_flush_test) {
 
   mark_point();
   res = aws_cloudwatch_conn_flush(NULL, NULL);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = aws_cloudwatch_conn_flush(p, NULL);
-  fail_unless(res < 0, "Failed to handle null cloudwetch");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null cloudwetch");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 }
 END_TEST

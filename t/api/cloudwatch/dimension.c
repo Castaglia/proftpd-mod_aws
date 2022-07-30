@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2017 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2017-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -55,41 +55,41 @@ START_TEST (cloudwatch_dimension_get_test) {
 
   mark_point();
   res = aws_cloudwatch_dimension_get(NULL, 0, NULL);
-  fail_unless(res == NULL, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res == NULL, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   flags = 0;
 
   mark_point();
   res = aws_cloudwatch_dimension_get(p, flags, NULL);
-  fail_unless(res != NULL, "Failed to get dimension for flags %lu: %s",
+  ck_assert_msg(res != NULL, "Failed to get dimension for flags %lu: %s",
     flags, strerror(errno));
-  fail_unless(res->nelts == 0, "Expected nelts 0, got %u", res->nelts);
+  ck_assert_msg(res->nelts == 0, "Expected nelts 0, got %u", res->nelts);
 
   flags = AWS_CLOUDWATCH_DIMENSION_PROTOCOL;
 
   mark_point();
   res = aws_cloudwatch_dimension_get(p, flags, NULL);
-  fail_unless(res != NULL, "Failed to get dimension for flags %lu: %s",
+  ck_assert_msg(res != NULL, "Failed to get dimension for flags %lu: %s",
     flags, strerror(errno));
-  fail_unless(res->nelts == 2, "Expected nelts 2, got %u", res->nelts);
+  ck_assert_msg(res->nelts == 2, "Expected nelts 2, got %u", res->nelts);
 
   flags = AWS_CLOUDWATCH_DIMENSION_INSTANCE_ID;
 
   mark_point();
   res = aws_cloudwatch_dimension_get(p, flags, NULL);
-  fail_unless(res != NULL, "Failed to get dimension for flags %lu: %s",
+  ck_assert_msg(res != NULL, "Failed to get dimension for flags %lu: %s",
     flags, strerror(errno));
-  fail_unless(res->nelts == 0, "Expected nelts 0, got %u", res->nelts);
+  ck_assert_msg(res->nelts == 0, "Expected nelts 0, got %u", res->nelts);
 
   flags = AWS_CLOUDWATCH_DIMENSION_AVAIL_ZONE;
 
   mark_point();
   res = aws_cloudwatch_dimension_get(p, flags, NULL);
-  fail_unless(res != NULL, "Failed to get dimension for flags %lu: %s",
+  ck_assert_msg(res != NULL, "Failed to get dimension for flags %lu: %s",
     flags, strerror(errno));
-  fail_unless(res->nelts == 0, "Expected nelts 0, got %u", res->nelts);
+  ck_assert_msg(res->nelts == 0, "Expected nelts 0, got %u", res->nelts);
 }
 END_TEST
 

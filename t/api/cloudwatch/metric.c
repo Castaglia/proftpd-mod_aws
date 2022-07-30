@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2017-2021 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2017-2022 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -111,24 +111,24 @@ START_TEST (cloudwatch_metric_counter_test) {
 
   mark_point();
   res = aws_cloudwatch_metric_counter(NULL, NULL, NULL, 0.0, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = aws_cloudwatch_metric_counter(p, NULL, NULL, 0.0, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null cloudwatch");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null cloudwatch");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   cw = get_cloudwatch(p);
-  fail_unless(cw != NULL, "Failed to get CloudWatch connection: %s",
+  ck_assert_msg(cw != NULL, "Failed to get CloudWatch connection: %s",
     strerror(errno));
 
   mark_point();
   res = aws_cloudwatch_metric_counter(p, cw, NULL, 0.0, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null name");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null name");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   name = "foo.bar";
@@ -136,7 +136,7 @@ START_TEST (cloudwatch_metric_counter_test) {
 
   mark_point();
   res = aws_cloudwatch_metric_counter(p, cw, name, incr, NULL, 0);
-  fail_unless(res == 0, "Failed to set counter value: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to set counter value: %s", strerror(errno));
 
   (void) aws_cloudwatch_conn_destroy(p, cw);
 }
@@ -155,24 +155,24 @@ START_TEST (cloudwatch_metric_timer_test) {
 
   mark_point();
   res = aws_cloudwatch_metric_timer(NULL, NULL, NULL, 0.0, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null pool");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null pool");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   mark_point();
   res = aws_cloudwatch_metric_timer(p, NULL, NULL, 0.0, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null cloudwatch");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null cloudwatch");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   cw = get_cloudwatch(p);
-  fail_unless(cw != NULL, "Failed to get CloudWatch connection: %s",
+  ck_assert_msg(cw != NULL, "Failed to get CloudWatch connection: %s",
     strerror(errno));
 
   mark_point();
   res = aws_cloudwatch_metric_timer(p, cw, NULL, 0.0, NULL, 0);
-  fail_unless(res < 0, "Failed to handle null name");
-  fail_unless(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
+  ck_assert_msg(res < 0, "Failed to handle null name");
+  ck_assert_msg(errno == EINVAL, "Expected EINVAL (%d), got %s (%d)", EINVAL,
     strerror(errno), errno);
 
   name = "foo.bar";
@@ -180,7 +180,7 @@ START_TEST (cloudwatch_metric_timer_test) {
 
   mark_point();
   res = aws_cloudwatch_metric_timer(p, cw, name, ms, NULL, 0);
-  fail_unless(res == 0, "Failed to set timing value: %s", strerror(errno));
+  ck_assert_msg(res == 0, "Failed to set timing value: %s", strerror(errno));
 
   (void) aws_cloudwatch_conn_destroy(p, cw);
 }
