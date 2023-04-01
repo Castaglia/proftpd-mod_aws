@@ -52,7 +52,7 @@ static void tear_down(void) {
   if (p != NULL) {
     destroy_pool(p);
     p = permanent_pool = NULL;
-  } 
+  }
 }
 
 START_TEST (cloudwatch_error_get_code_test) {

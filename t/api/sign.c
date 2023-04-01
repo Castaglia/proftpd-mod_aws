@@ -52,7 +52,7 @@ static void tear_down(void) {
   if (p) {
     destroy_pool(p);
     p = NULL;
-  } 
+  }
 }
 
 START_TEST (sign_v4_generate_invalid_params_test) {
