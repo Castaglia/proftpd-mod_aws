@@ -265,7 +265,7 @@ static long health_check_request(pool *p, struct aws_health *health,
 
   } else {
 
-    /* Advance past the method. */ 
+    /* Advance past the method. */
     ptr += 4;
 
     if (strncmp(ptr, health->uri, health->urisz) == 0) {
@@ -506,7 +506,7 @@ struct aws_health *aws_health_listener_create(pool *p,
   }
 
   health->timerno = pr_timer_add(freq, -1, &aws_module, health_ping_cb,
-    "AWS Health Request Handling"); 
+    "AWS Health Request Handling");
   if (health->timerno < 0) {
     pr_trace_msg(trace_channel, 1,
       "error adding health request handling timer (%d secs): %s", freq,
