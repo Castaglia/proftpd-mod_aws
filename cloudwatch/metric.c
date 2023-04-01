@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws CloudWatch Metric API
- * Copyright (c) 2017 TJ Saunders
+ * Copyright (c) 2017-2023 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,18 +32,18 @@ static const char *trace_channel = "aws.cloudwatch.metric";
 /* An array of dimensions is assumed to be alternating key/value strings. */
 static void add_dimensions(pool *p, array_header *query_params,
     array_header *dimensions, const char *itemno) {
-  register unsigned int i;
+  register unsigned int i, j;
 
   if (dimensions == NULL) {
     return;
   }
 
-  for (i = 0; i < dimensions->nelts; i++) {
+  for (i = 0, j = 0; i < dimensions->nelts; i++) {
     char *memberno, *name, *value;
 
     memberno = aws_utils_str_n2s(p, (int) i+1);
-    name = ((char **) dimensions->elts)[i];
-    value = ((char **) dimensions->elts)[i++];
+    name = ((char **) dimensions->elts)[j++];
+    value = ((char **) dimensions->elts)[j++];
 
     *((char **) push_array(query_params)) = pstrcat(p,
       "MetricData.member.", itemno, ".Dimensions.member.", memberno, ".Name=",

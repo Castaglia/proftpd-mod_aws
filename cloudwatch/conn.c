@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws CloudWatch Connection API
- * Copyright (c) 2017 TJ Saunders
+ * Copyright (c) 2017-2023 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -178,19 +178,16 @@ static int cloudwatch_perform(pool *p, void *http, int http_method,
     size_t (*resp_body)(char *, size_t, size_t, void *), void *user_data,
     struct cloudwatch_conn *cw) {
   int res;
-  long resp_code;
+  long resp_code = 0;
   const char *content_type = NULL, *method_name, *host;
   char *base_url, *url = NULL;
 
-  switch (http_method) {
-    case AWS_HTTP_METHOD_GET:
-      method_name = "GET";
-      break;
-
-    default:
-      errno = EINVAL;
-      return -1;
+  if (http_method != AWS_HTTP_METHOD_GET) {
+    errno = EINVAL;
+    return -1;
   }
+
+  method_name = "GET";
 
   if (cw->credentials == NULL) {
     /* Need to get AWS credentials for signing requests. */
@@ -249,13 +246,8 @@ static int cloudwatch_perform(pool *p, void *http, int http_method,
  * instance API), etc.
  */
 
-  switch (http_method) {
-    case AWS_HTTP_METHOD_GET:
-      res = aws_http_get(p, http, url, req_headers, resp_body, user_data,
-        &resp_code, &content_type);
-      break;
-  }
-
+  res = aws_http_get(p, http, url, req_headers, resp_body, user_data,
+    &resp_code, &content_type);
   if (res < 0) {
     return -1;
   }

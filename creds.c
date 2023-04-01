@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws AWS credentials
- * Copyright (c) 2016-2021 TJ Saunders
+ * Copyright (c) 2016-2023 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -551,7 +551,7 @@ int aws_creds_from_iam(pool *p, const char *iam_role,
 int aws_creds_from_chain(pool *p, const array_header *providers,
     const struct aws_credential_info *info, struct aws_credentials **creds) {
   register unsigned int i;
-  int res;
+  int res = -1;
   pool *sub_pool;
 
   if (p == NULL ||
