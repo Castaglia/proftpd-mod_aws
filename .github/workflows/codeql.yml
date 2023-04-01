@@ -1,0 +1,78 @@
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**/*.md'
+      - '**/doc/*'
+  pull_request:
+    branches:
+      - master
+    paths-ignore:
+      - '**/*.md'
+      - '**/doc/*'
+  schedule:
+    - cron: "23 4 * * 1"
+
+jobs:
+  analyze:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: true
+      matrix:
+        language:
+          - cpp
+
+    steps:
+      - name: Checkout ProFTPD
+        uses: actions/checkout@v3
+        with:
+          repository: proftpd/proftpd
+
+      - name: Checkout mod_aws
+        uses: actions/checkout@v3
+        with:
+          path: contrib/mod_aws
+
+      - name: Install Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev zlib1g-dev
+
+      - name: Configure
+        run: |
+          ./configure --with-includes=/usr/include/libxml2 --with-modules=mod_aws
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: ${{ matrix.language }}
+          config-file: contrib/mod_aws/.codeql.yml
+          queries: +security-and-quality
+          source-root: contrib/mod_aws
+
+      - name: Build
+        run: |
+          make
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:${{ matrix.language }}"
+          checkout_path: contrib/mod_aws
+          output: sarif-results
+          upload: false
+
+      - name: Upload CodeQL SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          checkout_path: contrib/mod_aws
+          sarif_file: "sarif-results/${{ matrix.language }}.sarif"
