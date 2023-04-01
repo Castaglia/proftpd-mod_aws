@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws EC2 API
- * Copyright (c) 2016-2017 TJ Saunders
+ * Copyright (c) 2016-2023 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -93,7 +93,7 @@ static int ec2_perform(pool *p, void *http, int http_method, const char *path,
     time_t request_time, size_t (*resp_body)(char *, size_t, size_t, void *),
     struct ec2_conn *ec2) {
   int res;
-  long resp_code;
+  long resp_code = 0;
   const char *content_type = NULL, *method_name;
   char *base_url, *host = NULL, *url = NULL;
 
