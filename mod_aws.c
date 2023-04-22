@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws
- * Copyright (c) 2016-2017 TJ Saunders
+ * Copyright (c) 2016-2023 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1331,36 +1331,47 @@ static void aws_exit_ev(const void *event_data, void *user_data) {
 
 #if defined(PR_SHARED_MODULE)
 static void aws_mod_unload_ev(const void *event_data, void *user_data) {
-  if (strncmp((const char *) event_data, "mod_aws.c", 12) == 0) {
-    /* Unregister ourselves from all events and timers. */
-    pr_event_unregister(&aws_module, NULL, NULL);
-    pr_timer_remove(-1, &aws_module);
+  if (strcmp((const char *) event_data, "mod_aws.c") != 0) {
+    return;
+  }
 
-    if (instance_health != NULL) {
-      if (aws_health_listener_destroy(aws_pool, instance_health) < 0) {
-        (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-          "error destroying healthcheck listener: %s", strerror(errno));
-      }
+  /* Unregister ourselves from all events and timers. */
+  pr_event_unregister(&aws_module, NULL, NULL);
+  pr_timer_remove(-1, &aws_module);
 
-      instance_health = NULL;
+  if (instance_health != NULL) {
+    if (aws_health_listener_destroy(aws_pool, instance_health) < 0) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "error destroying healthcheck listener: %s", strerror(errno));
     }
 
-    aws_http_free();
-    aws_xml_free();
-    destroy_pool(aws_pool);
-    aws_pool = NULL;
+    instance_health = NULL;
+  }
 
-    if (aws_logfd >= 0) {
-      (void) close(aws_logfd);
-      aws_logfd = -1;
-    }
+  aws_http_free();
+  aws_xml_free();
+  destroy_pool(aws_pool);
+  aws_pool = NULL;
+
+  if (aws_logfd >= 0) {
+    (void) close(aws_logfd);
+    aws_logfd = -1;
   }
 }
-#endif
+#endif /* PR_SHARED_MODULE */
 
 static void aws_restart_ev(const void *event_data, void *user_data) {
   int res;
   const char *http_details = NULL;
+
+  if (instance_health != NULL) {
+    if (aws_health_listener_destroy(aws_pool, instance_health) < 0) {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "error destroying healthcheck listener: %s", strerror(errno));
+    }
+
+    instance_health = NULL;
+  }
 
   aws_http_free();
 

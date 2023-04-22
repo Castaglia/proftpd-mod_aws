@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws Health API
- * Copyright (c) 2016-2017 TJ Saunders
+ * Copyright (c) 2016-2023 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -526,7 +526,9 @@ int aws_health_listener_destroy(pool *p, struct aws_health *health) {
       "error removing timer ID %d: %s", health->timerno, strerror(errno));
   }
 
-  pr_inet_close(health->pool, health->conn);
+  if (health->conn != NULL) {
+    pr_inet_close(health->pool, health->conn);
+  }
   destroy_pool(health->pool);
   health_listener = NULL;
 
