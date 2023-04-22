@@ -865,6 +865,8 @@ MODRET set_awsengine(cmd_rec *cmd) {
 
 /* usage: AWSHealthCheck uri [address] [port] */
 MODRET set_awshealthcheck(cmd_rec *cmd) {
+  const char *uri;
+
   if (cmd->argc < 2 ||
       cmd->argc > 4) {
     CONF_ERROR(cmd, "wrong number of parameters");
@@ -872,13 +874,20 @@ MODRET set_awshealthcheck(cmd_rec *cmd) {
 
   CHECK_CONF(cmd, CONF_ROOT);
 
-  if (strcasecmp(cmd->argv[1], "off") == 0 ||
-      strcasecmp(cmd->argv[1], "none") == 0) {
+  uri = cmd->argv[1];
+
+  if (strcasecmp(uri, "off") == 0 ||
+      strcasecmp(uri, "none") == 0) {
     aws_use_health = FALSE;
     return PR_HANDLED(cmd);
   }
 
-  aws_health_uri = pstrdup(aws_pool, (char *) cmd->argv[1]);
+  if (*uri != '/') {
+    CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, "URI '", uri,
+      "' must start with a slash (/) character", NULL));
+  }
+
+  aws_health_uri = pstrdup(aws_pool, uri);
 
   if (cmd->argc >= 3) {
     const char *name;
