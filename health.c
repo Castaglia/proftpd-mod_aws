@@ -528,6 +528,7 @@ int aws_health_listener_destroy(pool *p, struct aws_health *health) {
 
   if (health->conn != NULL) {
     pr_inet_close(health->pool, health->conn);
+    health->conn = NULL;
   }
   destroy_pool(health->pool);
   health_listener = NULL;

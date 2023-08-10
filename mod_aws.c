@@ -104,6 +104,10 @@ static struct cloudwatch_conn *aws_cloudwatch = NULL;
 static unsigned long aws_cloudwatch_dimensions = 0UL;
 static const char *aws_cloudwatch_namespace = NULL;
 
+/* Necessary prototypes */
+static int aws_health_listening(pool *p, const char *addr, int port,
+  const char *uri);
+
 static const char *trace_channel = "aws";
 
 static const pr_netaddr_t *get_addr(pool *p, const char *data, size_t datasz) {
@@ -1369,6 +1373,20 @@ static void aws_mod_unload_ev(const void *event_data, void *user_data) {
 }
 #endif /* PR_SHARED_MODULE */
 
+static void aws_postparse_ev(const void *event_data, void *user_data) {
+
+  /* If we should be listening for health checks, AND we have already been
+   * given an explicit AWSHealthCheck address, then start our listener here.
+   * Otherwise, we will wait until we have the EC2 instance' public IPv4
+   * address.
+   */
+  if (aws_use_health == TRUE &&
+      aws_health_addr != NULL) {
+    (void) aws_health_listening(aws_pool, aws_health_addr, aws_health_port,
+      aws_health_uri);
+  }
+}
+
 static void aws_restart_ev(const void *event_data, void *user_data) {
   int res;
   const char *http_details = NULL;
@@ -1504,17 +1522,6 @@ static void aws_startup_ev(const void *event_data, void *user_data) {
   }
 
   open_logfile();
-
-  /* If we should be listening for health checks, AND we have already been
-   * given an explicit AWSHealthCheck address, then start our listener here.
-   * Otherwise, we will wait until we have the EC2 instance' public IPv4
-   * address.
-   */
-  if (aws_use_health == TRUE &&
-      aws_health_addr != NULL) {
-    (void) aws_health_listening(aws_pool, aws_health_addr, aws_health_port,
-      aws_health_uri);
-  }
 
   instance_info = aws_instance_get_info(aws_pool);
   if (instance_info == NULL) {
@@ -1691,7 +1698,8 @@ static int aws_init(void) {
 #if defined(PR_SHARED_MODULE)
   pr_event_register(&aws_module, "core.module-unload", aws_mod_unload_ev,
     NULL);
-#endif
+#endif /* PR_SHARED_MODULE */
+  pr_event_register(&aws_module, "core.postparse", aws_postparse_ev, NULL);
   pr_event_register(&aws_module, "core.restart", aws_restart_ev, NULL);
   pr_event_register(&aws_module, "core.shutdown", aws_shutdown_ev, NULL);
   pr_event_register(&aws_module, "core.startup", aws_startup_ev, NULL);
