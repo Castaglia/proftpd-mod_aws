@@ -474,6 +474,9 @@ static void verify_pasv_ports(pool *p, const struct aws_info *info,
 }
 
 static void log_instance_info(pool *p, const struct aws_info *info) {
+  if (info == NULL) {
+    return;
+  }
 
   /* AWS domain */
   if (info->domain != NULL) {
@@ -1374,6 +1377,68 @@ static void aws_mod_unload_ev(const void *event_data, void *user_data) {
 #endif /* PR_SHARED_MODULE */
 
 static void aws_postparse_ev(const void *event_data, void *user_data) {
+  server_rec *s = NULL;
+  struct ec2_conn *ec2 = NULL;
+  struct route53_conn *route53 = NULL;
+  pr_table_t *security_groups = NULL;
+
+  if (aws_engine == FALSE) {
+    return;
+  }
+
+  open_logfile();
+
+  instance_info = aws_instance_get_info(aws_pool);
+  if (instance_info == NULL) {
+    pr_log_debug(DEBUG1, MOD_AWS_VERSION
+      ": unable to discover EC2 instance metadata: %s", strerror(errno));
+    return;
+  }
+
+  if (instance_info->domain == NULL) {
+    /* Nothing more to do at this time; the subsequent code deals with the
+     * EC2 environment.
+     *
+     * However, we DO provide other AWS functionality outside of EC2, so we
+     * do not want to simply disable the module here.
+     */
+
+    pr_log_debug(DEBUG1, MOD_AWS_VERSION
+      ": no EC2 instance metadata available (not running within AWS EC2)");
+    instance_info = NULL;
+
+    return;
+  }
+
+  log_instance_info(aws_pool, instance_info);
+
+  if (aws_use_health == TRUE &&
+      instance_health == NULL) {
+    const char *addr = NULL;
+
+    /* Use the public IPv4 address, if we have one.  If not, fall back to
+     * the local/private IPv4 address.
+     */
+    if (instance_info->public_ipv4 != NULL) {
+      addr = pstrndup(aws_pool, instance_info->public_ipv4,
+        instance_info->public_ipv4sz);
+
+    } else if (instance_info->local_ipv4 != NULL) {
+      addr = pstrndup(aws_pool, instance_info->local_ipv4,
+        instance_info->local_ipv4sz);
+    }
+
+    aws_health_addr = addr;
+
+    if (aws_health_addr != NULL) {
+      (void) aws_health_listening(aws_pool, aws_health_addr, aws_health_port,
+        aws_health_uri);
+
+    } else {
+      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+        "unable to listen for AWSHealthCheck: unable to discover address");
+    }
+  }
 
   /* If we should be listening for health checks, AND we have already been
    * given an explicit AWSHealthCheck address, then start our listener here.
@@ -1384,6 +1449,73 @@ static void aws_postparse_ev(const void *event_data, void *user_data) {
       aws_health_addr != NULL) {
     (void) aws_health_listening(aws_pool, aws_health_addr, aws_health_port,
       aws_health_uri);
+  }
+
+  /* Assume that we can only perform discovery/configuration via AWS services
+   * if we have an IAM role, which in turn means we have the necessary
+   * credentials for constructing the necessary signatures for talking to
+   * AWS services.
+   */
+  if (instance_info->iam_role != NULL) {
+    const char *domain, *iam_role;
+    struct aws_credential_info *cred_info = NULL;
+
+    domain = pstrndup(aws_pool, instance_info->domain, instance_info->domainsz);
+    iam_role = pstrndup(aws_pool, instance_info->iam_role,
+      instance_info->iam_rolesz);
+
+    cred_info = pcalloc(aws_pool, sizeof(struct aws_credential_info));
+    cred_info->iam_role = iam_role;
+
+    ec2 = aws_ec2_conn_alloc(aws_pool, aws_connect_timeout_secs,
+      aws_request_timeout_secs, aws_cacerts, instance_info->region, domain,
+      NULL, cred_info);
+
+    route53 = aws_route53_conn_alloc(aws_pool, aws_connect_timeout_secs,
+      aws_request_timeout_secs, aws_cacerts, domain, NULL, cred_info);
+
+    if (instance_info->security_groups != NULL) {
+      const char *vpc_id = NULL;
+
+      if (instance_info->vpc_id != NULL) {
+        vpc_id = pstrndup(aws_pool, instance_info->vpc_id,
+          instance_info->vpc_idsz);
+      }
+
+      security_groups = aws_ec2_get_security_groups(aws_pool, ec2, vpc_id,
+        instance_info->security_groups);
+    }
+
+  } else {
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "no IAM role configured for this instance, unable to auto-configure");
+    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
+      "recommended commands will thus be logged");
+  }
+
+  for (s = (server_rec *) server_list->xas_list; s; s = s->next) {
+    pr_signals_handle();
+
+    /* Verify control port access */
+    verify_ctrl_port(aws_pool, instance_info, ec2, s, security_groups);
+
+    /* Verify MasqueradeAddress */
+    verify_masq_addr(aws_pool, instance_info, s);
+
+    /* Verify PassivePorts access */
+    verify_pasv_ports(aws_pool, instance_info, ec2, s, security_groups);
+  }
+
+  /* XXX Register with Route53 */
+
+  if (ec2 != NULL) {
+    aws_ec2_conn_destroy(aws_pool, ec2);
+    ec2 = NULL;
+  }
+
+  if (route53 != NULL) {
+    aws_route53_conn_destroy(aws_pool, route53);
+    route53 = NULL;
   }
 }
 
@@ -1414,6 +1546,8 @@ static void aws_restart_ev(const void *event_data, void *user_data) {
   }
 
   destroy_pool(aws_pool);
+  instance_info = NULL;
+
   aws_pool = make_sub_pool(permanent_pool);
   pr_pool_tag(aws_pool, MOD_AWS_VERSION);
 
@@ -1511,140 +1645,6 @@ static int aws_health_listening(pool *p, const char *addr, int port,
   return res;
 }
 
-static void aws_startup_ev(const void *event_data, void *user_data) {
-  server_rec *s = NULL;
-  struct ec2_conn *ec2 = NULL;
-  struct route53_conn *route53 = NULL;
-  pr_table_t *security_groups = NULL;
-
-  if (aws_engine == FALSE) {
-    return;
-  }
-
-  open_logfile();
-
-  instance_info = aws_instance_get_info(aws_pool);
-  if (instance_info == NULL) {
-    pr_log_debug(DEBUG1, MOD_AWS_VERSION
-      ": unable to discover EC2 instance metadata: %s", strerror(errno));
-    return;
-  }
-
-  if (instance_info->domain == NULL) {
-    /* Nothing more to do at this time; the subsequent code deals with the
-     * EC2 environment.
-     *
-     * However, we DO provide other AWS functionality outside of EC2, so we
-     * do not want to simply disable the module here.
-     */
-
-    pr_log_debug(DEBUG1, MOD_AWS_VERSION
-      ": no EC2 instance metadata available (not running within AWS EC2)");
-    instance_info = NULL;
-
-    return;
-  }
-
-  log_instance_info(aws_pool, instance_info);
-
-  if (aws_use_health == TRUE &&
-      instance_health == NULL) {
-    const char *addr = NULL;
-
-    /* Use the public IPv4 address, if we have one.  If not, fall back to
-     * the local/private IPv4 address.
-     */
-    if (instance_info->public_ipv4 != NULL) {
-      addr = pstrndup(aws_pool, instance_info->public_ipv4,
-        instance_info->public_ipv4sz);
-
-    } else if (instance_info->local_ipv4 != NULL) {
-      addr = pstrndup(aws_pool, instance_info->local_ipv4,
-        instance_info->local_ipv4sz);
-    }
-
-    aws_health_addr = addr;
-
-    if (aws_health_addr != NULL) {
-      (void) aws_health_listening(aws_pool, aws_health_addr, aws_health_port,
-        aws_health_uri);
-
-    } else {
-      (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-        "unable to listen for AWSHealthCheck: unable to discover address");
-    }
-  }
-
-  /* Assume that we can only perform discovery/configuration via AWS services
-   * if we have an IAM role, which in turn means we have the necessary
-   * credentials for constructing the necessary signatures for talking to
-   * AWS services.
-   */
-  if (instance_info->iam_role != NULL) {
-    const char *domain, *iam_role;
-    struct aws_credential_info *cred_info = NULL;
-
-    domain = pstrndup(aws_pool, instance_info->domain, instance_info->domainsz);
-    iam_role = pstrndup(aws_pool, instance_info->iam_role,
-      instance_info->iam_rolesz);
-
-    cred_info = pcalloc(aws_pool, sizeof(struct aws_credential_info));
-    cred_info->iam_role = iam_role;
-
-    ec2 = aws_ec2_conn_alloc(aws_pool, aws_connect_timeout_secs,
-      aws_request_timeout_secs, aws_cacerts, instance_info->region, domain,
-      NULL, cred_info);
-
-    route53 = aws_route53_conn_alloc(aws_pool, aws_connect_timeout_secs,
-      aws_request_timeout_secs, aws_cacerts, domain, NULL, cred_info);
-
-    if (instance_info->security_groups != NULL) {
-      const char *vpc_id = NULL;
-
-      if (instance_info->vpc_id != NULL) {
-        vpc_id = pstrndup(aws_pool, instance_info->vpc_id,
-          instance_info->vpc_idsz);
-      }
-
-      security_groups = aws_ec2_get_security_groups(aws_pool, ec2, vpc_id,
-        instance_info->security_groups);
-    }
-
-  } else {
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "no IAM role configured for this instance, unable to auto-configure");
-    (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
-      "recommended commands will thus be logged");
-  }
-
-  for (s = (server_rec *) server_list->xas_list; s; s = s->next) {
-    /* Verify control port access */
-    verify_ctrl_port(aws_pool, instance_info, ec2, s, security_groups);
-
-    /* Verify MasqueradeAddress */
-    verify_masq_addr(aws_pool, instance_info, s);
-
-    /* Verify PassivePorts access */
-    verify_pasv_ports(aws_pool, instance_info, ec2, s, security_groups);
-  }
-
-  /* XXX Register with Route53 */
-
-  if (ec2 != NULL) {
-    aws_ec2_conn_destroy(aws_pool, ec2);
-    ec2 = NULL;
-  }
-
-  if (route53 != NULL) {
-    aws_route53_conn_destroy(aws_pool, route53);
-    route53 = NULL;
-  }
-
-  /* XXX Watch out for any fds that should NOT be opened (0, 1, 2), but
-   * which may be help open by e.g. libcurl.  If necessary, force-close them.
-   */
-}
-
 static void aws_timeout_idle_ev(const void *event_data, void *user_data) {
   incr_metric("TimeoutIdle", 1.0);
 }
@@ -1702,7 +1702,6 @@ static int aws_init(void) {
   pr_event_register(&aws_module, "core.postparse", aws_postparse_ev, NULL);
   pr_event_register(&aws_module, "core.restart", aws_restart_ev, NULL);
   pr_event_register(&aws_module, "core.shutdown", aws_shutdown_ev, NULL);
-  pr_event_register(&aws_module, "core.startup", aws_startup_ev, NULL);
 
   return 0;
 }
