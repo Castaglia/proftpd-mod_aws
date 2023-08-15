@@ -301,6 +301,8 @@ static void health_handle_ping(pool *p, struct aws_health *health,
   long resp_code;
 
   /* Check the remote IP address against our ACL whitelist. */
+  pr_trace_msg(trace_channel, 21, "%s",
+    "checking healthcheck connection against ACLs");
   res = health_allowed_conn(p, conn, health->acls);
   if (res < 0) {
     pr_trace_msg(trace_channel, 5,
@@ -309,6 +311,7 @@ static void health_handle_ping(pool *p, struct aws_health *health,
     return;
   }
 
+  pr_trace_msg(trace_channel, 21, "%s", "reading healthcheck HTTP request");
   req_line = health_read_request(p, conn);
   if (req_line == NULL) {
     pr_trace_msg(trace_channel, 5,
@@ -321,6 +324,7 @@ static void health_handle_ping(pool *p, struct aws_health *health,
   http_version = "1.1";
   resp_code = health_check_request(p, health, req_line, &http_version);
 
+  pr_trace_msg(trace_channel, 21, "%s", "writing healthcheck HTTP response");
   res = health_write_response(p, conn, http_version, resp_code);
   if (res < 0) {
     pr_trace_msg(trace_channel, 5,
@@ -386,6 +390,7 @@ static int health_ping_cb(CALLBACK_FRAME) {
   req_pool = make_sub_pool(health->pool);
   pr_pool_tag(req_pool, "AWS Health Request Pool");
 
+  pr_trace_msg(trace_channel, 21, "%s", "accepting healthcheck connection");
   conn = health_accept_conn(req_pool, health->conn);
   if (conn == NULL) {
     if (errno == ENOENT) {
@@ -508,9 +513,21 @@ struct aws_health *aws_health_listener_create(pool *p,
   health->timerno = pr_timer_add(freq, -1, &aws_module, health_ping_cb,
     "AWS Health Request Handling");
   if (health->timerno < 0) {
+    int xerrno = errno;
+
     pr_trace_msg(trace_channel, 1,
       "error adding health request handling timer (%d secs): %s", freq,
-      strerror(errno));
+      strerror(xerrno));
+
+    /* Since this timer is crucial to the AWSHealthCheck functionality,
+     * failure to register a timer means our listener will not work as needed.
+     */
+    pr_inet_close(health->pool, health->conn);
+    health->conn = NULL;
+    destroy_pool(health->pool);
+
+    errno = xerrno;
+    return NULL;
   }
 
   health_listener = health;
@@ -518,10 +535,11 @@ struct aws_health *aws_health_listener_create(pool *p,
 }
 
 int aws_health_listener_destroy(pool *p, struct aws_health *health) {
-  int res;
+  int ees;
 
   res = pr_timer_remove(health->timerno, &aws_module);
-  if (res < 0) {
+  if (res < 0 &&
+      errno != ENOENT) {
     pr_trace_msg(trace_channel, 3,
       "error removing timer ID %d: %s", health->timerno, strerror(errno));
   }

@@ -1388,6 +1388,17 @@ static void aws_postparse_ev(const void *event_data, void *user_data) {
 
   open_logfile();
 
+  /* If we should be listening for health checks, AND we have already been
+   * given an explicit AWSHealthCheck address, then start our listener here.
+   * Otherwise, we will wait until we have the EC2 instance' public IPv4
+   * address.
+   */
+  if (aws_use_health == TRUE &&
+      aws_health_addr != NULL) {
+    (void) aws_health_listening(aws_pool, aws_health_addr, aws_health_port,
+      aws_health_uri);
+  }
+
   instance_info = aws_instance_get_info(aws_pool);
   if (instance_info == NULL) {
     pr_log_debug(DEBUG1, MOD_AWS_VERSION
@@ -1438,17 +1449,6 @@ static void aws_postparse_ev(const void *event_data, void *user_data) {
       (void) pr_log_writefile(aws_logfd, MOD_AWS_VERSION,
         "unable to listen for AWSHealthCheck: unable to discover address");
     }
-  }
-
-  /* If we should be listening for health checks, AND we have already been
-   * given an explicit AWSHealthCheck address, then start our listener here.
-   * Otherwise, we will wait until we have the EC2 instance' public IPv4
-   * address.
-   */
-  if (aws_use_health == TRUE &&
-      aws_health_addr != NULL) {
-    (void) aws_health_listening(aws_pool, aws_health_addr, aws_health_port,
-      aws_health_uri);
   }
 
   /* Assume that we can only perform discovery/configuration via AWS services
@@ -1536,6 +1536,12 @@ static void aws_restart_ev(const void *event_data, void *user_data) {
 
   /* Note: We explicitly do NOT call aws_xml_free() here. */
 
+  destroy_pool(aws_pool);
+  instance_info = NULL;
+
+  aws_pool = make_sub_pool(permanent_pool);
+  pr_pool_tag(aws_pool, MOD_AWS_VERSION);
+
   res = aws_http_init(aws_pool, NULL, &http_details);
   if (res < 0) {
     pr_log_pri(PR_LOG_NOTICE, MOD_AWS_VERSION
@@ -1544,12 +1550,6 @@ static void aws_restart_ev(const void *event_data, void *user_data) {
     pr_session_disconnect(&aws_module, PR_SESS_DISCONNECT_SESSION_INIT_FAILED,
       http_details);
   }
-
-  destroy_pool(aws_pool);
-  instance_info = NULL;
-
-  aws_pool = make_sub_pool(permanent_pool);
-  pr_pool_tag(aws_pool, MOD_AWS_VERSION);
 
   /* Reset timeouts. */
   aws_connect_timeout_secs = AWS_CONNECT_DEFAULT_TIMEOUT;
