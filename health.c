@@ -535,7 +535,7 @@ struct aws_health *aws_health_listener_create(pool *p,
 }
 
 int aws_health_listener_destroy(pool *p, struct aws_health *health) {
-  int ees;
+  int res;
 
   res = pr_timer_remove(health->timerno, &aws_module);
   if (res < 0 &&
