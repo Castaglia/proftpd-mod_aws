@@ -355,13 +355,19 @@ static conn_t *health_accept_conn(pool *p, conn_t *listener) {
 
 static void health_close_conn(conn_t *conn) {
   if (conn->instrm != NULL) {
-    pr_netio_close(conn->instrm);
+    pr_netio_stream_t *nstrm;
+
+    nstrm = conn->instrm;
     conn->instrm = NULL;
+    pr_netio_close(nstrm);
   }
 
   if (conn->outstrm != NULL) {
-    pr_netio_close(conn->outstrm);
+    pr_netio_stream_t *nstrm;
+
+    nstrm = conn->outstrm;
     conn->outstrm = NULL;
+    pr_netio_close(nstrm);
   }
 
   if (conn->listen_fd != -1) {
@@ -383,15 +389,24 @@ static void health_close_conn(conn_t *conn) {
 static int health_ping_cb(CALLBACK_FRAME) {
   conn_t *conn;
   struct aws_health *health;
-  pool *req_pool;
+  pool *tmp_pool;
   uint64_t start_ms = 0, end_ms = 0;
 
   health = health_listener;
-  req_pool = make_sub_pool(health->pool);
-  pr_pool_tag(req_pool, "AWS Health Request Pool");
+
+  /* Note that we deliberately do NOT use any pool that might be
+   * destroyed/recreated during a restart.  Why?  We could be reading in
+   * the HTTP request line when a SIGHUP occurs, which then would trigger
+   * mod_aws' restart event listener.  And that listener might destroy,
+   * re-create pools, whose dependents are resources that we are currently
+   * using.  We would find ourselves using stale (or null) pointers, and
+   * thus segfaulting (Issue #41).
+   */
+  tmp_pool = make_sub_pool(permanent_pool);
+  pr_pool_tag(tmp_pool, "AWS Health Request Pool");
 
   pr_trace_msg(trace_channel, 21, "%s", "accepting healthcheck connection");
-  conn = health_accept_conn(req_pool, health->conn);
+  conn = health_accept_conn(tmp_pool, health->conn);
   if (conn == NULL) {
     if (errno == ENOENT) {
       pr_trace_msg(trace_channel, 19, "no pending requests to handle");
@@ -401,12 +416,12 @@ static int health_ping_cb(CALLBACK_FRAME) {
         strerror(errno));
     }
 
-    destroy_pool(req_pool);
+    destroy_pool(tmp_pool);
     return 1;
   }
 
   pr_gettimeofday_millis(&start_ms);
-  health_handle_ping(req_pool, health, conn);
+  health_handle_ping(tmp_pool, health, conn);
   pr_gettimeofday_millis(&end_ms);
 
   pr_trace_msg(trace_channel, 12, "response time: %lu ms",
@@ -417,7 +432,7 @@ static int health_ping_cb(CALLBACK_FRAME) {
    */
   health_close_conn(conn);
 
-  destroy_pool(req_pool);
+  destroy_pool(tmp_pool);
 
   /* Always restart the timer. */
   return 1;
