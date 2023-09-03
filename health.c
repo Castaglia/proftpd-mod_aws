@@ -39,7 +39,7 @@
 #define AWS_HEALTH_DEFAULT_INTERVAL		1
 
 /* The maximum length, per line, of an HTTP request that we support. */
-#define AWS_HEALTH_HTTP_REQ_BUFZ		1024
+#define AWS_HEALTH_HTTP_REQ_BUFSZ		1024
 
 /* The buffer size for formatting HTTP dates. */
 #define AWS_HEALTH_HTTP_DATE_BUFSZ		512
@@ -96,8 +96,15 @@ static const char *health_read_request(pool *p, conn_t *conn) {
   size_t bufsz;
   int len, xerrno = 0;
 
-  bufsz = AWS_HEALTH_HTTP_REQ_BUFZ;
+  bufsz = AWS_HEALTH_HTTP_REQ_BUFSZ;
   buf = palloc(p, bufsz);
+
+  /* By explicitly setting the poll interval to zero here, we do a "true"
+   * polling of the input stream: either there are bytes to be consumed
+   * (i.e. a legitimate HTTP request), or there are not (i.e. telnet/netcat).
+   * If there are no bytes, we Do The Right Thing and move on (Issue #45).
+   */
+  pr_netio_set_poll_interval(conn->instrm, 0);
 
   /* Read in the first line, which should be our request line.
    *
