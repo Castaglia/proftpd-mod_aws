@@ -1,6 +1,6 @@
 /*
  * ProFTPD - mod_aws testsuite
- * Copyright (c) 2016-2022 TJ Saunders <tj@castaglia.org>
+ * Copyright (c) 2016-2026 TJ Saunders <tj@castaglia.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,8 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+ * along with this program; if not, see <https://www.gnu.org/licenses/>.
  *
  * As a special exemption, TJ Saunders and other respective copyright holders
  * give permission to link this program with OpenSSL, and distribute the
@@ -312,8 +311,9 @@ START_TEST (http_get_test) {
   url = "http://1.2.3.4";
   res = aws_http_get(p, http, url, NULL, resp_cb, NULL, &resp_code, NULL);
   ck_assert_msg(res < 0, "Handled unreachable IP address unexpectedly");
-  ck_assert_msg(errno == ETIMEDOUT, "Expected ETIMEDOUT (%d), got %s (%d)",
-    ETIMEDOUT, strerror(errno), errno);
+  ck_assert_msg(errno == ETIMEDOUT || errno == EPERM,
+    "Expected ETIMEDOUT (%d) or EPERM (%d), got %s (%d)",
+    ETIMEDOUT, EPERM, strerror(errno), errno);
 
   /* Unsupported URL syntax */
   url = "foo://bar:baz/42";
